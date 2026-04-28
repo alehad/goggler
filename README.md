@@ -6,3 +6,6 @@ Personal eBay UK auction tracker for finding items that reappear after lost bids
 
 This project is starting with an OpenSpec-led planning phase. The first change proposal is in `openspec/changes/bootstrap-goggler`.
 
+## Workflow
+
+Development work should happen on short-lived branches and be described by OpenSpec changes before implementation.
