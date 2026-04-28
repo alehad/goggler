@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>goggler UI prototype</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside class="sidebar" aria-label="Primary navigation">
+        <div class="brand">
+          <div class="brand-mark">g</div>
+          <div>
+            <strong>goggler</strong>
+            <span>eBay UK tracker</span>
+          </div>
+        </div>
+
+        <nav class="nav-list">
+          <button class="nav-item active" data-tab="dashboard" type="button">D <span>Dashboard</span></button>
+          <button class="nav-item" data-tab="tracking" type="button">T <span>Tracking</span></button>
+          <button class="nav-item" data-tab="won" type="button">W <span>Won</span></button>
+          <button class="nav-item" data-tab="account" type="button">A <span>Account</span></button>
+        </nav>
+
+        <div class="sync-card">
+          <div class="sync-icon">OK</div>
+          <strong>eBay connected</strong>
+          <span>Last import 18 minutes ago</span>
+        </div>
+      </aside>
+
+      <section class="workspace">
+        <header class="topbar">
+          <div class="search-box">
+            <span>Search</span>
+            <input aria-label="Search tracked items" placeholder="Search tracked records, artists, catalogue numbers" />
+          </div>
+          <button class="icon-button" title="Filters" type="button">Filter</button>
+          <button class="user-switch" type="button"><span>User</span><span>Saja</span><span>v</span></button>
+        </header>
+
+        <section class="content tab active" id="dashboard">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Review queue</p>
+              <h1>Likely relistings</h1>
+            </div>
+            <button class="primary-button" type="button"><span>Run search</span></button>
+          </div>
+
+          <div class="summary-grid">
+            <div class="metric"><span>Unresolved candidates</span><strong>12</strong><p>+3 since last import</p></div>
+            <div class="metric"><span>Tracked lost items</span><strong>38</strong><p>21 actively searched</p></div>
+            <div class="metric"><span>Best confidence</span><strong>92%</strong><p>Wayne Shorter LP</p></div>
+          </div>
+
+          <div class="candidate-list">
+            <article class="candidate-card">
+              <div class="record-art art-one"><div class="vinyl-disc"></div></div>
+              <div class="candidate-main">
+                <div class="candidate-title-row">
+                  <div>
+                    <p class="artist">Wayne Shorter</p>
+                    <h2>Wayne Shorter - Speak No Evil LP, Blue Note 84194, Van Gelder</h2>
+                  </div>
+                  <span class="confidence">92%</span>
+                </div>
+                <div class="meta-row">
+                  <span>£42.00 current bid</span><span>£68.00 original lost bid</span><span>VG+ / VG</span><span>north-london-vinyl</span>
+                </div>
+                <div class="signal-row"><span>catalogue match</span><span>title match</span><span>same condition</span></div>
+              </div>
+              <div class="card-actions">
+                <span class="ends">Ends 2h 14m</span>
+                <button class="icon-button positive" title="Confirm match" type="button">OK</button>
+                <button class="icon-button negative" title="Reject match" type="button">No</button>
+                <button class="icon-button" title="Open listing" type="button">Open</button>
+              </div>
+            </article>
+
+            <article class="candidate-card">
+              <div class="record-art art-two"><div class="vinyl-disc"></div></div>
+              <div class="candidate-main">
+                <div class="candidate-title-row">
+                  <div>
+                    <p class="artist">Boards of Canada</p>
+                    <h2>Boards of Canada - Music Has The Right To Children 2LP WARP</h2>
+                  </div>
+                  <span class="confidence">86%</span>
+                </div>
+                <div class="meta-row">
+                  <span>£36.00 current bid</span><span>£51.50 original lost bid</span><span>NM / VG+</span><span>wax-archive</span>
+                </div>
+                <div class="signal-row"><span>label match</span><span>format match</span><span>price range</span></div>
+              </div>
+              <div class="card-actions">
+                <span class="ends">Ends 7h 41m</span>
+                <button class="icon-button positive" title="Confirm match" type="button">OK</button>
+                <button class="icon-button negative" title="Reject match" type="button">No</button>
+                <button class="icon-button" title="Open listing" type="button">Open</button>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="content tab" id="tracking">
+          <div class="section-heading">
+            <div><p class="eyebrow">Lost auctions</p><h1>Tracked items</h1></div>
+            <button class="primary-button" type="button"><span>Import history</span></button>
+          </div>
+          <div class="table-panel">
+            <div class="tracking-row"><div><h2>The Smiths - The Queen Is Dead original Rough Trade LP</h2><p>Lost at £74.00</p></div><span class="status">Searching</span></div>
+            <div class="tracking-row"><div><h2>Stereolab - Emperor Tomato Ketchup Duophonic vinyl</h2><p>Lost at £44.20</p></div><span class="status hot">2 candidates</span></div>
+            <div class="tracking-row"><div><h2>John Coltrane - A Love Supreme Impulse stereo pressing</h2><p>Lost at £96.00</p></div><span class="status">Searching</span></div>
+          </div>
+        </section>
+
+        <section class="content tab" id="won">
+          <div class="section-heading"><div><p class="eyebrow">Purchase analytics</p><h1>Won items</h1></div></div>
+          <div class="summary-grid">
+            <div class="metric"><span>Highest paid</span><strong>£64</strong><p>Imported won auctions</p></div>
+            <div class="metric"><span>Lowest paid</span><strong>£28</strong><p>Imported won auctions</p></div>
+            <div class="metric"><span>Median paid</span><strong>£48.50</strong><p>Mock data</p></div>
+          </div>
+          <div class="table-panel">
+            <div class="tracking-row"><div><h2>Aphex Twin - Selected Ambient Works 85-92</h2><p>Won auction</p></div><span class="price-pill">£64</span></div>
+            <div class="tracking-row"><div><h2>Joni Mitchell - Blue UK LP</h2><p>Won auction</p></div><span class="price-pill">£28</span></div>
+            <div class="tracking-row"><div><h2>Miles Davis - In A Silent Way</h2><p>Won auction</p></div><span class="price-pill">£42</span></div>
+          </div>
+        </section>
+
+        <section class="content tab account-layout" id="account">
+          <div class="section-heading"><div><p class="eyebrow">Local profile</p><h1>Account</h1></div></div>
+          <div class="settings-panel">
+            <div class="setting-row"><div><h2>Signed in user</h2><p>Saja</p></div><button class="secondary-button" type="button"><span>Switch</span></button></div>
+            <div class="setting-row"><div><h2>eBay UK</h2><p>Connected and ready to import buying history</p></div><button class="secondary-button" type="button"><span>Reconnect</span></button></div>
+            <div class="setting-row"><div><h2>Matching preferences</h2><p>Exact relisting signals only</p></div><button class="secondary-button" type="button"><span>Edit</span></button></div>
+          </div>
+        </section>
+      </section>
+    </main>
+    <script src="script.js"></script>
+  </body>
+</html>

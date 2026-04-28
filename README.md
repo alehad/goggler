@@ -9,3 +9,7 @@ This project is starting with an OpenSpec-led planning phase. The first change p
 ## Workflow
 
 Development work should happen on short-lived branches and be described by OpenSpec changes before implementation.
+
+## UI Prototype
+
+The first UI mock is available as a dependency-free static prototype in `prototype/`. Open `prototype/index.html` directly, or serve that folder locally, to review the initial dashboard, tracking, won-items, and account tabs.
