@@ -59,18 +59,23 @@ Automated checks SHALL avoid exposing credentials, tokens, or authorization code
 
 ### Requirement: Advisory AI review
 
-The system MAY use an advisory AI review workflow for pull requests after deterministic checks are available.
+The system MAY use advisory AI review after deterministic checks are available.
 
-#### Scenario: AI review enabled
+#### Scenario: Local AI review enabled
 
-- **GIVEN** AI review credentials and a review model are configured
-- **WHEN** a pull request is opened or updated
-- **THEN** the workflow SHALL review the diff, relevant OpenSpec files, and deterministic check summaries
-- **AND** SHALL provide advisory feedback without blocking merge by model judgment
+- **GIVEN** local AI review tooling such as VS Code GitHub Copilot review or GitHub Copilot CLI is available
+- **WHEN** implementation changes are ready for review
+- **THEN** the user MAY run an advisory local review of uncommitted changes or branch changes before commit or pull request
 
-#### Scenario: AI review disabled
+#### Scenario: Hosted AI review unavailable
 
-- **GIVEN** AI review credentials or model configuration are absent
+- **GIVEN** hosted AI review credentials, model configuration, or paid repository review features are absent
 - **WHEN** a pull request is opened or updated
 - **THEN** deterministic CI checks SHALL continue to run
-- **AND** the missing AI review configuration SHALL NOT block merge
+- **AND** the missing hosted AI review configuration SHALL NOT block merge
+
+#### Scenario: Hosted AI review enabled later
+
+- **GIVEN** hosted AI review is configured by a later change
+- **WHEN** a pull request is opened or updated
+- **THEN** the hosted review SHALL provide advisory feedback without blocking merge by model judgment

@@ -108,9 +108,16 @@ CI should be deterministic:
 
 ## Advisory AI Review
 
-Add an optional, non-blocking pull request workflow once repository tests are in place. The workflow should review the diff and OpenSpec alignment, then post advisory feedback or a workflow summary.
+Start with local, human-triggered AI review rather than hosted pull request automation. The user currently uses GitHub primarily for learning, so the first review workflow should avoid requiring a paid GitHub Copilot repository feature or extra hosted infrastructure.
 
-Configuration:
+Preferred first options:
+
+- VS Code GitHub Copilot review of all uncommitted changes from the Source Control view.
+- GitHub Copilot CLI `/review` when the CLI is installed and authenticated locally.
+
+Hosted GitHub Copilot pull request review can be revisited later if the account plan or project needs change.
+
+If a custom hosted AI review workflow is added later, configuration should include:
 
 - `OPENAI_API_KEY` or equivalent provider secret stored in GitHub Actions secrets.
 - `AI_REVIEW_MODEL` stored as an Actions variable or environment value so the review model can differ from the implementation model.
@@ -124,7 +131,7 @@ Initial review focus:
 - Are user-owned records consistently scoped by user?
 - Are provider calls mocked in CI?
 
-The AI review job should be advisory at first. It may fail only for infrastructure errors if that proves useful, but it should not block merging based on model judgment until the team explicitly changes that policy.
+AI review is advisory. It should not block commits or merges based on model judgment until the team explicitly changes that policy.
 
 ## Risks And Decisions
 

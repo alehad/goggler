@@ -16,10 +16,10 @@
 
 ## 3. Local Authentication
 
-- [ ] Create a minimal local sign-in/session flow.
-- [ ] Add request helper for resolving the current user on server routes.
+- [x] Create a minimal local sign-in/session flow.
+- [x] Add request helper for resolving the current user on server routes.
 - [ ] Protect account and import routes from anonymous access.
-- [ ] Add tests for session creation, lookup, expiry, and logout.
+- [x] Add tests for session creation, lookup, expiry, and logout.
 
 ## 4. eBay OAuth Connection
 

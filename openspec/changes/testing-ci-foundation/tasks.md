@@ -3,14 +3,14 @@
 ## 1. Specification
 
 - [x] Create OpenSpec change for testing and CI planning.
-- [ ] Review auth-first coverage requirements before implementing auth.
-- [ ] Decide the initial TypeScript test runner when auth implementation begins.
-- [ ] Decide whether AI review should comment on PRs or write workflow summaries in its first version.
+- [x] Review auth-first coverage requirements before implementing auth.
+- [x] Decide the initial TypeScript test runner when auth implementation begins.
+- [x] Decide local Copilot review is the first advisory AI review path.
 
 ## 2. Test Tooling
 
 - [ ] Add package scripts for lint, typecheck, unit tests, integration tests, and build.
-- [ ] Add a unit/route test runner.
+- [x] Add a unit/route test runner.
 - [ ] Add test utilities for route handlers and mocked sessions.
 - [ ] Add database test setup once Prisma/PostgreSQL is introduced.
 - [ ] Add eBay HTTP/XML fixtures for OAuth and `GetMyeBayBuying`.
@@ -18,7 +18,7 @@
 
 ## 3. Auth Coverage
 
-- [ ] Test local session creation, lookup, expiry, and logout.
+- [x] Test local session creation, lookup, expiry, and logout.
 - [ ] Test OAuth state signing, validation, expiry, replay rejection, and tamper rejection.
 - [ ] Test eBay authorization URL construction.
 - [ ] Test anonymous users cannot start eBay OAuth.
@@ -47,10 +47,10 @@
 
 ## 6. Advisory AI Review
 
-- [ ] Add non-blocking AI review workflow after deterministic CI exists.
-- [ ] Configure review model through `AI_REVIEW_MODEL` or equivalent.
-- [ ] Read API credentials from GitHub Actions secrets.
-- [ ] Feed the workflow PR diff, relevant OpenSpec files, and deterministic check summaries.
+- [x] Document local Copilot review of uncommitted changes as the first advisory review workflow.
+- [x] Check whether GitHub Copilot CLI is installed and usable for `/review`.
+- [ ] Keep hosted GitHub Copilot PR review as optional future work.
+- [ ] Add non-blocking hosted AI review workflow only if deterministic CI exists and the user wants hosted review.
 - [ ] Keep model feedback advisory until a later OpenSpec change makes any part blocking.
 
 ## 7. Verification
