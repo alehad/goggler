@@ -37,7 +37,7 @@ Initial scope:
 - Buying-history import planning currently targets Trading API `GetMyeBayBuying` for won and lost My eBay buying lists.
 - Tests and CI should be planned around auth first: local sessions, OAuth state handling, session-only token behavior, import authorization, and proof that eBay tokens are not persisted.
 - GitHub Actions should start with deterministic checks: lint, typecheck, unit tests, integration tests when persistence exists, and production build.
-- An advisory AI review workflow is planned for later, configurable with a separate review model such as `AI_REVIEW_MODEL`, but it should not block merges initially.
+- Advisory AI review should start locally, using VS Code GitHub Copilot review of uncommitted changes. Hosted AI review or GitHub Copilot PR review can be revisited later.
 
 ## Merged OpenSpec Changes
 
@@ -71,10 +71,35 @@ When moving to another Mac:
 
 ## Next Likely Steps
 
-- Start actual implementation of the auth layer from `main`.
-- Before coding behavior, create or update the relevant OpenSpec implementation change if needed.
-- Implement local app user/session foundation.
-- Add eBay OAuth start/callback/disconnect routes.
-- Store eBay token values only in server-side session state for the current goggler login.
-- Add tests for session lifecycle, OAuth state validation, callback failure cases, disconnect, import authorization, and token non-persistence.
-- Begin CI setup once package scripts and test runner choices are in place.
+- Local goggler auth/session foundation is implemented on `main` in commit `f016d14`.
+- The next implementation branch should likely be `codex/ebay-oauth-connect`.
+- Implement eBay OAuth connection only first, before buying-history import.
+- Add `GET /api/auth/ebay/start`, `GET /api/auth/ebay/callback`, and `POST /api/auth/ebay/disconnect`.
+- Add eBay config handling for environment, client id, client secret, RuName/redirect value, marketplace id, and UK Trading API site id.
+- Add signed OAuth state creation/validation with tests for valid, missing, expired, replayed, and tampered state.
+- Exchange the eBay authorization code for a user access token, but keep eBay token values only in server-side session state for the current goggler login.
+- Persist only non-secret eBay connection metadata, such as connection status, account identifier when available, last authorization time, and last connection error.
+- Update the Account UI from mock state to real states: not connected, connecting, connected for this session, reauth required, disconnected, and error.
+- After OAuth connect works end to end, implement `GetMyeBayBuying` import as a separate follow-on change.
+
+## eBay Developer Setup Needed
+
+To test against a real eBay account, the next Codex instance/user will need eBay Developer Program configuration:
+
+- eBay application keys for Sandbox first, then Production later.
+- OAuth user consent configured for the app.
+- The correct eBay RuName / redirect URI value for the selected environment.
+- Accept and reject URLs configured in the eBay developer portal.
+- Minimal scopes confirmed for the OAuth user token.
+- Environment variables kept in `.env.local` and never committed.
+
+Likely local environment variables:
+
+```bash
+EBAY_ENVIRONMENT=sandbox
+EBAY_CLIENT_ID=...
+EBAY_CLIENT_SECRET=...
+EBAY_REDIRECT_URI=...
+EBAY_MARKETPLACE_ID=EBAY_GB
+EBAY_TRADING_SITE_ID=3
+```
