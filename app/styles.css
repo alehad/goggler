@@ -216,6 +216,11 @@ button {
   padding: 0 14px;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .content {
   margin: 0 auto;
   max-width: 1180px;
@@ -432,6 +437,13 @@ h1 {
   color: var(--muted);
   font-size: 13px;
   margin-top: 4px;
+}
+
+.form-message {
+  color: var(--bad);
+  font-size: 13px;
+  font-weight: 700;
+  margin-top: 14px;
 }
 
 .status,

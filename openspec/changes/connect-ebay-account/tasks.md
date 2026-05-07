@@ -11,31 +11,31 @@
 
 - [ ] Add Prisma and PostgreSQL configuration if not already present.
 - [ ] Model `User`, `Session`, `ConnectedVenueAccount`, `ImportRun`, and imported auction records.
-- [ ] Add environment variable template for database, session, and eBay settings.
+- [x] Add environment variable template for database, session, and eBay settings.
 - [ ] Add tests proving eBay token values are not persisted in database-backed models or browser-visible responses.
 
 ## 3. Local Authentication
 
 - [x] Create a minimal local sign-in/session flow.
 - [x] Add request helper for resolving the current user on server routes.
-- [ ] Protect account and import routes from anonymous access.
+- [x] Protect account and import routes from anonymous access.
 - [x] Add tests for session creation, lookup, expiry, and logout.
 
 ## 4. eBay OAuth Connection
 
-- [ ] Implement eBay environment/config module.
-- [ ] Implement signed OAuth state creation and validation.
-- [ ] Add eBay consent start route.
-- [ ] Add eBay OAuth callback route and token exchange.
-- [ ] Store eBay token values only in server-side session state for the current goggler login.
+- [x] Implement eBay environment/config module.
+- [x] Implement signed OAuth state creation and validation.
+- [x] Add eBay consent start route.
+- [x] Add eBay OAuth callback route and token exchange.
+- [x] Store eBay token values only in server-side session state for the current goggler login.
 - [ ] Persist only non-secret eBay connection metadata when available.
-- [ ] Add disconnect route that clears session-scoped eBay token material.
-- [ ] Add tests for start, callback, invalid state, exchange failure, and disconnect.
+- [x] Add disconnect route that clears session-scoped eBay token material.
+- [x] Add tests for start, callback, invalid state, exchange failure, and disconnect.
 
 ## 5. eBay Adapter And Session Authorization
 
-- [ ] Add adapter helper that returns a valid session-scoped access token or marks reauth required.
-- [ ] Handle expired session-scoped eBay access by asking the user to reconnect eBay.
+- [x] Add adapter helper that returns a valid session-scoped access token or marks reauth required.
+- [x] Handle expired session-scoped eBay access by asking the user to reconnect eBay.
 - [ ] Implement Trading API XML client using OAuth `X-EBAY-API-IAF-TOKEN`.
 - [ ] Add response validation and normalized adapter errors.
 - [ ] Add tests with mocked eBay responses.
@@ -51,14 +51,15 @@
 
 ## 7. Account UI
 
-- [ ] Replace mock eBay connection state with server-backed connection status.
-- [ ] Add Connect eBay, Disconnect, and Import buying history actions.
+- [x] Replace mock eBay connection state with server-backed connection status.
+- [x] Add Connect eBay and Disconnect actions.
+- [ ] Add Import buying history action.
 - [ ] Show import progress/result and recoverable errors.
 - [ ] Add a basic smoke test for connect-state rendering and import action availability.
 
 ## 8. Verification
 
-- [ ] Run unit tests.
+- [x] Run unit tests.
 - [ ] Run database migration against a local development database.
 - [ ] Run eBay Sandbox OAuth connect flow.
 - [ ] Run Sandbox buying-history import with won and not-won fixtures.

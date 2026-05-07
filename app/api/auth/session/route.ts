@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "../../../../src/auth/current-user";
+import { NextRequest, NextResponse } from "next/server.js";
+import { getCurrentUser } from "../../../../src/auth/current-user.ts";
 
 export async function GET(request: NextRequest) {
   const result = getCurrentUser(request);

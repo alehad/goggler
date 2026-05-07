@@ -17,6 +17,14 @@ test("creates an http-only session cookie", () => {
   assert.match(cookie, /Expires=Fri, 01 May 2026 10:00:00 GMT/);
 });
 
+test("omits secure flag for local http session cookies", () => {
+  const cookie = createSessionCookie("abc 123", new Date("2026-05-01T10:00:00.000Z"), {
+    secure: false
+  });
+
+  assert.doesNotMatch(cookie, /Secure/);
+});
+
 test("reads the session token from a cookie header", () => {
   const token = readSessionToken("theme=light; goggler_session=abc%20123; other=value");
 
