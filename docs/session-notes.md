@@ -38,11 +38,49 @@ Initial scope:
 - Tests and CI should be planned around auth first: local sessions, OAuth state handling, session-only token behavior, import authorization, and proof that eBay tokens are not persisted.
 - GitHub Actions should start with deterministic checks: lint, typecheck, unit tests, integration tests when persistence exists, and production build.
 - Advisory AI review should start locally, using VS Code GitHub Copilot review of uncommitted changes. Hosted AI review or GitHub Copilot PR review can be revisited later.
+- Direct commits to `main` are only allowed for explicit end-of-session updates to `docs/session-notes.md`. All other code, dependency, configuration, OpenSpec, and documentation changes should use a `codex/` branch and PR.
+- Local goggler auth is currently an in-memory seeded-user session model. It stores only a hash of the local session token server-side and uses an HttpOnly cookie in the browser.
+- Local HTTP development cookies intentionally omit the `Secure` flag so `http://localhost:3000` sign-in works; HTTPS requests still get Secure cookies.
+- eBay OAuth connect routes now exist, but have not yet been validated against a real eBay Sandbox developer app.
+- eBay OAuth state signing requires `GOGGLER_AUTH_SECRET` with at least 32 characters.
+- State-changing POST routes use same-origin CSRF checks.
 
 ## Merged OpenSpec Changes
 
 - `connect-ebay-account`: plans local user-owned eBay OAuth connection, session-scoped eBay token handling, and buying-history import through eBay Trading API.
 - `testing-ci-foundation`: plans layered test coverage, auth-first verification, GitHub Actions checks, secret-safe CI behavior, mocked eBay provider responses, and optional advisory AI review.
+
+## Implemented So Far
+
+- Local goggler sign-in/session foundation is merged to `main`.
+- Account tab is wired to local sign-in/sign-out and real eBay session status.
+- eBay OAuth backend slice is merged to `main` in PR #4.
+- Implemented eBay routes:
+  - `GET /api/auth/ebay/start`
+  - `GET /api/auth/ebay/callback`
+  - `GET /api/auth/ebay/session`
+  - `POST /api/auth/ebay/disconnect`
+- Implemented eBay config loading, signed OAuth state creation/validation, authorization-code token exchange, and session-scoped eBay token storage.
+- eBay access/refresh token values are kept only in server-side session memory for the current goggler login and are not exposed through status responses.
+- `.env.example` exists with expected local settings.
+- Current verification before merge of PR #4:
+  - `npm run test:unit` passed with 35 tests.
+  - `npm run build` passed.
+  - Local browser check passed for app loading and Account sign-in.
+
+## Local Testing Notes
+
+To test the app shell and local sign-in:
+
+1. Run `npm run dev`.
+2. Open `http://localhost:3000`.
+3. Go to Account.
+4. Click Sign in.
+5. Confirm the top bar and Account tab show `Saja`.
+
+If the app shows a missing `.next/server` chunk error or loses styling after running `npm run build` while the dev server is active, stop the dev server, delete `.next`, and restart `npm run dev`. The generated `.next` output is shared by dev and production build modes.
+
+`npm run lint` is currently stale because it still uses deprecated `next lint`, which prompts for ESLint migration under Next 15. `npm run build` currently performs the framework type/lint validation successfully.
 
 ## UI Direction
 
@@ -71,16 +109,13 @@ When moving to another Mac:
 
 ## Next Likely Steps
 
-- Local goggler auth/session foundation is implemented on `main` in commit `f016d14`.
-- The next implementation branch should likely be `codex/ebay-oauth-connect`.
-- Implement eBay OAuth connection only first, before buying-history import.
-- Add `GET /api/auth/ebay/start`, `GET /api/auth/ebay/callback`, and `POST /api/auth/ebay/disconnect`.
-- Add eBay config handling for environment, client id, client secret, RuName/redirect value, marketplace id, and UK Trading API site id.
-- Add signed OAuth state creation/validation with tests for valid, missing, expired, replayed, and tampered state.
-- Exchange the eBay authorization code for a user access token, but keep eBay token values only in server-side session state for the current goggler login.
-- Persist only non-secret eBay connection metadata, such as connection status, account identifier when available, last authorization time, and last connection error.
-- Update the Account UI from mock state to real states: not connected, connecting, connected for this session, reauth required, disconnected, and error.
-- After OAuth connect works end to end, implement `GetMyeBayBuying` import as a separate follow-on change.
+- Create the eBay Developer Sandbox app configuration and collect the Sandbox client id, client secret, RuName/redirect value, and allowed scopes.
+- Create a local `.env.local` from `.env.example` with Sandbox values and a strong `GOGGLER_AUTH_SECRET`.
+- Start `npm run dev`, sign into goggler locally, click Connect in the Account tab, and validate the full eBay Sandbox OAuth redirect/callback flow.
+- Confirm the callback marks eBay as connected for the current goggler session.
+- If real eBay Sandbox connection succeeds, update any OpenSpec tasks and session notes with exact Sandbox setup details.
+- Only after OAuth connect works end to end, implement `GetMyeBayBuying` import as a separate follow-on change.
+- Consider a separate tooling branch to replace deprecated `next lint` with the ESLint CLI.
 
 ## eBay Developer Setup Needed
 
@@ -96,10 +131,13 @@ To test against a real eBay account, the next Codex instance/user will need eBay
 Likely local environment variables:
 
 ```bash
+DATABASE_URL=
+GOGGLER_AUTH_SECRET=at-least-32-characters
 EBAY_ENVIRONMENT=sandbox
 EBAY_CLIENT_ID=...
 EBAY_CLIENT_SECRET=...
 EBAY_REDIRECT_URI=...
+EBAY_OAUTH_SCOPES=...
 EBAY_MARKETPLACE_ID=EBAY_GB
 EBAY_TRADING_SITE_ID=3
 ```
