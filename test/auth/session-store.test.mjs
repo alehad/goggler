@@ -59,6 +59,127 @@ test("expires a session on sign out", () => {
   assert.equal(store.lookupSession(token), undefined);
 });
 
+test("stores eBay authorization only against an active session", () => {
+  const store = new InMemorySessionStore([user]);
+  const { session } = store.createSession(user.id);
+  const authorization = {
+    accessToken: "access-token",
+    refreshToken: "refresh-token",
+    tokenType: "User Access Token",
+    authorizedAt: new Date("2026-05-07T10:00:00.000Z"),
+    expiresAt: new Date("2026-05-07T12:00:00.000Z"),
+    scopes: ["scope-one"]
+  };
+
+  store.setEbayAuthorization(session.id, authorization);
+
+  assert.equal(
+    store.getEbayAuthorization(session.id, {
+      now: new Date("2026-05-07T10:30:00.000Z")
+    }),
+    authorization
+  );
+});
+
+test("does not expose eBay token values through connection status", () => {
+  const store = new InMemorySessionStore([user]);
+  const { session } = store.createSession(user.id);
+  store.setEbayAuthorization(session.id, {
+    accessToken: "access-token",
+    refreshToken: "refresh-token",
+    tokenType: "User Access Token",
+    authorizedAt: new Date("2026-05-07T10:00:00.000Z"),
+    expiresAt: new Date("2026-05-07T12:00:00.000Z"),
+    scopes: ["scope-one"]
+  });
+
+  const status = store.getEbayConnectionStatus(session.id, {
+    now: new Date("2026-05-07T10:30:00.000Z")
+  });
+
+  assert.equal(status.connected, true);
+  assert.equal(status.status, "connected_this_session");
+  assert.equal(JSON.stringify(status).includes("access-token"), false);
+  assert.equal(JSON.stringify(status).includes("refresh-token"), false);
+});
+
+test("clears eBay authorization when the local session expires", () => {
+  const store = new InMemorySessionStore([user]);
+  const { token, session } = store.createSession(user.id, {
+    now: new Date("2026-05-01T10:00:00.000Z"),
+    ttlMs: 1000
+  });
+  store.setEbayAuthorization(session.id, {
+    accessToken: "access-token",
+    tokenType: "User Access Token",
+    authorizedAt: new Date("2026-05-01T10:00:00.000Z"),
+    expiresAt: new Date("2026-05-01T12:00:00.000Z"),
+    scopes: ["scope-one"]
+  });
+
+  store.lookupSession(token, {
+    now: new Date("2026-05-01T10:00:01.001Z")
+  });
+
+  assert.equal(store.getEbayAuthorization(session.id), undefined);
+});
+
+test("expires eBay authorization independently from the local session", () => {
+  const store = new InMemorySessionStore([user]);
+  const { session } = store.createSession(user.id, {
+    now: new Date("2026-05-01T10:00:00.000Z"),
+    ttlMs: 1000 * 60 * 60
+  });
+  store.setEbayAuthorization(session.id, {
+    accessToken: "access-token",
+    tokenType: "User Access Token",
+    authorizedAt: new Date("2026-05-01T10:00:00.000Z"),
+    expiresAt: new Date("2026-05-01T10:00:01.000Z"),
+    scopes: ["scope-one"]
+  });
+
+  const authorization = store.getEbayAuthorization(session.id, {
+    now: new Date("2026-05-01T10:00:01.001Z")
+  });
+
+  assert.equal(authorization, undefined);
+  assert.equal(store.getEbayConnectionStatus(session.id).status, "reauth_required");
+});
+
+test("consumes pending eBay OAuth states once", () => {
+  const store = new InMemorySessionStore([user]);
+  const { session } = store.createSession(user.id);
+
+  store.addPendingEbayOAuthState(session.id, "state-1", new Date("2026-05-07T10:01:00.000Z"));
+
+  assert.equal(
+    store.consumePendingEbayOAuthState(session.id, "state-1", {
+      now: new Date("2026-05-07T10:00:30.000Z")
+    }),
+    true
+  );
+  assert.equal(
+    store.consumePendingEbayOAuthState(session.id, "state-1", {
+      now: new Date("2026-05-07T10:00:40.000Z")
+    }),
+    false
+  );
+});
+
+test("rejects expired pending eBay OAuth states", () => {
+  const store = new InMemorySessionStore([user]);
+  const { session } = store.createSession(user.id);
+
+  store.addPendingEbayOAuthState(session.id, "state-1", new Date("2026-05-07T10:01:00.000Z"));
+
+  assert.equal(
+    store.consumePendingEbayOAuthState(session.id, "state-1", {
+      now: new Date("2026-05-07T10:01:00.001Z")
+    }),
+    false
+  );
+});
+
 test("rejects unknown users", () => {
   const store = new InMemorySessionStore();
 

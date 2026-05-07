@@ -1,4 +1,4 @@
-import type { NextRequest } from "next/server";
+import type { NextRequest } from "next/server.js";
 import { sessionStore } from "./local-auth.ts";
 import { readSessionToken } from "./session-cookie.ts";
 import type { SessionLookupResult } from "./session-store.ts";

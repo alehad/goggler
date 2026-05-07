@@ -18,7 +18,7 @@ import {
   Sparkles,
   X
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Tab = "dashboard" | "tracking" | "won" | "account";
 
@@ -34,6 +34,23 @@ type Candidate = {
   signals: string[];
   seller: string;
   condition: string;
+};
+
+type LocalSession = {
+  user: {
+    id: string;
+    displayName: string;
+  } | null;
+};
+
+type EbaySession = {
+  connection: {
+    connected: boolean;
+    status: "connected_this_session" | "reauth_required" | "disconnected";
+    authorizedAt?: string;
+    expiresAt?: string;
+    scopes: string[];
+  };
 };
 
 const candidates: Candidate[] = [
@@ -115,6 +132,7 @@ const tabs = [
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
+  const [localSession, setLocalSession] = useState<LocalSession | null>(null);
   const stats = useMemo(() => {
     const prices = wonItems.map((item) => item.price).sort((a, b) => a - b);
     const median = (prices[1] + prices[2]) / 2;
@@ -123,6 +141,15 @@ export default function Home() {
       lowest: Math.min(...prices),
       median
     };
+  }, []);
+
+  async function refreshLocalSession() {
+    const sessionResponse = await fetch("/api/auth/session");
+    setLocalSession(sessionResponse.ok ? ((await sessionResponse.json()) as LocalSession) : { user: null });
+  }
+
+  useEffect(() => {
+    void refreshLocalSession();
   }, []);
 
   return (
@@ -174,7 +201,7 @@ export default function Home() {
           </button>
           <button className="user-switch" type="button">
             <CircleUserRound size={18} />
-            <span>Saja</span>
+            <span>{localSession?.user?.displayName ?? "Not signed in"}</span>
             <ChevronDown size={16} />
           </button>
         </header>
@@ -182,7 +209,7 @@ export default function Home() {
         {activeTab === "dashboard" && <Dashboard />}
         {activeTab === "tracking" && <Tracking />}
         {activeTab === "won" && <Won stats={stats} />}
-        {activeTab === "account" && <Account />}
+        {activeTab === "account" && <Account localSession={localSession} refreshLocalSession={refreshLocalSession} />}
       </section>
     </main>
   );
@@ -321,7 +348,62 @@ function Won({ stats }: { stats: { highest: number; lowest: number; median: numb
   );
 }
 
-function Account() {
+function Account({
+  localSession,
+  refreshLocalSession
+}: {
+  localSession: LocalSession | null;
+  refreshLocalSession: () => Promise<void>;
+}) {
+  const [ebaySession, setEbaySession] = useState<EbaySession | null>(null);
+  const [message, setMessage] = useState<string>("");
+
+  async function refreshEbaySessionState() {
+    if (localSession?.user) {
+      const ebayResponse = await fetch("/api/auth/ebay/session");
+      setEbaySession(ebayResponse.ok ? ((await ebayResponse.json()) as EbaySession) : null);
+      return;
+    }
+
+    setEbaySession(null);
+  }
+
+  useEffect(() => {
+    void refreshEbaySessionState();
+  }, [localSession?.user?.id]);
+
+  async function signIn() {
+    setMessage("");
+    const response = await fetch("/api/auth/sign-in", { method: "POST" });
+    if (!response.ok) {
+      setMessage("Could not sign in locally");
+      return;
+    }
+
+    await refreshLocalSession();
+  }
+
+  async function signOut() {
+    setMessage("");
+    await fetch("/api/auth/sign-out", { method: "POST" });
+    await refreshLocalSession();
+  }
+
+  async function disconnectEbay() {
+    setMessage("");
+    const response = await fetch("/api/auth/ebay/disconnect", { method: "POST" });
+    if (!response.ok) {
+      setMessage("Could not disconnect eBay");
+      return;
+    }
+
+    await refreshEbaySessionState();
+  }
+
+  const user = localSession?.user;
+  const ebayConnection = ebaySession?.connection;
+  const ebayConnected = ebayConnection?.connected === true;
+
   return (
     <section className="content account-layout">
       <div className="section-heading">
@@ -335,21 +417,28 @@ function Account() {
         <div className="setting-row">
           <div>
             <h2>Signed in user</h2>
-            <p>Saja</p>
+            <p>{user ? `${user.displayName} (${user.id})` : "Not signed in"}</p>
           </div>
-          <button className="secondary-button" type="button">
+          <button className="secondary-button" onClick={user ? signOut : signIn} type="button">
             <CircleUserRound size={17} />
-            <span>Switch</span>
+            <span>{user ? "Sign out" : "Sign in"}</span>
           </button>
         </div>
         <div className="setting-row">
           <div>
             <h2>eBay UK</h2>
-            <p>Connected and ready to import buying history</p>
+            <p>{formatEbayStatus(ebayConnection)}</p>
           </div>
-          <button className="secondary-button" type="button">
-            <Link2 size={17} />
-            <span>Reconnect</span>
+          <button
+            className="secondary-button"
+            disabled={!user}
+            onClick={ebayConnected ? disconnectEbay : () => {
+              window.location.href = "/api/auth/ebay/start";
+            }}
+            type="button"
+          >
+            {ebayConnected ? <X size={17} /> : <Link2 size={17} />}
+            <span>{ebayConnected ? "Disconnect" : "Connect"}</span>
           </button>
         </div>
         <div className="setting-row">
@@ -363,8 +452,27 @@ function Account() {
           </button>
         </div>
       </div>
+      {message && <p className="form-message">{message}</p>}
     </section>
   );
+}
+
+function formatEbayStatus(connection: EbaySession["connection"] | undefined): string {
+  if (!connection) {
+    return "Sign in locally before connecting eBay";
+  }
+
+  if (connection.connected) {
+    return connection.expiresAt
+      ? `Connected for this session until ${new Date(connection.expiresAt).toLocaleTimeString()}`
+      : "Connected for this session";
+  }
+
+  if (connection.status === "reauth_required") {
+    return "Reconnect eBay for this goggler session";
+  }
+
+  return "Not connected";
 }
 
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
@@ -376,4 +484,3 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
     </div>
   );
 }
-

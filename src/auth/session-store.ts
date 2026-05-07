@@ -14,6 +14,24 @@ export type SessionRecord = {
   createdAt: Date;
 };
 
+export type EbaySessionAuthorization = {
+  accessToken: string;
+  refreshToken?: string;
+  tokenType: string;
+  expiresAt: Date;
+  refreshTokenExpiresAt?: Date;
+  scopes: string[];
+  authorizedAt: Date;
+};
+
+export type EbayConnectionStatus = {
+  connected: boolean;
+  status: "connected_this_session" | "reauth_required" | "disconnected";
+  authorizedAt?: Date;
+  expiresAt?: Date;
+  scopes: string[];
+};
+
 export type SessionWithToken = {
   token: string;
   session: SessionRecord;
@@ -30,6 +48,8 @@ export const DEFAULT_SESSION_TTL_MS = 1000 * 60 * 60 * 8;
 export class InMemorySessionStore {
   private readonly users = new Map<string, AppUser>();
   private readonly sessions = new Map<string, SessionRecord>();
+  private readonly ebayAuthorizations = new Map<string, EbaySessionAuthorization>();
+  private readonly pendingEbayOAuthStates = new Map<string, Map<string, Date>>();
 
   constructor(seedUsers: AppUser[] = []) {
     for (const user of seedUsers) {
@@ -86,12 +106,16 @@ export class InMemorySessionStore {
 
       if (session.expiresAt <= now) {
         this.sessions.delete(session.id);
+        this.ebayAuthorizations.delete(session.id);
+        this.pendingEbayOAuthStates.delete(session.id);
         return undefined;
       }
 
       const user = this.users.get(session.userId);
       if (!user) {
         this.sessions.delete(session.id);
+        this.ebayAuthorizations.delete(session.id);
+        this.pendingEbayOAuthStates.delete(session.id);
         return undefined;
       }
 
@@ -109,6 +133,8 @@ export class InMemorySessionStore {
     const tokenHash = hashSessionToken(token);
     for (const session of this.sessions.values()) {
       if (safeEqual(session.tokenHash, tokenHash)) {
+        this.ebayAuthorizations.delete(session.id);
+        this.pendingEbayOAuthStates.delete(session.id);
         return this.sessions.delete(session.id);
       }
     }
@@ -118,6 +144,82 @@ export class InMemorySessionStore {
 
   sessionCount(): number {
     return this.sessions.size;
+  }
+
+  setEbayAuthorization(sessionId: string, authorization: EbaySessionAuthorization): void {
+    if (!this.sessions.has(sessionId)) {
+      throw new Error(`Cannot set eBay authorization for unknown session: ${sessionId}`);
+    }
+
+    this.ebayAuthorizations.set(sessionId, authorization);
+  }
+
+  getEbayAuthorization(sessionId: string, options: { now?: Date } = {}): EbaySessionAuthorization | undefined {
+    const authorization = this.ebayAuthorizations.get(sessionId);
+    if (!authorization) {
+      return undefined;
+    }
+
+    const now = options.now ?? new Date();
+    if (authorization.expiresAt <= now) {
+      this.ebayAuthorizations.delete(sessionId);
+      return undefined;
+    }
+
+    return authorization;
+  }
+
+  clearEbayAuthorization(sessionId: string): boolean {
+    return this.ebayAuthorizations.delete(sessionId);
+  }
+
+  getEbayConnectionStatus(sessionId: string, options: { now?: Date } = {}): EbayConnectionStatus {
+    const authorization = this.getEbayAuthorization(sessionId, options);
+    if (!authorization) {
+      return {
+        connected: false,
+        status: this.sessions.has(sessionId) ? "reauth_required" : "disconnected",
+        scopes: []
+      };
+    }
+
+    return {
+      connected: true,
+      status: "connected_this_session",
+      authorizedAt: authorization.authorizedAt,
+      expiresAt: authorization.expiresAt,
+      scopes: authorization.scopes
+    };
+  }
+
+  addPendingEbayOAuthState(sessionId: string, stateId: string, expiresAt: Date): void {
+    if (!this.sessions.has(sessionId)) {
+      throw new Error(`Cannot set eBay OAuth state for unknown session: ${sessionId}`);
+    }
+
+    const states = this.pendingEbayOAuthStates.get(sessionId) ?? new Map<string, Date>();
+    states.set(stateId, expiresAt);
+    this.pendingEbayOAuthStates.set(sessionId, states);
+  }
+
+  consumePendingEbayOAuthState(sessionId: string, stateId: string, options: { now?: Date } = {}): boolean {
+    const states = this.pendingEbayOAuthStates.get(sessionId);
+    if (!states) {
+      return false;
+    }
+
+    const expiresAt = states.get(stateId);
+    if (!expiresAt) {
+      return false;
+    }
+
+    states.delete(stateId);
+    if (states.size === 0) {
+      this.pendingEbayOAuthStates.delete(sessionId);
+    }
+
+    const now = options.now ?? new Date();
+    return expiresAt > now;
   }
 }
 
@@ -130,4 +232,3 @@ function safeEqual(left: string, right: string): boolean {
   const rightBuffer = Buffer.from(right);
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
 }
-

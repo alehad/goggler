@@ -2,26 +2,26 @@ import { SESSION_COOKIE_NAME } from "./session-store.ts";
 
 const MAX_AGE_ZERO = "Max-Age=0";
 
-export function createSessionCookie(token: string, expiresAt: Date): string {
-  return [
+export function createSessionCookie(token: string, expiresAt: Date, options: { secure?: boolean } = {}): string {
+  return compactCookieParts([
     `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
     "Path=/",
     "HttpOnly",
     "SameSite=Lax",
-    "Secure",
+    options.secure === false ? undefined : "Secure",
     `Expires=${expiresAt.toUTCString()}`
-  ].join("; ");
+  ]);
 }
 
-export function clearSessionCookie(): string {
-  return [
+export function clearSessionCookie(options: { secure?: boolean } = {}): string {
+  return compactCookieParts([
     `${SESSION_COOKIE_NAME}=`,
     "Path=/",
     "HttpOnly",
     "SameSite=Lax",
-    "Secure",
+    options.secure === false ? undefined : "Secure",
     MAX_AGE_ZERO
-  ].join("; ");
+  ]);
 }
 
 export function readSessionToken(cookieHeader: string | null | undefined): string | undefined {
@@ -37,4 +37,8 @@ export function readSessionToken(cookieHeader: string | null | undefined): strin
 
   const [, value] = sessionCookie.split("=");
   return value ? decodeURIComponent(value) : undefined;
+}
+
+function compactCookieParts(parts: Array<string | undefined>): string {
+  return parts.filter(Boolean).join("; ");
 }
