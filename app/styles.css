@@ -324,7 +324,7 @@ h1 {
 }
 
 .candidate-title-row {
-  align-items: start;
+  align-items: flex-start;
   display: flex;
   gap: 16px;
   justify-content: space-between;

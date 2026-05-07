@@ -15,3 +15,5 @@ goggler is a personal-first eBay UK auction tracker. It imports authenticated bu
 - Merge to `main` only after the user has confirmed the PR should be merged.
 - After a PR is merged, delete the feature branch on GitHub and locally unless the user asks to keep it.
 - Keep `main` clean and up to date before starting new work.
+- Do not commit directly on `main`, except for explicit end-of-session updates to `docs/session-notes.md` requested by the user.
+- All code, dependency, configuration, OpenSpec, and non-session-note documentation changes must follow the branch and pull request workflow.
