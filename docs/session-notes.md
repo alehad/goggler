@@ -49,6 +49,7 @@ Initial scope:
 
 - `connect-ebay-account`: plans local user-owned eBay OAuth connection, session-scoped eBay token handling, and buying-history import through eBay Trading API.
 - `testing-ci-foundation`: plans layered test coverage, auth-first verification, GitHub Actions checks, secret-safe CI behavior, mocked eBay provider responses, and optional advisory AI review.
+- `ebay-inspired-responsive-ux`: plans a marketplace-oriented app shell with eBay-familiar buyer destinations, compact listing rows, account/preferences grouping, and a bottom-docked navigation model suitable for a future iPhone app.
 
 ## Implemented So Far
 
@@ -62,11 +63,15 @@ Initial scope:
   - `POST /api/auth/ebay/disconnect`
 - Implemented eBay config loading, signed OAuth state creation/validation, authorization-code token exchange, and session-scoped eBay token storage.
 - eBay access/refresh token values are kept only in server-side session memory for the current goggler login and are not exposed through status responses.
+- UX update PR #6 is merged to `main`.
+- The app shell now uses a bottom-docked primary navigation model across desktop and mobile, with destinations for Home, Watching, Purchases, and My goggler.
+- The sticky top header now carries the goggler brand, search, eBay setup status, filters, and local user control.
+- Candidate relisting rows have been refined toward compact marketplace-style listing rows with image, title, seller/condition, lost bid/current bid, time left, confidence, and quick review actions.
 - `.env.example` exists with expected local settings.
-- Current verification before merge of PR #4:
-  - `npm run test:unit` passed with 35 tests.
+- Current verification before merge of PR #6:
+  - `npm run test:unit` passed with 39 tests.
   - `npm run build` passed.
-  - Local browser check passed for app loading and Account sign-in.
+  - Local browser check passed for the bottom-docked UX direction.
 
 ## Local Testing Notes
 
@@ -84,15 +89,17 @@ If the app shows a missing `.next/server` chunk error or loses styling after run
 
 ## UI Direction
 
-An initial UI foundation has been merged to `main`.
+An initial UI foundation and the first marketplace-oriented responsive UX pass have been merged to `main`.
 
 It includes:
 
 - Next.js TypeScript scaffold files.
 - A dependency-free static prototype under `prototype/`.
-- Tabs for Dashboard, Tracking, Won, and Account.
+- App destinations for Home, Watching, Purchases, and My goggler.
+- Bottom-docked primary navigation designed to map naturally to a future iPhone app.
+- Sticky top search/header with brand, filters, eBay setup status, and local user access.
 - Mock vinyl-record auction data.
-- Candidate relisting cards with confidence, pricing context, matching signals, ending time, and review actions.
+- Candidate relisting rows with confidence, pricing context, matching signals, ending time, and review actions.
 
 The static prototype can be opened directly from `prototype/index.html` or served locally from the `prototype/` folder.
 
