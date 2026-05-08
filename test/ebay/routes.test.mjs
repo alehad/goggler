@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { NextRequest } from "next/server.js";
 import { POST as signIn } from "../../app/api/auth/sign-in/route.ts";
+import { GET as getEbayConfigStatus } from "../../app/api/auth/ebay/config-status/route.ts";
 import { GET as startEbayAuth } from "../../app/api/auth/ebay/start/route.ts";
 import { GET as handleEbayCallback } from "../../app/api/auth/ebay/callback/route.ts";
 import { GET as getEbaySession } from "../../app/api/auth/ebay/session/route.ts";
@@ -26,6 +27,31 @@ test("eBay start route requires local auth", async () => {
 
   assert.equal(response.status, 401);
   assert.equal(body.error, "local_auth_required");
+});
+
+test("eBay config status route reports missing fields without auth", async () => {
+  clearEbayEnv();
+  const response = await getEbayConfigStatus();
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.config.ready, false);
+  assert.ok(body.config.missing.includes("EBAY_CLIENT_ID"));
+  assert.equal(JSON.stringify(body).includes("client-secret"), false);
+});
+
+test("eBay start route reports config errors for signed-in users", async () => {
+  clearEbayEnv();
+  const cookie = await signInCookie();
+  const response = await startEbayAuth(
+    new NextRequest("http://localhost:3000/api/auth/ebay/start", {
+      headers: { cookie }
+    })
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 500);
+  assert.equal(body.error, "ebay_config_error");
 });
 
 test("eBay start route redirects signed-in users to eBay consent", async () => {
@@ -165,5 +191,11 @@ function currentSessionFromCookie(cookie) {
 function setEbayEnv() {
   for (const [key, value] of Object.entries(ebayEnv)) {
     process.env[key] = value;
+  }
+}
+
+function clearEbayEnv() {
+  for (const key of Object.keys(ebayEnv)) {
+    delete process.env[key];
   }
 }

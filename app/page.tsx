@@ -53,6 +53,18 @@ type EbaySession = {
   };
 };
 
+type EbayConfigStatus = {
+  config: {
+    ready: boolean;
+    environment: "sandbox" | "production";
+    missing: string[];
+    invalid: string[];
+    marketplaceId: string;
+    tradingSiteId: string;
+    scopeCount: number;
+  };
+};
+
 const candidates: Candidate[] = [
   {
     id: "blue-note",
@@ -356,9 +368,17 @@ function Account({
   refreshLocalSession: () => Promise<void>;
 }) {
   const [ebaySession, setEbaySession] = useState<EbaySession | null>(null);
+  const [ebayConfigStatus, setEbayConfigStatus] = useState<EbayConfigStatus | null>(null);
   const [message, setMessage] = useState<string>("");
 
+  async function refreshEbayConfigStatus() {
+    const response = await fetch("/api/auth/ebay/config-status");
+    setEbayConfigStatus(response.ok ? ((await response.json()) as EbayConfigStatus) : null);
+  }
+
   async function refreshEbaySessionState() {
+    await refreshEbayConfigStatus();
+
     if (localSession?.user) {
       const ebayResponse = await fetch("/api/auth/ebay/session");
       setEbaySession(ebayResponse.ok ? ((await ebayResponse.json()) as EbaySession) : null);
@@ -402,7 +422,9 @@ function Account({
 
   const user = localSession?.user;
   const ebayConnection = ebaySession?.connection;
+  const ebayConfig = ebayConfigStatus?.config;
   const ebayConnected = ebayConnection?.connected === true;
+  const canConnectEbay = Boolean(user && ebayConfig?.ready);
 
   return (
     <section className="content account-layout">
@@ -427,11 +449,11 @@ function Account({
         <div className="setting-row">
           <div>
             <h2>eBay UK</h2>
-            <p>{formatEbayStatus(ebayConnection)}</p>
+            <p>{formatEbayStatus(ebayConnection, ebayConfig)}</p>
           </div>
           <button
             className="secondary-button"
-            disabled={!user}
+            disabled={!canConnectEbay && !ebayConnected}
             onClick={ebayConnected ? disconnectEbay : () => {
               window.location.href = "/api/auth/ebay/start";
             }}
@@ -457,9 +479,20 @@ function Account({
   );
 }
 
-function formatEbayStatus(connection: EbaySession["connection"] | undefined): string {
+function formatEbayStatus(
+  connection: EbaySession["connection"] | undefined,
+  config: EbayConfigStatus["config"] | undefined
+): string {
   if (!connection) {
     return "Sign in locally before connecting eBay";
+  }
+
+  if (!config) {
+    return "Checking eBay Sandbox configuration";
+  }
+
+  if (!config.ready) {
+    return formatEbayConfigGap(config);
   }
 
   if (connection.connected) {
@@ -473,6 +506,12 @@ function formatEbayStatus(connection: EbaySession["connection"] | undefined): st
   }
 
   return "Not connected";
+}
+
+function formatEbayConfigGap(config: EbayConfigStatus["config"]): string {
+  const missing = config.missing.length > 0 ? `missing ${config.missing.join(", ")}` : "";
+  const invalid = config.invalid.length > 0 ? `invalid ${config.invalid.join(", ")}` : "";
+  return `Sandbox config not ready${missing || invalid ? `: ${[missing, invalid].filter(Boolean).join("; ")}` : ""}`;
 }
 
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {

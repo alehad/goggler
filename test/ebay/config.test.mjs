@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { buildEbayConsentUrl, loadEbayConfig } from "../../src/ebay/config.ts";
+import { buildEbayConsentUrl, getEbayConfigStatus, loadEbayConfig } from "../../src/ebay/config.ts";
 
 const env = {
   EBAY_ENVIRONMENT: "sandbox",
+  GOGGLER_AUTH_SECRET: "test-secret-with-at-least-32-characters",
   EBAY_CLIENT_ID: "client-id",
   EBAY_CLIENT_SECRET: "client-secret",
   EBAY_REDIRECT_URI: "runame-value",
@@ -45,4 +46,27 @@ test("builds eBay user consent URL", () => {
   assert.equal(url.searchParams.get("response_type"), "code");
   assert.equal(url.searchParams.get("scope"), "scope-one scope-two");
   assert.equal(url.searchParams.get("state"), "signed-state");
+});
+
+test("reports eBay configuration readiness without exposing secrets", () => {
+  const status = getEbayConfigStatus(env);
+
+  assert.equal(status.ready, true);
+  assert.equal(status.environment, "sandbox");
+  assert.equal(status.scopeCount, 2);
+  assert.deepEqual(status.missing, []);
+  assert.deepEqual(status.invalid, []);
+  assert.equal(JSON.stringify(status).includes("client-secret"), false);
+  assert.equal(JSON.stringify(status).includes(env.GOGGLER_AUTH_SECRET), false);
+});
+
+test("reports missing and invalid eBay configuration", () => {
+  const status = getEbayConfigStatus({
+    EBAY_ENVIRONMENT: "not-real",
+    GOGGLER_AUTH_SECRET: "short"
+  });
+
+  assert.equal(status.ready, false);
+  assert.deepEqual(status.missing, ["EBAY_CLIENT_ID", "EBAY_CLIENT_SECRET", "EBAY_REDIRECT_URI", "EBAY_OAUTH_SCOPES"]);
+  assert.deepEqual(status.invalid, ["EBAY_ENVIRONMENT", "GOGGLER_AUTH_SECRET"]);
 });
