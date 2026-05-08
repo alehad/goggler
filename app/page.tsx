@@ -7,13 +7,14 @@ import {
   CircleUserRound,
   Clock3,
   ExternalLink,
-  Gauge,
   Gavel,
   Heart,
+  House,
   Link2,
   Search,
   Settings,
   ShieldCheck,
+  ShoppingBag,
   SlidersHorizontal,
   Sparkles,
   X
@@ -136,11 +137,11 @@ const wonItems = [
 ];
 
 const tabs = [
-  { id: "dashboard", label: "Dashboard", icon: Gauge },
-  { id: "tracking", label: "Tracking", icon: Heart },
-  { id: "won", label: "Won", icon: BarChart3 },
-  { id: "account", label: "Account", icon: CircleUserRound }
-] satisfies { id: Tab; label: string; icon: typeof Gauge }[];
+  { id: "dashboard", label: "Home", mobileLabel: "Home", icon: House },
+  { id: "tracking", label: "Watching", mobileLabel: "Watching", icon: Heart },
+  { id: "won", label: "Purchases", mobileLabel: "Purchases", icon: ShoppingBag },
+  { id: "account", label: "My goggler", mobileLabel: "My", icon: CircleUserRound }
+] satisfies { id: Tab; label: string; mobileLabel: string; icon: typeof House }[];
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
@@ -166,47 +167,22 @@ export default function Home() {
 
   return (
     <main className="app-shell">
-      <aside className="sidebar" aria-label="Primary navigation">
-        <div className="brand">
-          <div className="brand-mark">g</div>
-          <div>
-            <strong>goggler</strong>
-            <span>eBay UK tracker</span>
-          </div>
-        </div>
-
-        <nav className="nav-list">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button
-                className={activeTab === tab.id ? "nav-item active" : "nav-item"}
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                type="button"
-                title={tab.label}
-              >
-                <Icon size={18} />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-
-        <div className="sync-card">
-          <div className="sync-icon">
-            <ShieldCheck size={18} />
-          </div>
-          <strong>eBay connected</strong>
-          <span>Last import 18 minutes ago</span>
-        </div>
-      </aside>
-
       <section className="workspace">
         <header className="topbar">
+          <div className="brand">
+            <div className="brand-mark">g</div>
+            <div>
+              <strong>goggler</strong>
+              <span>eBay UK tracker</span>
+            </div>
+          </div>
           <div className="search-box">
             <Search size={18} />
             <input aria-label="Search tracked items" placeholder="Search tracked records, artists, catalogue numbers" />
+          </div>
+          <div className="setup-chip" title="Connect from My goggler">
+            <ShieldCheck size={16} />
+            <span>eBay setup</span>
           </div>
           <button className="icon-button" title="Filters" type="button">
             <SlidersHorizontal size={18} />
@@ -223,6 +199,24 @@ export default function Home() {
         {activeTab === "won" && <Won stats={stats} />}
         {activeTab === "account" && <Account localSession={localSession} refreshLocalSession={refreshLocalSession} />}
       </section>
+
+      <nav className="bottom-tabbar" aria-label="Primary navigation">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              className={activeTab === tab.id ? "bottom-tab active" : "bottom-tab"}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              type="button"
+              title={tab.label}
+            >
+              <Icon size={20} />
+              <span>{tab.mobileLabel}</span>
+            </button>
+          );
+        })}
+      </nav>
     </main>
   );
 }
@@ -232,7 +226,7 @@ function Dashboard() {
     <section className="content">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Review queue</p>
+          <p className="eyebrow">Home</p>
           <h1>Likely relistings</h1>
         </div>
         <button className="primary-button" type="button">
@@ -263,10 +257,9 @@ function Dashboard() {
               </div>
 
               <div className="meta-row">
-                <span>{candidate.currentPrice} current bid</span>
-                <span>{candidate.originalPrice} original lost bid</span>
                 <span>{candidate.condition}</span>
                 <span>{candidate.seller}</span>
+                <span>{candidate.originalPrice} lost bid</span>
               </div>
 
               <div className="signal-row">
@@ -278,11 +271,17 @@ function Dashboard() {
               </div>
             </div>
 
-            <div className="card-actions">
+            <div className="listing-side">
+              <strong>{candidate.currentPrice}</strong>
+              <span>current bid</span>
+              <span className="confidence">{candidate.confidence}% match</span>
               <span className="ends">
                 <Clock3 size={16} />
                 {candidate.ends}
               </span>
+            </div>
+
+            <div className="card-actions">
               <button className="icon-button positive" title="Confirm match" type="button">
                 <Check size={18} />
               </button>
@@ -305,8 +304,8 @@ function Tracking() {
     <section className="content">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Lost auctions</p>
-          <h1>Tracked items</h1>
+          <p className="eyebrow">Watching</p>
+          <h1>Tracked lost auctions</h1>
         </div>
         <button className="primary-button" type="button">
           <Gavel size={17} />
@@ -334,8 +333,8 @@ function Won({ stats }: { stats: { highest: number; lowest: number; median: numb
     <section className="content">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Purchase analytics</p>
-          <h1>Won items</h1>
+          <p className="eyebrow">Purchases</p>
+          <h1>Won item history</h1>
         </div>
       </div>
 
@@ -430,8 +429,8 @@ function Account({
     <section className="content account-layout">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Local profile</p>
-          <h1>Account</h1>
+          <p className="eyebrow">Account and preferences</p>
+          <h1>My goggler</h1>
         </div>
       </div>
 
