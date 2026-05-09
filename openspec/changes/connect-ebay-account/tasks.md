@@ -19,6 +19,9 @@
 - [x] Create a minimal local sign-in/session flow.
 - [x] Add request helper for resolving the current user on server routes.
 - [x] Protect account and import routes from anonymous access.
+- [x] Keep the process-local development session store stable across Next.js dev route reloads.
+- [x] Support same-origin CSRF validation when local development is reached through an HTTPS tunnel.
+- [x] Redirect OAuth callbacks back to the public tunnel origin when local development is proxied.
 - [x] Add tests for session creation, lookup, expiry, and logout.
 
 ## 4. eBay OAuth Connection
