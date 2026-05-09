@@ -41,9 +41,10 @@ Initial scope:
 - Direct commits to `main` are only allowed for explicit end-of-session updates to `docs/session-notes.md`. All other code, dependency, configuration, OpenSpec, and documentation changes should use a `codex/` branch and PR.
 - Local goggler auth is currently an in-memory seeded-user session model. It stores only a hash of the local session token server-side and uses an HttpOnly cookie in the browser.
 - Local HTTP development cookies intentionally omit the `Secure` flag so `http://localhost:3000` sign-in works; HTTPS requests still get Secure cookies.
-- eBay OAuth connect routes now exist, but have not yet been validated against a real eBay Sandbox developer app.
+- eBay OAuth connect routes have been validated end to end against a real eBay Sandbox developer app through ngrok.
 - eBay OAuth state signing requires `GOGGLER_AUTH_SECRET` with at least 32 characters.
 - State-changing POST routes use same-origin CSRF checks.
+- Local development through HTTPS tunnels is supported for OAuth testing. Forwarded `x-forwarded-host` / `x-forwarded-proto` headers are used to validate tunneled origins and redirect callbacks back to the public tunnel origin.
 
 ## Merged OpenSpec Changes
 
@@ -63,15 +64,23 @@ Initial scope:
   - `POST /api/auth/ebay/disconnect`
 - Implemented eBay config loading, signed OAuth state creation/validation, authorization-code token exchange, and session-scoped eBay token storage.
 - eBay access/refresh token values are kept only in server-side session memory for the current goggler login and are not exposed through status responses.
+- eBay Sandbox OAuth was validated manually on 2026-05-09 using a Sandbox buyer test user and ngrok HTTPS callback.
+- ngrok was installed locally with Homebrew and used to expose `localhost:3000` as a temporary HTTPS origin.
+- eBay Sandbox app details configured locally:
+  - Application title: `Goggler`
+  - Sandbox RuName / redirect URI: `Alex_Hadzic-AlexHadz-Goggle-vdrxokh`
+  - Accepted/declined redirect URL used for this session: `https://unrigged-fifth-nastily.ngrok-free.dev/api/auth/ebay/callback`
+  - OAuth scope used for initial connect validation: `https://api.ebay.com/oauth/api_scope`
+- PR #7 is merged to `main`; it stabilizes local-dev OAuth via ngrok by preserving the process-local session store across Next.js dev route reloads, supporting forwarded HTTPS origins for CSRF validation, and redirecting callbacks to the public tunnel origin.
 - UX update PR #6 is merged to `main`.
 - The app shell now uses a bottom-docked primary navigation model across desktop and mobile, with destinations for Home, Watching, Purchases, and My goggler.
 - The sticky top header now carries the goggler brand, search, eBay setup status, filters, and local user control.
 - Candidate relisting rows have been refined toward compact marketplace-style listing rows with image, title, seller/condition, lost bid/current bid, time left, confidence, and quick review actions.
 - `.env.example` exists with expected local settings.
-- Current verification before merge of PR #6:
-  - `npm run test:unit` passed with 39 tests.
+- Current verification before merge of PR #7:
+  - `npm run test:unit` passed with 42 tests.
   - `npm run build` passed.
-  - Local browser check passed for the bottom-docked UX direction.
+  - Manual eBay Sandbox OAuth flow through ngrok passed.
 
 ## Local Testing Notes
 
@@ -82,6 +91,17 @@ To test the app shell and local sign-in:
 3. Go to Account.
 4. Click Sign in.
 5. Confirm the top bar and Account tab show `Saja`.
+
+To test eBay Sandbox OAuth locally:
+
+1. Run `npm run dev`.
+2. In another terminal, run `ngrok http 3000`.
+3. Confirm the active ngrok HTTPS URL matches the accepted/declined URL configured in the eBay Sandbox RuName. If ngrok gives a new temporary URL, update eBay Developer portal before testing.
+4. Open the ngrok HTTPS URL, not `localhost`, in the browser.
+5. Sign into goggler locally as `Saja`.
+6. Go to My goggler and click Connect eBay.
+7. Sign into the eBay Sandbox buyer test user and consent.
+8. Confirm the app returns to the ngrok URL with `?account=ebay_connected` and the eBay status shows connected for the current session.
 
 If the app shows a missing `.next/server` chunk error or loses styling after running `npm run build` while the dev server is active, stop the dev server, delete `.next`, and restart `npm run dev`. The generated `.next` output is shared by dev and production build modes.
 
@@ -116,35 +136,34 @@ When moving to another Mac:
 
 ## Next Likely Steps
 
-- Create the eBay Developer Sandbox app configuration and collect the Sandbox client id, client secret, RuName/redirect value, and allowed scopes.
-- Create a local `.env.local` from `.env.example` with Sandbox values and a strong `GOGGLER_AUTH_SECRET`.
-- Start `npm run dev`, sign into goggler locally, click Connect in the Account tab, and validate the full eBay Sandbox OAuth redirect/callback flow.
-- Confirm the callback marks eBay as connected for the current goggler session.
-- If real eBay Sandbox connection succeeds, update any OpenSpec tasks and session notes with exact Sandbox setup details.
-- Only after OAuth connect works end to end, implement `GetMyeBayBuying` import as a separate follow-on change.
+- Confirm exact Trading API `GetMyeBayBuying` headers and XML request shape when using OAuth via `X-EBAY-API-IAF-TOKEN`.
+- Implement the Trading API XML client using the session-scoped eBay access token.
+- Implement `GetMyeBayBuying` request builder for `WonList` and `LostList` as a separate follow-on branch.
+- Add mocked response tests for request headers, pagination, response validation, and normalized errors before relying on live Sandbox data.
 - Consider a separate tooling branch to replace deprecated `next lint` with the ESLint CLI.
 
-## eBay Developer Setup Needed
+## eBay Developer Setup
 
-To test against a real eBay account, the next Codex instance/user will need eBay Developer Program configuration:
+Sandbox setup completed on 2026-05-09:
 
-- eBay application keys for Sandbox first, then Production later.
-- OAuth user consent configured for the app.
-- The correct eBay RuName / redirect URI value for the selected environment.
-- Accept and reject URLs configured in the eBay developer portal.
-- Minimal scopes confirmed for the OAuth user token.
-- Environment variables kept in `.env.local` and never committed.
+- eBay Developer application title: `Goggler`
+- Sandbox App ID, Dev ID, and Cert ID were created. Do not paste or commit the App ID/Cert ID values.
+- OAuth user consent was configured for Sandbox.
+- Sandbox buyer test user was created and used for OAuth consent.
+- Sandbox RuName / redirect URI: `Alex_Hadzic-AlexHadz-Goggle-vdrxokh`
+- Accepted and declined URLs were configured to the temporary ngrok callback for this session.
+- Environment variables are kept in `.env.local` and must never be committed.
 
-Likely local environment variables:
+Current local environment variables:
 
 ```bash
 DATABASE_URL=
-GOGGLER_AUTH_SECRET=at-least-32-characters
+GOGGLER_AUTH_SECRET=at-least-32-characters # already generated locally
 EBAY_ENVIRONMENT=sandbox
-EBAY_CLIENT_ID=...
-EBAY_CLIENT_SECRET=...
-EBAY_REDIRECT_URI=...
-EBAY_OAUTH_SCOPES=...
+EBAY_CLIENT_ID=<Sandbox App ID>
+EBAY_CLIENT_SECRET=<Sandbox Cert ID>
+EBAY_REDIRECT_URI=Alex_Hadzic-AlexHadz-Goggle-vdrxokh
+EBAY_OAUTH_SCOPES=https://api.ebay.com/oauth/api_scope
 EBAY_MARKETPLACE_ID=EBAY_GB
 EBAY_TRADING_SITE_ID=3
 ```
