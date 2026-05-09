@@ -1,13 +1,13 @@
 import type { NextRequest } from "next/server.js";
+import { getAllowedRequestOrigins } from "../http/origin.ts";
 
 export type CsrfValidation = { ok: true } | { ok: false; error: "invalid_origin" };
 
 export function validateSameOriginRequest(request: NextRequest): CsrfValidation {
-  const expectedOrigin = request.nextUrl.origin;
   const origin = request.headers.get("origin");
 
   if (origin) {
-    return origin === expectedOrigin ? { ok: true } : { ok: false, error: "invalid_origin" };
+    return expectedOrigins(request).has(origin) ? { ok: true } : { ok: false, error: "invalid_origin" };
   }
 
   const referer = request.headers.get("referer");
@@ -16,8 +16,12 @@ export function validateSameOriginRequest(request: NextRequest): CsrfValidation 
   }
 
   try {
-    return new URL(referer).origin === expectedOrigin ? { ok: true } : { ok: false, error: "invalid_origin" };
+    return expectedOrigins(request).has(new URL(referer).origin) ? { ok: true } : { ok: false, error: "invalid_origin" };
   } catch {
     return { ok: false, error: "invalid_origin" };
   }
+}
+
+function expectedOrigins(request: NextRequest): Set<string> {
+  return getAllowedRequestOrigins(request);
 }
