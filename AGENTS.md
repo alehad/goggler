@@ -23,5 +23,12 @@ goggler is a personal-first eBay UK auction tracker. It imports authenticated bu
 ## Review Workflow
 
 - Before committing security-sensitive changes, prefer a local advisory security review of the uncommitted diff when a callable local tool is available, such as VS Code GitHub Copilot review or another explicit Copilot CLI integration.
+- When GitHub Copilot CLI is authenticated and available, prefer a non-interactive, read-only review prompt before committing security-sensitive changes. Ask it to review the current uncommitted git diff for security issues, return only verdict/findings/recommended fixes, and not modify files.
+- A suitable Copilot CLI pattern is:
+
+```bash
+copilot -p "Review the current uncommitted git diff for security issues. Do not modify files. Return verdict, findings, and recommended fixes only." --silent --deny-tool='write' --deny-tool='shell(*)'
+```
+
 - If no Copilot/VS Code review command is available in the Codex environment, say so and continue with normal verification plus any security review feedback the user provides manually.
 - Treat advisory AI review as supplemental. Do not replace deterministic checks such as unit tests, production build, and direct code inspection.
