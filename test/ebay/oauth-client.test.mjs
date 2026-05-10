@@ -17,7 +17,7 @@ test("exchanges an eBay authorization code for session-scoped token metadata", a
     now: new Date("2026-05-07T10:00:00.000Z"),
     fetch: async (url, init) => {
       request = { url, init };
-      return Response.json({
+      return jsonResponse({
         access_token: "access-token",
         expires_in: 7200,
         refresh_token: "refresh-token",
@@ -49,3 +49,9 @@ test("normalizes eBay token exchange failures", async () => {
     /status 401/
   );
 });
+
+function jsonResponse(body) {
+  return new Response(JSON.stringify(body), {
+    headers: { "Content-Type": "application/json" }
+  });
+}

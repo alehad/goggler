@@ -54,6 +54,23 @@ export class EbayOAuthStateStore {
     state: string | undefined,
     expected: { userId: string; sessionId: string; now?: Date }
   ): EbayOAuthStateValidation {
+    const validation = this.validateSignedState(state, { now: expected.now });
+    if (!validation.ok) {
+      return validation;
+    }
+
+    if (validation.payload.userId !== expected.userId) {
+      return { ok: false, reason: "wrong_user" };
+    }
+
+    if (validation.payload.sessionId !== expected.sessionId) {
+      return { ok: false, reason: "wrong_session" };
+    }
+
+    return validation;
+  }
+
+  validateSignedState(state: string | undefined, options: { now?: Date } = {}): EbayOAuthStateValidation {
     if (!state) {
       return { ok: false, reason: "malformed" };
     }
@@ -73,17 +90,9 @@ export class EbayOAuthStateStore {
       return { ok: false, reason: "malformed" };
     }
 
-    const now = expected.now ?? new Date();
+    const now = options.now ?? new Date();
     if (payload.expiresAt <= now.getTime()) {
       return { ok: false, reason: "expired" };
-    }
-
-    if (payload.userId !== expected.userId) {
-      return { ok: false, reason: "wrong_user" };
-    }
-
-    if (payload.sessionId !== expected.sessionId) {
-      return { ok: false, reason: "wrong_session" };
     }
 
     return { ok: true, payload };
