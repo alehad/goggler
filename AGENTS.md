@@ -13,7 +13,10 @@ goggler is a personal-first eBay UK auction tracker. It imports authenticated bu
 - Do development work on short-lived branches using the `codex/` prefix by default.
 - Open pull requests from feature branches into `main`.
 - Merge to `main` only after the user has confirmed the PR should be merged.
-- When the user explicitly asks to merge an approved PR, Codex may use the GitHub API via `curl` to merge the PR, delete the remote branch, synchronize local `main`, and delete the local branch.
+- Prefer GitHub CLI (`gh`) for PR creation and merge/cleanup when it is authenticated and available.
+- When the user explicitly asks to create a PR, prefer `gh pr create` over raw GitHub API calls.
+- When the user explicitly asks to merge an approved PR, prefer `gh pr merge --squash --delete-branch`, then synchronize local `main` and delete the local branch.
+- If `gh` is unavailable or unauthenticated, Codex may use the GitHub API via `curl` to merge the PR, delete the remote branch, synchronize local `main`, and delete the local branch.
 - The user has pre-approved this repository PR merge/cleanup workflow conceptually; still follow runtime approval prompts if the Codex environment requires them.
 - After a PR is merged, delete the feature branch on GitHub and locally unless the user asks to keep it.
 - Keep `main` clean and up to date before starting new work.
