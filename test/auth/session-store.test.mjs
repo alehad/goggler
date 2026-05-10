@@ -36,6 +36,21 @@ test("looks up a valid session by token", () => {
   assert.equal(result?.user.id, user.id);
 });
 
+test("looks up a valid session by id", () => {
+  const store = new InMemorySessionStore([user]);
+  const { session } = store.createSession(user.id, {
+    now: new Date("2026-05-01T10:00:00.000Z"),
+    ttlMs: 1000
+  });
+
+  const result = store.lookupSessionById(session.id, {
+    now: new Date("2026-05-01T10:00:00.500Z")
+  });
+
+  assert.equal(result?.user.id, user.id);
+  assert.equal(result?.session.id, session.id);
+});
+
 test("expires sessions after their ttl", () => {
   const store = new InMemorySessionStore([user]);
   const { token } = store.createSession(user.id, {
@@ -44,6 +59,21 @@ test("expires sessions after their ttl", () => {
   });
 
   const result = store.lookupSession(token, {
+    now: new Date("2026-05-01T10:00:01.001Z")
+  });
+
+  assert.equal(result, undefined);
+  assert.equal(store.sessionCount(), 0);
+});
+
+test("expires sessions by id after their ttl", () => {
+  const store = new InMemorySessionStore([user]);
+  const { session } = store.createSession(user.id, {
+    now: new Date("2026-05-01T10:00:00.000Z"),
+    ttlMs: 1000
+  });
+
+  const result = store.lookupSessionById(session.id, {
     now: new Date("2026-05-01T10:00:01.001Z")
   });
 

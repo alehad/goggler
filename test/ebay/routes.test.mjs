@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { NextRequest } from "next/server.js";
 import { POST as signIn } from "../../app/api/auth/sign-in/route.ts";
 import { GET as getEbayConfigStatus } from "../../app/api/auth/ebay/config-status/route.ts";
-import { GET as startEbayAuth } from "../../app/api/auth/ebay/start/route.ts";
+import { GET as startEbayAuth, HEAD as prewarmEbayAuthStart } from "../../app/api/auth/ebay/start/route.ts";
 import { GET as handleEbayCallback } from "../../app/api/auth/ebay/callback/route.ts";
 import { GET as getEbaySession } from "../../app/api/auth/ebay/session/route.ts";
 import { POST as disconnectEbay } from "../../app/api/auth/ebay/disconnect/route.ts";
@@ -76,6 +76,48 @@ test("eBay start route redirects signed-in users to eBay consent", async () => {
   assert.ok(url.searchParams.get("state"));
 });
 
+test("eBay start prewarm validates auth and config without redirecting", async () => {
+  setEbayEnv();
+  const cookie = await signInCookie();
+  const sessionBefore = currentSessionFromCookie(cookie);
+  const response = await prewarmEbayAuthStart(
+    new NextRequest("http://localhost:3000/api/auth/ebay/start", {
+      headers: { cookie },
+      method: "HEAD"
+    })
+  );
+
+  assert.equal(response.status, 204);
+  assert.equal(response.headers.get("location"), null);
+
+  const sessionAfter = currentSessionFromCookie(cookie);
+  assert.equal(sessionAfter.session.id, sessionBefore.session.id);
+});
+
+test("eBay start prewarm requires local auth", async () => {
+  setEbayEnv();
+  const response = await prewarmEbayAuthStart(
+    new NextRequest("http://localhost:3000/api/auth/ebay/start", {
+      method: "HEAD"
+    })
+  );
+
+  assert.equal(response.status, 401);
+});
+
+test("eBay start prewarm reports config errors generically", async () => {
+  clearEbayEnv();
+  const cookie = await signInCookie();
+  const response = await prewarmEbayAuthStart(
+    new NextRequest("http://localhost:3000/api/auth/ebay/start", {
+      headers: { cookie },
+      method: "HEAD"
+    })
+  );
+
+  assert.equal(response.status, 503);
+});
+
 test("eBay session route requires local auth", async () => {
   const response = await getEbaySession(new NextRequest("http://localhost:3000/api/auth/ebay/session"));
   const body = await response.json();
@@ -126,7 +168,7 @@ test("eBay callback stores token values only in server-side session state", asyn
 
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async () =>
-    Response.json({
+    jsonResponse({
       access_token: "access-token",
       expires_in: 7200,
       refresh_token: "refresh-token",
@@ -156,6 +198,85 @@ test("eBay callback stores token values only in server-side session state", asyn
   assert.equal(body.connection.status, "connected_this_session");
   assert.equal(JSON.stringify(body).includes("access-token"), false);
   assert.equal(JSON.stringify(body).includes("refresh-token"), false);
+});
+
+test("eBay callback can complete from signed pending state when the browser omits the session cookie", async () => {
+  setEbayEnv();
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  const { payload, state } = getEbayOAuthStateStore().createWithPayload({
+    userId: session.user.id,
+    sessionId: session.session.id
+  });
+  sessionStore.addPendingEbayOAuthState(session.session.id, payload.id, new Date(payload.expiresAt));
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    jsonResponse({
+      access_token: "access-token-without-cookie",
+      expires_in: 7200,
+      token_type: "User Access Token"
+    });
+
+  try {
+    const callback = await handleEbayCallback(
+      new NextRequest(`http://localhost:3000/api/auth/ebay/callback?code=auth-code&state=${encodeURIComponent(state)}`)
+    );
+    assert.equal(callback.status, 307);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const statusResponse = await getEbaySession(
+    new NextRequest("http://localhost:3000/api/auth/ebay/session", {
+      headers: { cookie }
+    })
+  );
+  const body = await statusResponse.json();
+
+  assert.equal(body.connection.connected, true);
+  assert.equal(JSON.stringify(body).includes("access-token-without-cookie"), false);
+});
+
+test("eBay callback rejects replayed cookie-less signed state before exchanging a token", async () => {
+  setEbayEnv();
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  const { payload, state } = getEbayOAuthStateStore().createWithPayload({
+    userId: session.user.id,
+    sessionId: session.session.id
+  });
+  sessionStore.addPendingEbayOAuthState(session.session.id, payload.id, new Date(payload.expiresAt));
+
+  let fetchCalls = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    return jsonResponse({
+      access_token: "access-token-for-replay-test",
+      expires_in: 7200,
+      token_type: "User Access Token"
+    });
+  };
+
+  try {
+    const first = await handleEbayCallback(
+      new NextRequest(`http://localhost:3000/api/auth/ebay/callback?code=auth-code&state=${encodeURIComponent(state)}`)
+    );
+    assert.equal(first.status, 307);
+
+    const second = await handleEbayCallback(
+      new NextRequest(`http://localhost:3000/api/auth/ebay/callback?code=auth-code&state=${encodeURIComponent(state)}`)
+    );
+    const body = await second.json();
+    assert.equal(second.status, 400);
+    assert.equal(body.error, "invalid_oauth_state");
+    assert.equal(body.reason, "replayed");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(fetchCalls, 1);
 });
 
 test("eBay disconnect route requires local auth", async () => {
@@ -198,4 +319,10 @@ function clearEbayEnv() {
   for (const key of Object.keys(ebayEnv)) {
     delete process.env[key];
   }
+}
+
+function jsonResponse(body) {
+  return new Response(JSON.stringify(body), {
+    headers: { "Content-Type": "application/json" }
+  });
 }

@@ -368,6 +368,7 @@ function Account({
 }) {
   const [ebaySession, setEbaySession] = useState<EbaySession | null>(null);
   const [ebayConfigStatus, setEbayConfigStatus] = useState<EbayConfigStatus | null>(null);
+  const [ebayStartReady, setEbayStartReady] = useState(false);
   const [message, setMessage] = useState<string>("");
 
   async function refreshEbayConfigStatus() {
@@ -390,6 +391,36 @@ function Account({
   useEffect(() => {
     void refreshEbaySessionState();
   }, [localSession?.user?.id]);
+
+  useEffect(() => {
+    const user = localSession?.user;
+    const ebayConfig = ebayConfigStatus?.config;
+    if (!user || !ebayConfig?.ready) {
+      setEbayStartReady(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setEbayStartReady(false);
+
+    fetch("/api/auth/ebay/start", {
+      cache: "no-store",
+      method: "HEAD",
+      signal: controller.signal
+    })
+      .then((response) => {
+        if (!controller.signal.aborted) {
+          setEbayStartReady(response.ok);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setEbayStartReady(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [localSession?.user?.id, ebayConfigStatus?.config?.ready]);
 
   async function signIn() {
     setMessage("");
@@ -424,6 +455,7 @@ function Account({
   const ebayConfig = ebayConfigStatus?.config;
   const ebayConnected = ebayConnection?.connected === true;
   const canConnectEbay = Boolean(user && ebayConfig?.ready);
+  const canStartEbayConnect = canConnectEbay && ebayStartReady;
 
   return (
     <section className="content account-layout">
@@ -452,14 +484,14 @@ function Account({
           </div>
           <button
             className="secondary-button"
-            disabled={!canConnectEbay && !ebayConnected}
+            disabled={!canStartEbayConnect && !ebayConnected}
             onClick={ebayConnected ? disconnectEbay : () => {
               window.location.href = "/api/auth/ebay/start";
             }}
             type="button"
           >
             {ebayConnected ? <X size={17} /> : <Link2 size={17} />}
-            <span>{ebayConnected ? "Disconnect" : "Connect"}</span>
+            <span>{formatEbayActionLabel(ebayConnected, canConnectEbay, ebayStartReady)}</span>
           </button>
         </div>
         <div className="setting-row">
@@ -476,6 +508,18 @@ function Account({
       {message && <p className="form-message">{message}</p>}
     </section>
   );
+}
+
+function formatEbayActionLabel(connected: boolean, canConnect: boolean, startReady: boolean): string {
+  if (connected) {
+    return "Disconnect";
+  }
+
+  if (canConnect && !startReady) {
+    return "Preparing...";
+  }
+
+  return "Connect";
 }
 
 function formatEbayStatus(

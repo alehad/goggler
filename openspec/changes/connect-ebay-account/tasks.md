@@ -29,6 +29,7 @@
 - [x] Implement eBay environment/config module.
 - [x] Implement signed OAuth state creation and validation.
 - [x] Add eBay consent start route.
+- [x] Prewarm the eBay consent start route so the first Connect click navigates to eBay in local development.
 - [x] Add eBay OAuth callback route and token exchange.
 - [x] Store eBay token values only in server-side session state for the current goggler login.
 - [ ] Persist only non-secret eBay connection metadata when available.

@@ -125,6 +125,31 @@ export class InMemorySessionStore {
     return undefined;
   }
 
+  lookupSessionById(sessionId: string, options: { now?: Date } = {}): SessionLookupResult | undefined {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const now = options.now ?? new Date();
+    if (session.expiresAt <= now) {
+      this.sessions.delete(session.id);
+      this.ebayAuthorizations.delete(session.id);
+      this.pendingEbayOAuthStates.delete(session.id);
+      return undefined;
+    }
+
+    const user = this.users.get(session.userId);
+    if (!user) {
+      this.sessions.delete(session.id);
+      this.ebayAuthorizations.delete(session.id);
+      this.pendingEbayOAuthStates.delete(session.id);
+      return undefined;
+    }
+
+    return { session, user };
+  }
+
   expireSession(token: string | undefined): boolean {
     if (!token) {
       return false;

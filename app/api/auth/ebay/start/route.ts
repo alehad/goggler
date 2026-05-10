@@ -4,6 +4,21 @@ import { sessionStore } from "../../../../../src/auth/local-auth.ts";
 import { buildEbayConsentUrl, loadEbayConfig } from "../../../../../src/ebay/config.ts";
 import { getEbayOAuthStateStore } from "../../../../../src/ebay/oauth-state.ts";
 
+export async function HEAD(request: NextRequest) {
+  const currentUser = getCurrentUser(request);
+  if (!currentUser) {
+    return new NextResponse(null, { status: 401 });
+  }
+
+  try {
+    loadEbayConfig();
+  } catch {
+    return new NextResponse(null, { status: 503 });
+  }
+
+  return new NextResponse(null, { status: 204 });
+}
+
 export async function GET(request: NextRequest) {
   const currentUser = getCurrentUser(request);
   if (!currentUser) {
@@ -20,12 +35,8 @@ export async function GET(request: NextRequest) {
     sessionStore.addPendingEbayOAuthState(currentUser.session.id, payload.id, new Date(payload.expiresAt));
     consentUrl = buildEbayConsentUrl(config, state);
   } catch (error) {
-    return NextResponse.json({ error: "ebay_config_error", message: getPublicErrorMessage(error) }, { status: 500 });
+    return NextResponse.json({ error: "ebay_config_error" }, { status: 500 });
   }
 
   return NextResponse.redirect(consentUrl);
-}
-
-function getPublicErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unknown eBay configuration error";
 }
