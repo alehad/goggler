@@ -7,17 +7,18 @@ import { GET as startEbayAuth, HEAD as prewarmEbayAuthStart } from "../../app/ap
 import { GET as handleEbayCallback } from "../../app/api/auth/ebay/callback/route.ts";
 import { GET as getEbaySession } from "../../app/api/auth/ebay/session/route.ts";
 import { POST as disconnectEbay } from "../../app/api/auth/ebay/disconnect/route.ts";
+import { GET as getBuyingHistory } from "../../app/api/ebay/buying-history/route.ts";
 import { readSessionToken } from "../../src/auth/session-cookie.ts";
 import { sessionStore } from "../../src/auth/local-auth.ts";
 import { getEbayOAuthStateStore } from "../../src/ebay/oauth-state.ts";
 
 const ebayEnv = {
   EBAY_ENVIRONMENT: "sandbox",
-  EBAY_CLIENT_ID: "client-id",
-  EBAY_CLIENT_SECRET: "client-secret",
+  EBAY_CLIENT_ID: "test-client-id",
+  EBAY_CLIENT_SECRET: "test-client-secret",
   EBAY_REDIRECT_URI: "runame-value",
   EBAY_OAUTH_SCOPES: "scope-one",
-  GOGGLER_AUTH_SECRET: "test-secret-with-at-least-32-characters"
+  GOGGLER_AUTH_SECRET: "test-auth-secret-placeholder-32-chars"
 };
 
 test("eBay start route requires local auth", async () => {
@@ -69,7 +70,7 @@ test("eBay start route redirects signed-in users to eBay consent", async () => {
 
   const url = new URL(location);
   assert.equal(url.origin + url.pathname, "https://auth.sandbox.ebay.com/oauth2/authorize");
-  assert.equal(url.searchParams.get("client_id"), "client-id");
+  assert.equal(url.searchParams.get("client_id"), "test-client-id");
   assert.equal(url.searchParams.get("redirect_uri"), "runame-value");
   assert.equal(url.searchParams.get("response_type"), "code");
   assert.equal(url.searchParams.get("scope"), "scope-one");
@@ -291,6 +292,99 @@ test("eBay disconnect route requires local auth", async () => {
   assert.equal(body.error, "local_auth_required");
 });
 
+test("eBay buying history route requires local auth", async () => {
+  process.env.GOGGLER_EBAY_HISTORY_SOURCE = "fixture";
+  const response = await getBuyingHistory(new NextRequest("http://localhost:3000/api/ebay/buying-history"));
+  const body = await response.json();
+
+  assert.equal(response.status, 401);
+  assert.equal(body.error, "local_auth_required");
+});
+
+test("eBay buying history route requires current-session eBay auth", async () => {
+  process.env.GOGGLER_EBAY_HISTORY_SOURCE = "fixture";
+  const cookie = await signInCookie();
+  const response = await getBuyingHistory(
+    new NextRequest("http://localhost:3000/api/ebay/buying-history", {
+      headers: { cookie }
+    })
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 409);
+  assert.equal(body.error, "ebay_reauth_required");
+});
+
+test("eBay buying history route serves fixture history after eBay connection", async () => {
+  process.env.GOGGLER_EBAY_HISTORY_SOURCE = "fixture";
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  authorizeEbaySession(session.session.id);
+
+  const response = await getBuyingHistory(
+    new NextRequest("http://localhost:3000/api/ebay/buying-history", {
+      headers: { cookie }
+    })
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.source, "fixture");
+  assert.deepEqual(body.counts, {
+    lost: 10,
+    won: 7,
+    eventuallyWon: 4,
+    neverWon: 6
+  });
+  assert.equal(body.lostItems.length, 10);
+  assert.equal(body.wonItems.length, 7);
+  assert.equal(JSON.stringify(body).includes("access-token"), false);
+});
+
+test("eBay buying history route rejects fixture history in production", async () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  process.env.GOGGLER_EBAY_HISTORY_SOURCE = "fixture";
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  authorizeEbaySession(session.session.id);
+
+  try {
+    const response = await getBuyingHistory(
+      new NextRequest("http://localhost:3000/api/ebay/buying-history", {
+        headers: { cookie }
+      })
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 503);
+    assert.equal(body.error, "fixture_not_allowed_in_production");
+  } finally {
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
+  }
+});
+
+test("eBay buying history route reports live history as not implemented", async () => {
+  process.env.GOGGLER_EBAY_HISTORY_SOURCE = "live";
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  authorizeEbaySession(session.session.id);
+
+  const response = await getBuyingHistory(
+    new NextRequest("http://localhost:3000/api/ebay/buying-history", {
+      headers: { cookie }
+    })
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 501);
+  assert.equal(body.error, "live_history_not_implemented");
+});
+
 async function signInCookie() {
   const response = await signIn(
     new NextRequest("http://localhost:3000/api/auth/sign-in", {
@@ -307,6 +401,16 @@ function currentSessionFromCookie(cookie) {
   const session = sessionStore.lookupSession(token);
   assert.ok(session);
   return session;
+}
+
+function authorizeEbaySession(sessionId) {
+  sessionStore.setEbayAuthorization(sessionId, {
+    accessToken: "access-token",
+    tokenType: "User Access Token",
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    scopes: ["scope-one"],
+    authorizedAt: new Date()
+  });
 }
 
 function setEbayEnv() {
