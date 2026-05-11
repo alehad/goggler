@@ -22,6 +22,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 type Tab = "dashboard" | "tracking" | "won" | "account";
+type LostFilter = "all" | "neverWon" | "eventuallyWon";
 
 type Candidate = {
   id: string;
@@ -66,6 +67,37 @@ type EbayConfigStatus = {
   };
 };
 
+type HistoryItem = {
+  itemId: string;
+  title: string;
+  list: "LostList" | "WonList";
+  currentPrice?: {
+    value: number;
+    currency: string;
+  };
+  endTime?: string;
+  sellerUserId?: string;
+  conditionDisplayName?: string;
+  relistingGroupId?: string;
+};
+
+type BuyingHistory = {
+  source: "fixture";
+  counts: {
+    lost: number;
+    won: number;
+    eventuallyWon: number;
+    neverWon: number;
+  };
+  lostItems: HistoryItem[];
+  wonItems: HistoryItem[];
+};
+
+type HistoryState =
+  | { status: "idle" | "loading" }
+  | { status: "ready"; history: BuyingHistory }
+  | { status: "sign_in_required" | "reauth_required" | "live_not_implemented" | "unavailable"; message: string };
+
 const candidates: Candidate[] = [
   {
     id: "blue-note",
@@ -108,34 +140,6 @@ const candidates: Candidate[] = [
   }
 ];
 
-const trackedItems = [
-  {
-    title: "The Smiths - The Queen Is Dead original Rough Trade LP",
-    price: "Lost at £74.00",
-    status: "Searching",
-    matches: 0
-  },
-  {
-    title: "Stereolab - Emperor Tomato Ketchup Duophonic vinyl",
-    price: "Lost at £44.20",
-    status: "2 candidates",
-    matches: 2
-  },
-  {
-    title: "John Coltrane - A Love Supreme Impulse stereo pressing",
-    price: "Lost at £96.00",
-    status: "Searching",
-    matches: 0
-  }
-];
-
-const wonItems = [
-  { title: "Aphex Twin - Selected Ambient Works 85-92", price: 64 },
-  { title: "Joni Mitchell - Blue UK LP", price: 28 },
-  { title: "Miles Davis - In A Silent Way", price: 42 },
-  { title: "Cocteau Twins - Heaven or Las Vegas", price: 55 }
-];
-
 const tabs = [
   { id: "dashboard", label: "Home", mobileLabel: "Home", icon: House },
   { id: "tracking", label: "Watching", mobileLabel: "Watching", icon: Heart },
@@ -146,24 +150,79 @@ const tabs = [
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [localSession, setLocalSession] = useState<LocalSession | null>(null);
+  const [historyState, setHistoryState] = useState<HistoryState>({ status: "idle" });
   const stats = useMemo(() => {
-    const prices = wonItems.map((item) => item.price).sort((a, b) => a - b);
-    const median = (prices[1] + prices[2]) / 2;
+    const prices =
+      historyState.status === "ready"
+        ? historyState.history.wonItems.map((item) => item.currentPrice?.value ?? 0).sort((a, b) => a - b)
+        : [];
+    const median =
+      prices.length === 0
+        ? 0
+        : prices.length % 2 === 0
+          ? (prices[prices.length / 2 - 1] + prices[prices.length / 2]) / 2
+          : prices[Math.floor(prices.length / 2)];
     return {
-      highest: Math.max(...prices),
-      lowest: Math.min(...prices),
+      highest: prices.length > 0 ? Math.max(...prices) : 0,
+      lowest: prices.length > 0 ? Math.min(...prices) : 0,
       median
     };
-  }, []);
+  }, [historyState]);
 
   async function refreshLocalSession() {
     const sessionResponse = await fetch("/api/auth/session");
     setLocalSession(sessionResponse.ok ? ((await sessionResponse.json()) as LocalSession) : { user: null });
   }
 
+  async function refreshBuyingHistory() {
+    if (!localSession?.user) {
+      setHistoryState({
+        status: "sign_in_required",
+        message: "Sign in locally and connect eBay to view buying history"
+      });
+      return;
+    }
+
+    setHistoryState({ status: "loading" });
+    const response = await fetch("/api/ebay/buying-history", { cache: "no-store" });
+    const body = await response.json().catch(() => ({}));
+
+    if (response.ok) {
+      setHistoryState({ status: "ready", history: body as BuyingHistory });
+      return;
+    }
+
+    if (response.status === 409) {
+      setHistoryState({
+        status: "reauth_required",
+        message: "Connect eBay in My goggler to view buying history"
+      });
+      return;
+    }
+
+    if (response.status === 501) {
+      setHistoryState({
+        status: "live_not_implemented",
+        message: "Live history import is not implemented yet"
+      });
+      return;
+    }
+
+    setHistoryState({
+      status: "unavailable",
+      message: body.error ? `History unavailable: ${body.error}` : "History is unavailable"
+    });
+  }
+
   useEffect(() => {
     void refreshLocalSession();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "tracking" || activeTab === "won") {
+      void refreshBuyingHistory();
+    }
+  }, [activeTab, localSession?.user?.id]);
 
   return (
     <main className="app-shell">
@@ -195,9 +254,15 @@ export default function Home() {
         </header>
 
         {activeTab === "dashboard" && <Dashboard />}
-        {activeTab === "tracking" && <Tracking />}
-        {activeTab === "won" && <Won stats={stats} />}
-        {activeTab === "account" && <Account localSession={localSession} refreshLocalSession={refreshLocalSession} />}
+        {activeTab === "tracking" && <Tracking historyState={historyState} refreshBuyingHistory={refreshBuyingHistory} />}
+        {activeTab === "won" && <Won historyState={historyState} stats={stats} refreshBuyingHistory={refreshBuyingHistory} />}
+        {activeTab === "account" && (
+          <Account
+            localSession={localSession}
+            refreshLocalSession={refreshLocalSession}
+            clearHistory={() => setHistoryState({ status: "idle" })}
+          />
+        )}
       </section>
 
       <nav className="bottom-tabbar" aria-label="Primary navigation">
@@ -299,7 +364,31 @@ function Dashboard() {
   );
 }
 
-function Tracking() {
+function Tracking({
+  historyState,
+  refreshBuyingHistory
+}: {
+  historyState: HistoryState;
+  refreshBuyingHistory: () => Promise<void>;
+}) {
+  const [filter, setFilter] = useState<LostFilter>("all");
+  const filteredItems = useMemo(() => {
+    if (historyState.status !== "ready") {
+      return [];
+    }
+
+    const wonGroups = new Set(historyState.history.wonItems.map((item) => item.relistingGroupId));
+    if (filter === "neverWon") {
+      return historyState.history.lostItems.filter((item) => !wonGroups.has(item.relistingGroupId));
+    }
+
+    if (filter === "eventuallyWon") {
+      return historyState.history.lostItems.filter((item) => wonGroups.has(item.relistingGroupId));
+    }
+
+    return historyState.history.lostItems;
+  }, [filter, historyState]);
+
   return (
     <section className="content">
       <div className="section-heading">
@@ -307,28 +396,64 @@ function Tracking() {
           <p className="eyebrow">Watching</p>
           <h1>Tracked lost auctions</h1>
         </div>
-        <button className="primary-button" type="button">
+        <button className="primary-button" onClick={() => void refreshBuyingHistory()} type="button">
           <Gavel size={17} />
-          <span>Import history</span>
+          <span>Refresh history</span>
         </button>
       </div>
 
-      <div className="table-panel">
-        {trackedItems.map((item) => (
-          <div className="tracking-row" key={item.title}>
-            <div>
-              <h2>{item.title}</h2>
-              <p>{item.price}</p>
-            </div>
-            <span className={item.matches > 0 ? "status hot" : "status"}>{item.status}</span>
+      {historyState.status === "ready" ? (
+        <>
+          <div className="summary-grid">
+            <Metric label="Lost bids" value={String(historyState.history.counts.lost)} detail="Fixture history" />
+            <Metric label="Never won" value={String(historyState.history.counts.neverWon)} detail="Still unresolved" />
+            <Metric
+              label="Eventually won"
+              value={String(historyState.history.counts.eventuallyWon)}
+              detail="Won through relisting"
+            />
           </div>
-        ))}
-      </div>
+          <div className="segmented-control" aria-label="Lost bid filter">
+            <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")} type="button">
+              All
+            </button>
+            <button
+              className={filter === "neverWon" ? "active" : ""}
+              onClick={() => setFilter("neverWon")}
+              type="button"
+            >
+              Never won
+            </button>
+            <button
+              className={filter === "eventuallyWon" ? "active" : ""}
+              onClick={() => setFilter("eventuallyWon")}
+              type="button"
+            >
+              Eventually won
+            </button>
+          </div>
+          <div className="table-panel">
+            {filteredItems.map((item) => (
+              <HistoryRow item={item} key={item.itemId} sideLabel={formatLostStatus(item, historyState.history.wonItems)} />
+            ))}
+          </div>
+        </>
+      ) : (
+        <HistoryEmptyState state={historyState} />
+      )}
     </section>
   );
 }
 
-function Won({ stats }: { stats: { highest: number; lowest: number; median: number } }) {
+function Won({
+  historyState,
+  stats,
+  refreshBuyingHistory
+}: {
+  historyState: HistoryState;
+  stats: { highest: number; lowest: number; median: number };
+  refreshBuyingHistory: () => Promise<void>;
+}) {
   return (
     <section className="content">
       <div className="section-heading">
@@ -336,35 +461,41 @@ function Won({ stats }: { stats: { highest: number; lowest: number; median: numb
           <p className="eyebrow">Purchases</p>
           <h1>Won item history</h1>
         </div>
+        <button className="primary-button" onClick={() => void refreshBuyingHistory()} type="button">
+          <ShoppingBag size={17} />
+          <span>Refresh history</span>
+        </button>
       </div>
 
-      <div className="summary-grid">
-        <Metric label="Highest paid" value={`£${stats.highest}`} detail="Imported won auctions" />
-        <Metric label="Lowest paid" value={`£${stats.lowest}`} detail="Imported won auctions" />
-        <Metric label="Median paid" value={`£${stats.median}`} detail="Mock data" />
-      </div>
-
-      <div className="table-panel">
-        {wonItems.map((item) => (
-          <div className="tracking-row" key={item.title}>
-            <div>
-              <h2>{item.title}</h2>
-              <p>Won auction</p>
-            </div>
-            <span className="price-pill">£{item.price}</span>
+      {historyState.status === "ready" ? (
+        <>
+          <div className="summary-grid">
+            <Metric label="Won items" value={String(historyState.history.counts.won)} detail="Fixture history" />
+            <Metric label="Highest paid" value={formatCurrency(stats.highest)} detail="Won auctions" />
+            <Metric label="Median paid" value={formatCurrency(stats.median)} detail="Won auctions" />
           </div>
-        ))}
-      </div>
+
+          <div className="table-panel">
+            {historyState.history.wonItems.map((item) => (
+              <HistoryRow item={item} key={item.itemId} sideLabel="Won" />
+            ))}
+          </div>
+        </>
+      ) : (
+        <HistoryEmptyState state={historyState} />
+      )}
     </section>
   );
 }
 
 function Account({
   localSession,
-  refreshLocalSession
+  refreshLocalSession,
+  clearHistory
 }: {
   localSession: LocalSession | null;
   refreshLocalSession: () => Promise<void>;
+  clearHistory: () => void;
 }) {
   const [ebaySession, setEbaySession] = useState<EbaySession | null>(null);
   const [ebayConfigStatus, setEbayConfigStatus] = useState<EbayConfigStatus | null>(null);
@@ -436,6 +567,7 @@ function Account({
   async function signOut() {
     setMessage("");
     await fetch("/api/auth/sign-out", { method: "POST" });
+    clearHistory();
     await refreshLocalSession();
   }
 
@@ -448,6 +580,7 @@ function Account({
     }
 
     await refreshEbaySessionState();
+    clearHistory();
   }
 
   const user = localSession?.user;
@@ -485,9 +618,13 @@ function Account({
           <button
             className="secondary-button"
             disabled={!canStartEbayConnect && !ebayConnected}
-            onClick={ebayConnected ? disconnectEbay : () => {
-              window.location.href = "/api/auth/ebay/start";
-            }}
+            onClick={
+              ebayConnected
+                ? disconnectEbay
+                : () => {
+                    window.location.href = "/api/auth/ebay/start";
+                  }
+            }
             type="button"
           >
             {ebayConnected ? <X size={17} /> : <Link2 size={17} />}
@@ -555,6 +692,64 @@ function formatEbayConfigGap(config: EbayConfigStatus["config"]): string {
   const missing = config.missing.length > 0 ? `missing ${config.missing.join(", ")}` : "";
   const invalid = config.invalid.length > 0 ? `invalid ${config.invalid.join(", ")}` : "";
   return `Sandbox config not ready${missing || invalid ? `: ${[missing, invalid].filter(Boolean).join("; ")}` : ""}`;
+}
+
+function HistoryRow({ item, sideLabel }: { item: HistoryItem; sideLabel: string }) {
+  return (
+    <div className="tracking-row">
+      <div>
+        <h2>{item.title}</h2>
+        <p>
+          {item.sellerUserId ?? "Unknown seller"}
+          {item.conditionDisplayName ? ` | ${item.conditionDisplayName}` : ""}
+          {item.endTime ? ` | ended ${new Date(item.endTime).toLocaleDateString()}` : ""}
+        </p>
+      </div>
+      <div className="history-side">
+        <span className="price-pill">{formatCurrency(item.currentPrice?.value ?? 0)}</span>
+        <span className={sideLabel === "Eventually won" ? "status hot" : "status"}>{sideLabel}</span>
+      </div>
+    </div>
+  );
+}
+
+function HistoryEmptyState({ state }: { state: HistoryState }) {
+  const message = getHistoryMessage(state);
+
+  return (
+    <div className="empty-panel">
+      <Gavel size={20} />
+      <h2>Buying history unavailable</h2>
+      <p>{message}</p>
+    </div>
+  );
+}
+
+function getHistoryMessage(state: HistoryState): string {
+  switch (state.status) {
+    case "idle":
+    case "loading":
+      return "Loading buying history";
+    case "ready":
+      return "";
+    case "sign_in_required":
+    case "reauth_required":
+    case "live_not_implemented":
+    case "unavailable":
+      return state.message;
+  }
+}
+
+function formatLostStatus(item: HistoryItem, wonItems: HistoryItem[]): string {
+  const wasEventuallyWon = wonItems.some((wonItem) => wonItem.relistingGroupId === item.relistingGroupId);
+  return wasEventuallyWon ? "Eventually won" : "Never won";
+}
+
+function formatCurrency(value: number): string {
+  return new Intl.NumberFormat("en-GB", {
+    currency: "GBP",
+    style: "currency"
+  }).format(value);
 }
 
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
