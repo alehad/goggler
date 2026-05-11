@@ -51,6 +51,9 @@ Initial scope:
 - `connect-ebay-account`: plans local user-owned eBay OAuth connection, session-scoped eBay token handling, and buying-history import through eBay Trading API.
 - `testing-ci-foundation`: plans layered test coverage, auth-first verification, GitHub Actions checks, secret-safe CI behavior, mocked eBay provider responses, and optional advisory AI review.
 - `ebay-inspired-responsive-ux`: plans a marketplace-oriented app shell with eBay-familiar buyer destinations, compact listing rows, account/preferences grouping, and a bottom-docked navigation model suitable for a future iPhone app.
+- `ebay-buying-history-foundation`: plans and implements the first fixture-tested Trading API `GetMyeBayBuying` request/client boundary plus normalized lost/won buying-history fixture data.
+- `fixture-history-ui`: plans and implements development-only fixture history mode after real local sign-in and session-scoped eBay connection.
+- `home-relisting-watchlist-ux`: plans and implements the first watchlist-first Home feed using fixture watchlist data, relisting candidates, filters, and local-only add-to-watchlist affordance.
 
 ## Implemented So Far
 
@@ -81,6 +84,29 @@ Initial scope:
   - `npm run test:unit` passed with 42 tests.
   - `npm run build` passed.
   - Manual eBay Sandbox OAuth flow through ngrok passed.
+- PR #9 is merged to `main`; it added the eBay buying-history foundation:
+  - `src/ebay/trading-client.ts` builds `GetMyeBayBuying` Trading API XML requests for `LostList` and `WonList`.
+  - Trading API calls use OAuth token material only in the `X-EBAY-API-IAF-TOKEN` header, not in XML body.
+  - Trading API endpoint config now supports Sandbox and production.
+  - Basic XML parsing normalizes representative eBay buying-history responses into internal item records.
+  - Fixture buying-history data includes 10 lost bid items and 7 won items, with 4 won items modeled as relistings of earlier lost bids.
+- PR #10 is merged to `main`; it added fixture-backed buying history UI:
+  - `GOGGLER_EBAY_HISTORY_SOURCE=fixture | live` controls the history source.
+  - Fixture mode defaults outside production and is blocked in production.
+  - `/api/ebay/buying-history` requires local sign-in plus an active session-scoped eBay connection before returning fixture history.
+  - Watching renders lost bids with filters for all, never won, and eventually won.
+  - Purchases renders won history from fixture data.
+- PR #11 is merged to `main`; it added the watchlist-first Home feed:
+  - Fixture data now includes 6 eBay watchlist items in explicit watchlist order.
+  - 2 watchlist items are also tagged as relistings of previous non-won items.
+  - 2 additional relisting candidates are not currently on the watchlist and show a local-only `Add` affordance.
+  - Home now fetches the fixture history/feed after connection and shows filters for All, Needs action, On watchlist, Relistings, Never won, and Resolved.
+  - Home ordering is: current eBay watchlist items first, then relisting candidates not on watchlist, then unresolved lost bids, then resolved/eventually-won lost bids.
+- Current verification before merge of PR #11:
+  - `npm run test:unit` passed with 74 tests.
+  - `./node_modules/.bin/tsc --noEmit` passed.
+  - Copilot advisory security review found no security issues.
+  - Manual ngrok OAuth and fixture-history UI inspection passed.
 
 ## Local Testing Notes
 
@@ -103,6 +129,21 @@ To test eBay Sandbox OAuth locally:
 7. Sign into the eBay Sandbox buyer test user and consent.
 8. Confirm the app returns to the ngrok URL with `?account=ebay_connected` and the eBay status shows connected for the current session.
 
+To test the fixture history and Home feed locally:
+
+1. Use the ngrok HTTPS URL for the full flow, because eBay OAuth redirects require the registered HTTPS callback.
+2. Sign into goggler locally as `Saja`.
+3. Connect eBay through Sandbox.
+4. Open Home.
+5. Confirm the top rows are the 6 modeled eBay watchlist items in watchlist order.
+6. Confirm 2 watchlist rows are tagged as relisting candidates.
+7. Use the Home filters:
+   - `Needs action` shows relisting candidates not on the watchlist.
+   - `On watchlist` shows current eBay watchlist items.
+   - `Relistings` shows both watched and not-watched relisting candidates.
+   - `Never won` and `Resolved` show the corresponding lost-bid states.
+8. Open Watching and Purchases to inspect lost and won history fixture views.
+
 If the app shows a missing `.next/server` chunk error or loses styling after running `npm run build` while the dev server is active, stop the dev server, delete `.next`, and restart `npm run dev`. The generated `.next` output is shared by dev and production build modes.
 
 `npm run lint` is currently stale because it still uses deprecated `next lint`, which prompts for ESLint migration under Next 15. `npm run build` currently performs the framework type/lint validation successfully.
@@ -120,6 +161,8 @@ It includes:
 - Sticky top search/header with brand, filters, eBay setup status, and local user access.
 - Mock vinyl-record auction data.
 - Candidate relisting rows with confidence, pricing context, matching signals, ending time, and review actions.
+- Fixture-backed Home feed led by modeled eBay watchlist rows, followed by relisting candidates and unresolved/resolved lost-bid history.
+- Development-only fixture history source guarded behind local sign-in and active session-scoped eBay connection.
 
 The static prototype can be opened directly from `prototype/index.html` or served locally from the `prototype/` folder.
 
@@ -136,10 +179,11 @@ When moving to another Mac:
 
 ## Next Likely Steps
 
-- Confirm exact Trading API `GetMyeBayBuying` headers and XML request shape when using OAuth via `X-EBAY-API-IAF-TOKEN`.
-- Implement the Trading API XML client using the session-scoped eBay access token.
-- Implement `GetMyeBayBuying` request builder for `WonList` and `LostList` as a separate follow-on branch.
-- Add mocked response tests for request headers, pagination, response validation, and normalized errors before relying on live Sandbox data.
+- Refine Home feed UX after reviewing the watchlist-first layout in the running app.
+- Decide whether fixture-only `Confirm match` and `Dismiss` actions should be implemented next as local UI state.
+- Investigate eBay APIs/scopes for reading the authenticated user's watchlist and adding items to that watchlist. Do not wire real watchlist mutation until endpoint, scope, Sandbox behavior, and error handling are confirmed.
+- Implement real `GetMyeBayBuying` paging through won/lost history with a safety limit.
+- Start designing the persistence layer for imported auction records, import runs, and user-owned connection metadata, while continuing to avoid token persistence at rest.
 - Consider a separate tooling branch to replace deprecated `next lint` with the ESLint CLI.
 
 ## eBay Developer Setup
@@ -166,4 +210,5 @@ EBAY_REDIRECT_URI=Alex_Hadzic-AlexHadz-Goggle-vdrxokh
 EBAY_OAUTH_SCOPES=https://api.ebay.com/oauth/api_scope
 EBAY_MARKETPLACE_ID=EBAY_GB
 EBAY_TRADING_SITE_ID=3
+GOGGLER_EBAY_HISTORY_SOURCE=fixture
 ```
