@@ -17,6 +17,7 @@ test("loads sandbox eBay configuration with defaults", () => {
   assert.equal(config.environment, "sandbox");
   assert.equal(config.authorizeUrl, "https://auth.sandbox.ebay.com/oauth2/authorize");
   assert.equal(config.tokenUrl, "https://api.sandbox.ebay.com/identity/v1/oauth2/token");
+  assert.equal(config.tradingApiUrl, "https://api.sandbox.ebay.com/ws/api.dll");
   assert.equal(config.marketplaceId, "EBAY_GB");
   assert.equal(config.tradingSiteId, "3");
   assert.deepEqual(config.scopes, ["scope-one", "scope-two"]);
@@ -30,6 +31,7 @@ test("loads production eBay endpoints", () => {
 
   assert.equal(config.authorizeUrl, "https://auth.ebay.com/oauth2/authorize");
   assert.equal(config.tokenUrl, "https://api.ebay.com/identity/v1/oauth2/token");
+  assert.equal(config.tradingApiUrl, "https://api.ebay.com/ws/api.dll");
 });
 
 test("requires OAuth app credentials and scopes", () => {

@@ -6,6 +6,7 @@ node_modules/
 dist/
 build/
 coverage/
+tsconfig.tsbuildinfo
 
 # env
 .env
@@ -23,4 +24,3 @@ pnpm-debug.log*
 .DS_Store
 .idea/
 .vscode/
-
