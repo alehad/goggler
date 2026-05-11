@@ -23,6 +23,7 @@ import { useEffect, useMemo, useState } from "react";
 
 type Tab = "dashboard" | "tracking" | "won" | "account";
 type LostFilter = "all" | "neverWon" | "eventuallyWon";
+type HomeFeedFilter = "all" | "needsAction" | "onWatchlist" | "relistings" | "neverWon" | "resolved";
 
 type Candidate = {
   id: string;
@@ -88,9 +89,24 @@ type BuyingHistory = {
     won: number;
     eventuallyWon: number;
     neverWon: number;
+    watchlist: number;
+    watchlistRelistings: number;
+    needsAction: number;
+    relistings: number;
   };
   lostItems: HistoryItem[];
   wonItems: HistoryItem[];
+  homeFeed: {
+    rows: HomeFeedRow[];
+    counts: {
+      watchlist: number;
+      watchlistRelistings: number;
+      needsAction: number;
+      relistings: number;
+      neverWon: number;
+      resolved: number;
+    };
+  };
 };
 
 type HistoryState =
@@ -98,47 +114,21 @@ type HistoryState =
   | { status: "ready"; history: BuyingHistory }
   | { status: "sign_in_required" | "reauth_required" | "live_not_implemented" | "unavailable"; message: string };
 
-const candidates: Candidate[] = [
-  {
-    id: "blue-note",
-    title: "Wayne Shorter - Speak No Evil LP, Blue Note 84194, Van Gelder",
-    artist: "Wayne Shorter",
-    originalPrice: "£68.00",
-    currentPrice: "£42.00",
-    ends: "2h 14m",
-    confidence: 92,
-    image: "linear-gradient(135deg, #2f4f80, #f5c16c 55%, #111827)",
-    signals: ["catalogue match", "title match", "same condition"],
-    seller: "north-london-vinyl",
-    condition: "VG+ / VG"
-  },
-  {
-    id: "warp",
-    title: "Boards of Canada - Music Has The Right To Children 2LP WARP",
-    artist: "Boards of Canada",
-    originalPrice: "£51.50",
-    currentPrice: "£36.00",
-    ends: "7h 41m",
-    confidence: 86,
-    image: "linear-gradient(135deg, #b95432, #f1d08a 48%, #394f4a)",
-    signals: ["label match", "format match", "price range"],
-    seller: "wax-archive",
-    condition: "NM / VG+"
-  },
-  {
-    id: "island",
-    title: "Nick Drake - Bryter Layter LP Island pink rim pressing",
-    artist: "Nick Drake",
-    originalPrice: "£118.00",
-    currentPrice: "£88.00",
-    ends: "1d 3h",
-    confidence: 79,
-    image: "linear-gradient(135deg, #65743a, #e3d8b3 52%, #7c2d12)",
-    signals: ["pressing hint", "UK seller", "condition close"],
-    seller: "needle-and-sleeve",
-    condition: "VG / VG"
-  }
-];
+type HomeFeedRow = {
+  id: string;
+  section: "watchlist" | "needs_action" | "unresolved" | "resolved";
+  title: string;
+  currentPrice?: { value: number; currency: string };
+  originalLostPrice?: { value: number; currency: string };
+  endsAt?: string;
+  sellerUserId?: string;
+  conditionDisplayName?: string;
+  watchlistPosition?: number;
+  matchConfidence?: number;
+  matchSignals: string[];
+  tags: string[];
+  actions: string[];
+};
 
 const tabs = [
   { id: "dashboard", label: "Home", mobileLabel: "Home", icon: House },
@@ -219,7 +209,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === "tracking" || activeTab === "won") {
+    if (activeTab === "dashboard" || activeTab === "tracking" || activeTab === "won") {
       void refreshBuyingHistory();
     }
   }, [activeTab, localSession?.user?.id]);
@@ -253,7 +243,7 @@ export default function Home() {
           </button>
         </header>
 
-        {activeTab === "dashboard" && <Dashboard />}
+        {activeTab === "dashboard" && <Dashboard historyState={historyState} refreshBuyingHistory={refreshBuyingHistory} />}
         {activeTab === "tracking" && <Tracking historyState={historyState} refreshBuyingHistory={refreshBuyingHistory} />}
         {activeTab === "won" && <Won historyState={historyState} stats={stats} refreshBuyingHistory={refreshBuyingHistory} />}
         {activeTab === "account" && (
@@ -286,81 +276,184 @@ export default function Home() {
   );
 }
 
-function Dashboard() {
+function Dashboard({
+  historyState,
+  refreshBuyingHistory
+}: {
+  historyState: HistoryState;
+  refreshBuyingHistory: () => Promise<void>;
+}) {
+  const [filter, setFilter] = useState<HomeFeedFilter>("all");
+  const [locallyWatchedIds, setLocallyWatchedIds] = useState<string[]>([]);
+  const rows = useMemo(() => {
+    if (historyState.status !== "ready") {
+      return [];
+    }
+
+    const updatedRows = historyState.history.homeFeed.rows.map((row) => {
+      if (!locallyWatchedIds.includes(row.id)) {
+        return row;
+      }
+
+      return {
+        ...row,
+        section: "watchlist" as const,
+        tags: [...new Set([...row.tags.filter((tag) => tag !== "Not watched"), "On eBay watchlist", "Added by goggler"])],
+        actions: row.actions.filter((action) => action !== "add_to_watchlist")
+      };
+    });
+
+    return filterHomeRows(updatedRows, filter);
+  }, [filter, historyState, locallyWatchedIds]);
+
   return (
     <section className="content">
       <div className="section-heading">
         <div>
           <p className="eyebrow">Home</p>
-          <h1>Likely relistings</h1>
+          <h1>Watchlist and relistings</h1>
         </div>
-        <button className="primary-button" type="button">
+        <button className="primary-button" onClick={() => void refreshBuyingHistory()} type="button">
           <Sparkles size={17} />
-          <span>Run search</span>
+          <span>Refresh feed</span>
         </button>
       </div>
 
-      <div className="summary-grid">
-        <Metric label="Unresolved candidates" value="12" detail="+3 since last import" />
-        <Metric label="Tracked lost items" value="38" detail="21 actively searched" />
-        <Metric label="Best confidence" value="92%" detail="Wayne Shorter LP" />
-      </div>
+      {historyState.status === "ready" ? (
+        <>
+          <div className="summary-grid">
+            <Metric label="On watchlist" value={String(historyState.history.counts.watchlist)} detail="Shown first" />
+            <Metric
+              label="Relistings"
+              value={String(historyState.history.counts.relistings)}
+              detail={`${historyState.history.counts.watchlistRelistings} already watched`}
+            />
+            <Metric label="Needs action" value={String(historyState.history.counts.needsAction)} detail="Not watched yet" />
+          </div>
 
-      <div className="candidate-list">
-        {candidates.map((candidate) => (
-          <article className="candidate-card" key={candidate.id}>
-            <div className="record-art" style={{ background: candidate.image }}>
-              <div className="vinyl-disc" />
-            </div>
-            <div className="candidate-main">
-              <div className="candidate-title-row">
-                <div>
-                  <p className="artist">{candidate.artist}</p>
-                  <h2>{candidate.title}</h2>
-                </div>
-                <span className="confidence">{candidate.confidence}%</span>
-              </div>
+          <div className="segmented-control home-filters" aria-label="Home feed filter">
+            <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")} type="button">
+              All
+            </button>
+            <button
+              className={filter === "needsAction" ? "active" : ""}
+              onClick={() => setFilter("needsAction")}
+              type="button"
+            >
+              Needs action
+            </button>
+            <button
+              className={filter === "onWatchlist" ? "active" : ""}
+              onClick={() => setFilter("onWatchlist")}
+              type="button"
+            >
+              On watchlist
+            </button>
+            <button
+              className={filter === "relistings" ? "active" : ""}
+              onClick={() => setFilter("relistings")}
+              type="button"
+            >
+              Relistings
+            </button>
+            <button
+              className={filter === "neverWon" ? "active" : ""}
+              onClick={() => setFilter("neverWon")}
+              type="button"
+            >
+              Never won
+            </button>
+            <button
+              className={filter === "resolved" ? "active" : ""}
+              onClick={() => setFilter("resolved")}
+              type="button"
+            >
+              Resolved
+            </button>
+          </div>
 
-              <div className="meta-row">
-                <span>{candidate.condition}</span>
-                <span>{candidate.seller}</span>
-                <span>{candidate.originalPrice} lost bid</span>
-              </div>
-
-              <div className="signal-row">
-                {candidate.signals.map((signal) => (
-                  <span className="signal" key={signal}>
-                    {signal}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="listing-side">
-              <strong>{candidate.currentPrice}</strong>
-              <span>current bid</span>
-              <span className="confidence">{candidate.confidence}% match</span>
-              <span className="ends">
-                <Clock3 size={16} />
-                {candidate.ends}
-              </span>
-            </div>
-
-            <div className="card-actions">
-              <button className="icon-button positive" title="Confirm match" type="button">
-                <Check size={18} />
-              </button>
-              <button className="icon-button negative" title="Reject match" type="button">
-                <X size={18} />
-              </button>
-              <button className="icon-button" title="Open listing" type="button">
-                <ExternalLink size={18} />
-              </button>
-            </div>
-          </article>
-        ))}
-      </div>
+          <div className="candidate-list">
+            {rows.map((row) => (
+              <HomeFeedCard
+                key={row.id}
+                row={row}
+                onAddToWatchlist={() => setLocallyWatchedIds((ids) => [...new Set([...ids, row.id])])}
+              />
+            ))}
+          </div>
+        </>
+      ) : (
+        <HistoryEmptyState state={historyState} />
+      )}
     </section>
+  );
+}
+
+function HomeFeedCard({ row, onAddToWatchlist }: { row: HomeFeedRow; onAddToWatchlist: () => void }) {
+  return (
+    <article className="candidate-card home-feed-card">
+      <div className="watch-rank" title={row.watchlistPosition ? "eBay watchlist order" : "goggler feed"}>
+        {row.watchlistPosition ? row.watchlistPosition : <Sparkles size={20} />}
+      </div>
+      <div className="candidate-main">
+        <div className="candidate-title-row">
+          <div>
+            <p className="artist">{formatHomeSection(row.section)}</p>
+            <h2>{row.title}</h2>
+          </div>
+          {row.matchConfidence !== undefined && <span className="confidence">{row.matchConfidence}%</span>}
+        </div>
+
+        <div className="meta-row">
+          <span>{row.conditionDisplayName ?? "Condition unknown"}</span>
+          <span>{row.sellerUserId ?? "Unknown seller"}</span>
+          {row.originalLostPrice && <span>{formatCurrency(row.originalLostPrice.value)} lost bid</span>}
+        </div>
+
+        <div className="signal-row">
+          {row.tags.map((tag) => (
+            <span className={tag === "Not watched" ? "signal attention" : "signal"} key={tag}>
+              {tag}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="listing-side">
+        <strong>{row.currentPrice ? formatCurrency(row.currentPrice.value) : "-"}</strong>
+        <span>{row.currentPrice ? "current price" : "lost bid"}</span>
+        {row.endsAt && (
+          <span className="ends">
+            <Clock3 size={16} />
+            {formatRelativeDate(row.endsAt)}
+          </span>
+        )}
+      </div>
+
+      <div className="card-actions">
+        {row.actions.includes("add_to_watchlist") && (
+          <button className="secondary-button compact" onClick={onAddToWatchlist} type="button">
+            <Heart size={17} />
+            <span>Add</span>
+          </button>
+        )}
+        {row.actions.includes("confirm_match") && (
+          <button className="icon-button positive" title="Confirm match" type="button">
+            <Check size={18} />
+          </button>
+        )}
+        {row.actions.includes("dismiss") && (
+          <button className="icon-button negative" title="Dismiss" type="button">
+            <X size={18} />
+          </button>
+        )}
+        {row.actions.includes("open_on_ebay") && (
+          <button className="icon-button" title="Open on eBay" type="button">
+            <ExternalLink size={18} />
+          </button>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -740,9 +833,46 @@ function getHistoryMessage(state: HistoryState): string {
   }
 }
 
+function filterHomeRows(rows: HomeFeedRow[], filter: HomeFeedFilter): HomeFeedRow[] {
+  switch (filter) {
+    case "needsAction":
+      return rows.filter((row) => row.section === "needs_action");
+    case "onWatchlist":
+      return rows.filter((row) => row.section === "watchlist");
+    case "relistings":
+      return rows.filter((row) => row.tags.includes("Relisting candidate"));
+    case "neverWon":
+      return rows.filter((row) => row.tags.includes("Never won"));
+    case "resolved":
+      return rows.filter((row) => row.section === "resolved");
+    case "all":
+      return rows;
+  }
+}
+
+function formatHomeSection(section: HomeFeedRow["section"]): string {
+  switch (section) {
+    case "watchlist":
+      return "eBay watchlist";
+    case "needs_action":
+      return "Relisting candidate";
+    case "unresolved":
+      return "Unresolved lost bid";
+    case "resolved":
+      return "Eventually won";
+  }
+}
+
 function formatLostStatus(item: HistoryItem, wonItems: HistoryItem[]): string {
   const wasEventuallyWon = wonItems.some((wonItem) => wonItem.relistingGroupId === item.relistingGroupId);
   return wasEventuallyWon ? "Eventually won" : "Never won";
+}
+
+function formatRelativeDate(value: string): string {
+  return new Date(value).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short"
+  });
 }
 
 function formatCurrency(value: number): string {

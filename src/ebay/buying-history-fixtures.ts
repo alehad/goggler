@@ -4,6 +4,23 @@ type FixtureItem = EbayBuyingHistoryItem & {
   relistingGroupId: string;
 };
 
+export type FixtureWatchlistItem = {
+  itemId: string;
+  title: string;
+  watchlistPosition: number;
+  currentPrice: { value: number; currency: string };
+  endsAt: string;
+  sellerUserId: string;
+  conditionDisplayName: string;
+  relistingGroupId?: string;
+  matchConfidence?: number;
+  matchSignals?: string[];
+};
+
+export type FixtureRelistingCandidate = Omit<FixtureWatchlistItem, "watchlistPosition"> & {
+  candidateId: string;
+};
+
 export const mockLostBidItems: FixtureItem[] = [
   lostItem("sandbox-lost-001", "Rega Planar 3 turntable with Elys cartridge", "relist-rega-planar-3", 214.25, "2026-01-12"),
   lostItem("sandbox-lost-002", "Naim Nait 5si integrated amplifier", "relist-naim-nait-5si", 326.01, "2026-01-28"),
@@ -25,6 +42,48 @@ export const mockWonItems: FixtureItem[] = [
   wonItem("sandbox-won-005", "Rotel RA-930AX integrated amplifier", "won-rotel-ra-930ax", 88.5, "2026-04-02"),
   wonItem("sandbox-won-006", "Bowers & Wilkins DM601 S2 speaker pair", "won-bw-dm601-s2", 151.22, "2026-04-24"),
   wonItem("sandbox-won-007", "Cambridge Audio DacMagic Plus silver", "won-dacmagic-plus", 119.99, "2026-05-01")
+];
+
+export const mockWatchlistItems: FixtureWatchlistItem[] = [
+  watchlistItem(
+    "sandbox-watch-001",
+    "Quad 33 preamp and 303 power amp pair - serviced",
+    1,
+    "lost-quad-33-303",
+    92,
+    ["same model", "same amp pair", "price range"]
+  ),
+  watchlistItem(
+    "sandbox-watch-002",
+    "Mission 770 speakers with original stands",
+    2,
+    "lost-mission-770-stands",
+    88,
+    ["same model", "original stands", "UK seller"]
+  ),
+  watchlistItem("sandbox-watch-003", "Sansui AU-217 integrated amplifier", 3),
+  watchlistItem("sandbox-watch-004", "Rega Fono Mini A2D phono stage", 4),
+  watchlistItem("sandbox-watch-005", "Tannoy Mercury M20 Gold speakers", 5),
+  watchlistItem("sandbox-watch-006", "Sony WM-D6C Professional Walkman", 6)
+];
+
+export const mockRelistingCandidates: FixtureRelistingCandidate[] = [
+  relistingCandidate(
+    "candidate-001",
+    "sandbox-candidate-001",
+    "Arcam Alpha 9 CD player boxed",
+    "lost-arcam-alpha-9",
+    84,
+    ["same model", "boxed", "seller title match"]
+  ),
+  relistingCandidate(
+    "candidate-002",
+    "sandbox-candidate-002",
+    "Thorens TD160 turntable restoration project",
+    "lost-thorens-td160",
+    81,
+    ["same model", "project condition", "price range"]
+  )
 ];
 
 export function filterLostItemsNeverWon(lostItems: FixtureItem[], wonItems: FixtureItem[]): FixtureItem[] {
@@ -73,6 +132,50 @@ function historyItem(
     currentPrice: { value, currency: "GBP" },
     endTime: `${date}T20:15:00.000Z`,
     sellerUserId: "sandbox-seller",
+    conditionDisplayName: "Used"
+  };
+}
+
+function watchlistItem(
+  itemId: string,
+  title: string,
+  watchlistPosition: number,
+  relistingGroupId?: string,
+  matchConfidence?: number,
+  matchSignals: string[] = []
+): FixtureWatchlistItem {
+  return {
+    itemId,
+    title,
+    watchlistPosition,
+    relistingGroupId,
+    matchConfidence,
+    matchSignals,
+    currentPrice: { value: 95 + watchlistPosition * 17.5, currency: "GBP" },
+    endsAt: `2026-05-${String(11 + watchlistPosition).padStart(2, "0")}T19:30:00.000Z`,
+    sellerUserId: "watchlist-seller",
+    conditionDisplayName: "Used"
+  };
+}
+
+function relistingCandidate(
+  candidateId: string,
+  itemId: string,
+  title: string,
+  relistingGroupId: string,
+  matchConfidence: number,
+  matchSignals: string[]
+): FixtureRelistingCandidate {
+  return {
+    candidateId,
+    itemId,
+    title,
+    relistingGroupId,
+    matchConfidence,
+    matchSignals,
+    currentPrice: { value: 110 + matchConfidence, currency: "GBP" },
+    endsAt: `2026-05-${String(matchConfidence - 70).padStart(2, "0")}T20:45:00.000Z`,
+    sellerUserId: "candidate-seller",
     conditionDisplayName: "Used"
   };
 }

@@ -334,10 +334,16 @@ test("eBay buying history route serves fixture history after eBay connection", a
     lost: 10,
     won: 7,
     eventuallyWon: 4,
-    neverWon: 6
+    neverWon: 6,
+    watchlist: 6,
+    watchlistRelistings: 2,
+    needsAction: 2,
+    relistings: 4
   });
   assert.equal(body.lostItems.length, 10);
   assert.equal(body.wonItems.length, 7);
+  assert.equal(body.watchlistItems.length, 6);
+  assert.equal(body.homeFeed.rows.slice(0, 6).every((row) => row.section === "watchlist"), true);
   assert.equal(JSON.stringify(body).includes("access-token"), false);
 });
 
