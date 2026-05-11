@@ -4,6 +4,8 @@ import {
   filterLostItemsEventuallyWon,
   filterLostItemsNeverWon,
   mockLostBidItems,
+  mockRelistingCandidates,
+  mockWatchlistItems,
   mockWonItems
 } from "../../src/ebay/buying-history-fixtures.ts";
 
@@ -12,6 +14,16 @@ test("models the target local buying-history scenario", () => {
   assert.equal(mockWonItems.length, 7);
   assert.equal(filterLostItemsEventuallyWon(mockLostBidItems, mockWonItems).length, 4);
   assert.equal(filterLostItemsNeverWon(mockLostBidItems, mockWonItems).length, 6);
+});
+
+test("models the target eBay watchlist scenario", () => {
+  assert.equal(mockWatchlistItems.length, 6);
+  assert.equal(mockWatchlistItems.filter((item) => item.relistingGroupId).length, 2);
+  assert.deepEqual(
+    mockWatchlistItems.map((item) => item.watchlistPosition),
+    [1, 2, 3, 4, 5, 6]
+  );
+  assert.equal(mockRelistingCandidates.length, 2);
 });
 
 test("marks relisted wins by a shared relisting group instead of reusing eBay item IDs", () => {

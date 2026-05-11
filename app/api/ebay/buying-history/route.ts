@@ -4,8 +4,11 @@ import {
   filterLostItemsEventuallyWon,
   filterLostItemsNeverWon,
   mockLostBidItems,
+  mockRelistingCandidates,
+  mockWatchlistItems,
   mockWonItems
 } from "../../../../src/ebay/buying-history-fixtures.ts";
+import { buildHomeFeed } from "../../../../src/ebay/home-feed.ts";
 import { getEbayHistorySourceStatus } from "../../../../src/ebay/history-source.ts";
 import { requireSessionEbayAccessToken } from "../../../../src/ebay/session-access.ts";
 
@@ -31,6 +34,12 @@ export async function GET(request: NextRequest) {
 
   const eventuallyWonLostItems = filterLostItemsEventuallyWon(mockLostBidItems, mockWonItems);
   const neverWonLostItems = filterLostItemsNeverWon(mockLostBidItems, mockWonItems);
+  const homeFeed = buildHomeFeed({
+    lostItems: mockLostBidItems,
+    wonItems: mockWonItems,
+    watchlistItems: mockWatchlistItems,
+    relistingCandidates: mockRelistingCandidates
+  });
 
   return NextResponse.json({
     source: "fixture",
@@ -38,9 +47,16 @@ export async function GET(request: NextRequest) {
       lost: mockLostBidItems.length,
       won: mockWonItems.length,
       eventuallyWon: eventuallyWonLostItems.length,
-      neverWon: neverWonLostItems.length
+      neverWon: neverWonLostItems.length,
+      watchlist: mockWatchlistItems.length,
+      watchlistRelistings: homeFeed.counts.watchlistRelistings,
+      needsAction: homeFeed.counts.needsAction,
+      relistings: homeFeed.counts.relistings
     },
     lostItems: mockLostBidItems,
-    wonItems: mockWonItems
+    wonItems: mockWonItems,
+    watchlistItems: mockWatchlistItems,
+    relistingCandidates: mockRelistingCandidates,
+    homeFeed
   });
 }
