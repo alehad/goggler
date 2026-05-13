@@ -4,6 +4,7 @@ import { loadEbayConfig } from "../../src/ebay/config.ts";
 import {
   buildGetMyeBayBuyingRequest,
   fetchGetMyeBayBuyingPage,
+  fetchGetMyeBayBuyingPages,
   parseGetMyeBayBuyingResponse
 } from "../../src/ebay/trading-client.ts";
 
@@ -43,6 +44,65 @@ test("builds WonList requests independently from LostList requests", () => {
   assert.match(request.body, /<EntriesPerPage>100<\/EntriesPerPage>/);
   assert.match(request.body, /<PageNumber>1<\/PageNumber>/);
   assert.equal(request.body.includes("<LostList>"), false);
+});
+
+test("builds WatchList requests independently from history list requests", () => {
+  const request = buildGetMyeBayBuyingRequest(config, "session-access-token", {
+    list: "WatchList",
+    pageNumber: 1,
+    entriesPerPage: 10
+  });
+
+  assert.match(request.body, /<WatchList>/);
+  assert.match(request.body, /<EntriesPerPage>10<\/EntriesPerPage>/);
+  assert.equal(request.body.includes("<LostList>"), false);
+  assert.equal(request.body.includes("<WonList>"), false);
+  assert.equal(request.body.includes("session-access-token"), false);
+});
+
+test("fetches GetMyeBayBuying pages up to the safety limit", async () => {
+  const requestedPages = [];
+  const pages = await fetchGetMyeBayBuyingPages(
+    config,
+    "session-access-token",
+    { list: "WatchList", entriesPerPage: 1, maxPages: 2 },
+    {
+      fetch: async (_url, init) => {
+        const pageNumber = Number(init.body.match(/<PageNumber>(\d+)<\/PageNumber>/)?.[1]);
+        requestedPages.push(pageNumber);
+        return new Response(responseXml("WatchList", { pageNumber, totalPages: 3, totalEntries: 3 }), {
+          headers: { "Content-Type": "text/xml" }
+        });
+      }
+    }
+  );
+
+  assert.deepEqual(requestedPages, [1, 2]);
+  assert.equal(pages.truncated, true);
+  assert.equal(pages.pagesFetched, 2);
+  assert.equal(pages.items.length, 4);
+});
+
+test("falls back on malformed pagination values", () => {
+  const page = parseGetMyeBayBuyingResponse(
+    responseXml("WatchList", { pageNumber: "not-a-number", totalPages: "-1", totalEntries: "nope" }),
+    "WatchList"
+  );
+
+  assert.equal(page.pageNumber, 1);
+  assert.equal(page.totalPages, 1);
+  assert.equal(page.totalEntries, 0);
+});
+
+test("treats a missing requested list in a successful response as empty history", () => {
+  const page = parseGetMyeBayBuyingResponse(
+    "<?xml version=\"1.0\" encoding=\"utf-8\"?><GetMyeBayBuyingResponse><Ack>Success</Ack></GetMyeBayBuyingResponse>",
+    "WonList"
+  );
+
+  assert.equal(page.list, "WonList");
+  assert.equal(page.totalEntries, 0);
+  assert.deepEqual(page.items, []);
 });
 
 test("rejects unexpected Trading API URLs before sending token material", () => {
@@ -121,16 +181,19 @@ test("normalizes HTTP and API failures without leaking token values", async () =
   );
 });
 
-function responseXml(listName) {
+function responseXml(listName, options = {}) {
+  const pageNumber = options.pageNumber ?? 1;
+  const totalPages = options.totalPages ?? 3;
+  const totalEntries = options.totalEntries ?? 48;
   return `<?xml version="1.0" encoding="utf-8"?>
 <GetMyeBayBuyingResponse xmlns="urn:ebay:apis:eBLBaseComponents">
   <Ack>Success</Ack>
   <${listName}>
     <PaginationResult>
-      <TotalNumberOfPages>3</TotalNumberOfPages>
-      <TotalNumberOfEntries>48</TotalNumberOfEntries>
+      <TotalNumberOfPages>${totalPages}</TotalNumberOfPages>
+      <TotalNumberOfEntries>${totalEntries}</TotalNumberOfEntries>
     </PaginationResult>
-    <PageNumber>1</PageNumber>
+    <PageNumber>${pageNumber}</PageNumber>
     <ItemArray>
       <Item>
         <ItemID>sandbox-lost-001</ItemID>

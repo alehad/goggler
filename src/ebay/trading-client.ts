@@ -1,6 +1,6 @@
 import type { EbayConfig } from "./config.ts";
 
-export type EbayBuyingListKind = "LostList" | "WonList";
+export type EbayBuyingListKind = "LostList" | "WatchList" | "WonList";
 
 export type EbayMoney = {
   value: number;
@@ -24,6 +24,12 @@ export type GetMyeBayBuyingInput = {
   entriesPerPage?: number;
 };
 
+export type GetMyeBayBuyingPagesInput = {
+  list: EbayBuyingListKind;
+  entriesPerPage?: number;
+  maxPages?: number;
+};
+
 export type EbayTradingRequest = {
   url: string;
   headers: Record<string, string>;
@@ -34,6 +40,15 @@ export type EbayBuyingHistoryPage = {
   list: EbayBuyingListKind;
   ack: string;
   pageNumber: number;
+  totalPages: number;
+  totalEntries: number;
+  items: EbayBuyingHistoryItem[];
+};
+
+export type EbayBuyingHistoryPages = {
+  list: EbayBuyingListKind;
+  pagesFetched: number;
+  truncated: boolean;
   totalPages: number;
   totalEntries: number;
   items: EbayBuyingHistoryItem[];
@@ -111,6 +126,47 @@ export async function fetchGetMyeBayBuyingPage(
   return parseGetMyeBayBuyingResponse(await response.text(), input.list);
 }
 
+export async function fetchGetMyeBayBuyingPages(
+  config: EbayConfig,
+  accessToken: string,
+  input: GetMyeBayBuyingPagesInput,
+  options: { fetch?: typeof fetch } = {}
+): Promise<EbayBuyingHistoryPages> {
+  const maxPages = Math.min(Math.max(input.maxPages ?? 3, 1), 10);
+  const entriesPerPage = input.entriesPerPage ?? 50;
+  const items: EbayBuyingHistoryItem[] = [];
+  let pageNumber = 1;
+  let totalPages = 1;
+  let totalEntries = 0;
+
+  while (pageNumber <= totalPages && pageNumber <= maxPages) {
+    const page = await fetchGetMyeBayBuyingPage(
+      config,
+      accessToken,
+      {
+        list: input.list,
+        entriesPerPage,
+        pageNumber
+      },
+      options
+    );
+
+    totalPages = Math.max(1, page.totalPages);
+    totalEntries = page.totalEntries;
+    items.push(...page.items);
+    pageNumber += 1;
+  }
+
+  return {
+    list: input.list,
+    pagesFetched: pageNumber - 1,
+    truncated: totalPages > maxPages,
+    totalPages,
+    totalEntries,
+    items
+  };
+}
+
 export function parseGetMyeBayBuyingResponse(xml: string, list: EbayBuyingListKind): EbayBuyingHistoryPage {
   const ack = firstText(xml, "Ack");
   if (!ack) {
@@ -123,15 +179,22 @@ export function parseGetMyeBayBuyingResponse(xml: string, list: EbayBuyingListKi
 
   const listXml = firstBlock(xml, list);
   if (!listXml) {
-    throw new EbayTradingApiError(`eBay Trading API response was missing ${list}`);
+    return {
+      list,
+      ack,
+      pageNumber: 1,
+      totalPages: 1,
+      totalEntries: 0,
+      items: []
+    };
   }
 
   return {
     list,
     ack,
-    pageNumber: Number(firstText(listXml, "PageNumber") ?? 1),
-    totalPages: Number(firstText(listXml, "TotalNumberOfPages") ?? 1),
-    totalEntries: Number(firstText(listXml, "TotalNumberOfEntries") ?? 0),
+    pageNumber: parsePositiveInteger(firstText(listXml, "PageNumber"), 1),
+    totalPages: parsePositiveInteger(firstText(listXml, "TotalNumberOfPages"), 1),
+    totalEntries: parsePositiveInteger(firstText(listXml, "TotalNumberOfEntries"), 0),
     items: blocks(listXml, "Item").map((itemXml) => parseItem(itemXml, list))
   };
 }
@@ -185,6 +248,19 @@ function blocks(xml: string, tag: string): string[] {
 function attributeValue(xml: string, name: string): string | undefined {
   const match = xml.match(new RegExp(`${name}="([^"]+)"`));
   return match?.[1];
+}
+
+function parsePositiveInteger(value: string | undefined, fallback: number): number {
+  if (value === undefined) {
+    return fallback;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return fallback;
+  }
+
+  return parsed;
 }
 
 function stripTags(value: string): string {

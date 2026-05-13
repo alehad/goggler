@@ -374,21 +374,64 @@ test("eBay buying history route rejects fixture history in production", async ()
   }
 });
 
-test("eBay buying history route reports live history as not implemented", async () => {
+test("eBay buying history route serves mocked live history after eBay connection", async () => {
+  setEbayEnv();
   process.env.GOGGLER_EBAY_HISTORY_SOURCE = "live";
   const cookie = await signInCookie();
   const session = currentSessionFromCookie(cookie);
   authorizeEbaySession(session.session.id);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, init) => {
+    const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
+    return new Response(liveResponseXml(list), {
+      headers: { "Content-Type": "text/xml" }
+    });
+  };
 
-  const response = await getBuyingHistory(
-    new NextRequest("http://localhost:3000/api/ebay/buying-history", {
-      headers: { cookie }
-    })
-  );
-  const body = await response.json();
+  try {
+    const response = await getBuyingHistory(
+      new NextRequest("http://localhost:3000/api/ebay/buying-history", {
+        headers: { cookie }
+      })
+    );
+    const body = await response.json();
 
-  assert.equal(response.status, 501);
-  assert.equal(body.error, "live_history_not_implemented");
+    assert.equal(response.status, 200);
+    assert.equal(body.source, "live");
+    assert.equal(body.counts.watchlist, 1);
+    assert.equal(body.homeFeed.rows[0].section, "watchlist");
+    assert.equal(JSON.stringify(body).includes("access-token"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("eBay buying history route hides upstream live eBay failure details", async () => {
+  setEbayEnv();
+  process.env.GOGGLER_EBAY_HISTORY_SOURCE = "live";
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  authorizeEbaySession(session.session.id);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response("<GetMyeBayBuyingResponse><Ack>Failure</Ack></GetMyeBayBuyingResponse>", { status: 200 });
+
+  try {
+    const response = await getBuyingHistory(
+      new NextRequest("http://localhost:3000/api/ebay/buying-history", {
+        headers: { cookie }
+      })
+    );
+    const body = await response.json();
+    const serialized = JSON.stringify(body);
+
+    assert.equal(response.status, 502);
+    assert.deepEqual(body, { error: "live_history_error" });
+    assert.equal(serialized.includes("Failure"), false);
+    assert.equal(serialized.includes("access-token"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 async function signInCookie() {
@@ -435,4 +478,26 @@ function jsonResponse(body) {
   return new Response(JSON.stringify(body), {
     headers: { "Content-Type": "application/json" }
   });
+}
+
+function liveResponseXml(listName) {
+  const title = listName === "WatchList" ? "Quad 33 preamp and 303 power amp pair" : `${listName} item`;
+  return `<?xml version="1.0" encoding="utf-8"?>
+<GetMyeBayBuyingResponse xmlns="urn:ebay:apis:eBLBaseComponents">
+  <Ack>Success</Ack>
+  <${listName}>
+    <PaginationResult>
+      <TotalNumberOfPages>1</TotalNumberOfPages>
+      <TotalNumberOfEntries>1</TotalNumberOfEntries>
+    </PaginationResult>
+    <PageNumber>1</PageNumber>
+    <ItemArray>
+      <Item>
+        <ItemID>${listName}-001</ItemID>
+        <Title>${title}</Title>
+        <SellingStatus><CurrentPrice currencyID="GBP">123.00</CurrentPrice></SellingStatus>
+      </Item>
+    </ItemArray>
+  </${listName}>
+</GetMyeBayBuyingResponse>`;
 }
