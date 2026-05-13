@@ -4,6 +4,8 @@ This repository uses OpenSpec to drive planning and implementation.
 
 Before implementing behavior, create or update an OpenSpec change under `openspec/changes/`. Accepted behavior should later be reflected under `openspec/specs/`.
 
+Every implementation step must be preceded by an OpenSpec planning step. The planning and implementation may happen on the same feature branch, but the first step of the branch should create or update the relevant `proposal.md`, `design.md`, `tasks.md`, and spec deltas as needed. Implementation should proceed only after the user has had a chance to review the OpenSpec design for that step.
+
 ## Project Direction
 
 goggler is a personal-first eBay UK auction tracker. It imports authenticated buying history, tracks items the user did not win, searches for likely exact relistings, and presents matches in an app dashboard.

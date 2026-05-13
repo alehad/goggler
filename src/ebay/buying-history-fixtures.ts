@@ -1,25 +1,12 @@
 import type { EbayBuyingHistoryItem } from "./trading-client.ts";
+import type { HomeFeedRelistingCandidate, HomeFeedWatchlistItem } from "./home-feed.ts";
 
 type FixtureItem = EbayBuyingHistoryItem & {
   relistingGroupId: string;
 };
 
-export type FixtureWatchlistItem = {
-  itemId: string;
-  title: string;
-  watchlistPosition: number;
-  currentPrice: { value: number; currency: string };
-  endsAt: string;
-  sellerUserId: string;
-  conditionDisplayName: string;
-  relistingGroupId?: string;
-  matchConfidence?: number;
-  matchSignals?: string[];
-};
-
-export type FixtureRelistingCandidate = Omit<FixtureWatchlistItem, "watchlistPosition"> & {
-  candidateId: string;
-};
+export type FixtureWatchlistItem = HomeFeedWatchlistItem;
+export type FixtureRelistingCandidate = HomeFeedRelistingCandidate;
 
 export const mockLostBidItems: FixtureItem[] = [
   lostItem("sandbox-lost-001", "Rega Planar 3 turntable with Elys cartridge", "relist-rega-planar-3", 214.25, "2026-01-12"),

@@ -1,8 +1,21 @@
-import type {
-  FixtureRelistingCandidate,
-  FixtureWatchlistItem
-} from "./buying-history-fixtures.ts";
 import type { EbayBuyingHistoryItem } from "./trading-client.ts";
+
+export type HomeFeedWatchlistItem = {
+  itemId: string;
+  title: string;
+  watchlistPosition: number;
+  currentPrice: { value: number; currency: string };
+  endsAt?: string;
+  sellerUserId?: string;
+  conditionDisplayName?: string;
+  relistingGroupId?: string;
+  matchConfidence?: number;
+  matchSignals?: string[];
+};
+
+export type HomeFeedRelistingCandidate = Omit<HomeFeedWatchlistItem, "watchlistPosition"> & {
+  candidateId: string;
+};
 
 export type HomeFeedFilter = "all" | "needsAction" | "onWatchlist" | "relistings" | "neverWon" | "resolved";
 export type HomeFeedSection = "watchlist" | "needs_action" | "unresolved" | "resolved";
@@ -48,8 +61,8 @@ export type HomeFeed = {
 type BuildHomeFeedInput = {
   lostItems: EbayBuyingHistoryItem[];
   wonItems: EbayBuyingHistoryItem[];
-  watchlistItems: FixtureWatchlistItem[];
-  relistingCandidates: FixtureRelistingCandidate[];
+  watchlistItems: HomeFeedWatchlistItem[];
+  relistingCandidates: HomeFeedRelistingCandidate[];
 };
 
 export function buildHomeFeed(input: BuildHomeFeedInput): HomeFeed {
@@ -132,7 +145,7 @@ export function filterHomeFeedRows(rows: HomeFeedRow[], filter: HomeFeedFilter):
 
 function activeListingRow(input: {
   id: string;
-  item: FixtureWatchlistItem | FixtureRelistingCandidate;
+  item: HomeFeedWatchlistItem | HomeFeedRelistingCandidate;
   lostItem?: EbayBuyingHistoryItem;
   section: HomeFeedSection;
   tags: HomeFeedTag[];
