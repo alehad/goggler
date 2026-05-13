@@ -59,7 +59,7 @@ Automated checks SHALL avoid exposing credentials, tokens, or authorization code
 
 ### Requirement: Advisory AI review
 
-The system MAY use advisory AI review after deterministic checks are available.
+The system SHALL treat AI review as advisory and optional after deterministic checks are available.
 
 #### Scenario: Local AI review enabled
 
