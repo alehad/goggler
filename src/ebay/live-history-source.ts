@@ -11,6 +11,7 @@ export type FetchLiveEbayHistoryOptions = {
   fetch?: typeof fetch;
   entriesPerPage?: number;
   maxPagesPerList?: number;
+  now?: Date;
 };
 
 export async function fetchLiveEbayHistoryResponse(
@@ -20,6 +21,7 @@ export async function fetchLiveEbayHistoryResponse(
 ): Promise<EbayHistoryResponse> {
   const entriesPerPage = options.entriesPerPage ?? 50;
   const maxPages = options.maxPagesPerList ?? 3;
+  const now = options.now ?? new Date();
   const fetchOptions = { fetch: options.fetch };
 
   const [watchList, lostList, wonList] = await Promise.all(
@@ -40,7 +42,8 @@ export async function fetchLiveEbayHistoryResponse(
   const lostItems = withTitleRelistingGroups(lostList.items);
   const wonItems = withTitleRelistingGroups(wonList.items);
   const lostGroups = new Set(lostItems.map((item) => item.relistingGroupId).filter((value): value is string => Boolean(value)));
-  const watchlistItems = watchList.items.map((item, index) =>
+  const activeWatchListItems = watchList.items.filter((item) => isActiveListing(item, now));
+  const watchlistItems = activeWatchListItems.map((item, index) =>
     toWatchlistItem(item, index + 1, lostGroups.has(titleRelistingGroup(item.title)))
   );
   const homeFeed = buildHomeFeed({
@@ -95,10 +98,20 @@ function toWatchlistItem(
     endsAt: item.endTime,
     sellerUserId: item.sellerUserId,
     conditionDisplayName: item.conditionDisplayName,
+    imageUrl: item.imageUrl,
     relistingGroupId: matchedLostItem ? titleRelistingGroup(item.title) : undefined,
     matchConfidence: matchedLostItem ? 100 : undefined,
     matchSignals: matchedLostItem ? ["exact title match"] : []
   };
+}
+
+function isActiveListing(item: EbayBuyingHistoryItem, now: Date): boolean {
+  if (!item.endTime) {
+    return false;
+  }
+
+  const endTime = Date.parse(item.endTime);
+  return Number.isFinite(endTime) && endTime > now.getTime();
 }
 
 function titleRelistingGroup(title: string): string {

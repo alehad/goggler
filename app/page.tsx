@@ -123,6 +123,7 @@ type HomeFeedRow = {
   endsAt?: string;
   sellerUserId?: string;
   conditionDisplayName?: string;
+  imageUrl?: string;
   watchlistPosition?: number;
   matchConfidence?: number;
   matchSignals: string[];
@@ -297,8 +298,7 @@ function Dashboard({
 
       return {
         ...row,
-        section: "watchlist" as const,
-        tags: [...new Set([...row.tags.filter((tag) => tag !== "Not watched"), "On eBay watchlist", "Added by goggler"])],
+        tags: [...new Set([...row.tags.filter((tag) => tag !== "Not watched"), "Added by goggler"])],
         actions: row.actions.filter((action) => action !== "add_to_watchlist")
       };
     });
@@ -392,8 +392,8 @@ function Dashboard({
 function HomeFeedCard({ row, onAddToWatchlist }: { row: HomeFeedRow; onAddToWatchlist: () => void }) {
   return (
     <article className="candidate-card home-feed-card">
-      <div className="watch-rank" title={row.watchlistPosition ? "eBay watchlist order" : "goggler feed"}>
-        {row.watchlistPosition ? row.watchlistPosition : <Sparkles size={20} />}
+      <div className="watch-thumbnail" title={row.imageUrl ? "eBay listing image" : "goggler feed"}>
+        {row.imageUrl ? <img alt="" loading="lazy" referrerPolicy="no-referrer" src={row.imageUrl} /> : <Sparkles size={20} />}
       </div>
       <div className="candidate-main">
         <div className="candidate-title-row">

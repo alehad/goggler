@@ -135,8 +135,27 @@ test("parses normalized buying history pages", () => {
     currentPrice: { value: 214.25, currency: "GBP" },
     endTime: "2026-01-12T20:15:00.000Z",
     sellerUserId: "sandbox-seller",
-    conditionDisplayName: "Used"
+    conditionDisplayName: "Used",
+    imageUrl: "https://i.ebayimg.example/sandbox-lost-001.jpg"
   });
+});
+
+test("rejects unsafe listing image URLs", () => {
+  const page = parseGetMyeBayBuyingResponse(responseXml("WatchList", { imageUrl: "javascript:alert(1)" }), "WatchList");
+  const httpPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { imageUrl: "http://i.ebayimg.example/item.jpg" }), "WatchList");
+  const localhostPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { imageUrl: "https://localhost/item.jpg" }), "WatchList");
+  const privateIpPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { imageUrl: "https://192.168.1.10/item.jpg" }), "WatchList");
+  const apipaPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { imageUrl: "https://169.254.1.10/item.jpg" }), "WatchList");
+  const mappedIpPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { imageUrl: "https://[::ffff:192.168.1.10]/item.jpg" }), "WatchList");
+  const linkLocalPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { imageUrl: "https://[fe80::1]/item.jpg" }), "WatchList");
+
+  assert.equal(page.items[0].imageUrl, undefined);
+  assert.equal(httpPage.items[0].imageUrl, undefined);
+  assert.equal(localhostPage.items[0].imageUrl, undefined);
+  assert.equal(privateIpPage.items[0].imageUrl, undefined);
+  assert.equal(apipaPage.items[0].imageUrl, undefined);
+  assert.equal(mappedIpPage.items[0].imageUrl, undefined);
+  assert.equal(linkLocalPage.items[0].imageUrl, undefined);
 });
 
 test("fetches and parses GetMyeBayBuying pages", async () => {
@@ -185,6 +204,7 @@ function responseXml(listName, options = {}) {
   const pageNumber = options.pageNumber ?? 1;
   const totalPages = options.totalPages ?? 3;
   const totalEntries = options.totalEntries ?? 48;
+  const imageUrl = options.imageUrl ?? "https://i.ebayimg.example/sandbox-lost-001.jpg";
   return `<?xml version="1.0" encoding="utf-8"?>
 <GetMyeBayBuyingResponse xmlns="urn:ebay:apis:eBLBaseComponents">
   <Ack>Success</Ack>
@@ -204,6 +224,9 @@ function responseXml(listName, options = {}) {
         <ListingDetails>
           <EndTime>2026-01-12T20:15:00.000Z</EndTime>
         </ListingDetails>
+        <PictureDetails>
+          <GalleryURL>${imageUrl}</GalleryURL>
+        </PictureDetails>
         <SellingStatus>
           <CurrentPrice currencyID="GBP">214.25</CurrentPrice>
         </SellingStatus>

@@ -8,6 +8,7 @@ export type HomeFeedWatchlistItem = {
   endsAt?: string;
   sellerUserId?: string;
   conditionDisplayName?: string;
+  imageUrl?: string;
   relistingGroupId?: string;
   matchConfidence?: number;
   matchSignals?: string[];
@@ -36,6 +37,7 @@ export type HomeFeedRow = {
   endsAt?: string;
   sellerUserId?: string;
   conditionDisplayName?: string;
+  imageUrl?: string;
   watchlistPosition?: number;
   matchConfidence?: number;
   matchSignals: string[];
@@ -160,6 +162,7 @@ function activeListingRow(input: {
     endsAt: input.item.endsAt,
     sellerUserId: input.item.sellerUserId,
     conditionDisplayName: input.item.conditionDisplayName,
+    imageUrl: input.item.imageUrl,
     watchlistPosition: "watchlistPosition" in input.item ? input.item.watchlistPosition : undefined,
     matchConfidence: input.item.matchConfidence,
     matchSignals: input.item.matchSignals ?? [],

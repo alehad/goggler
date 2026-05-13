@@ -141,7 +141,8 @@ function watchlistItem(
     currentPrice: { value: 95 + watchlistPosition * 17.5, currency: "GBP" },
     endsAt: `2026-05-${String(11 + watchlistPosition).padStart(2, "0")}T19:30:00.000Z`,
     sellerUserId: "watchlist-seller",
-    conditionDisplayName: "Used"
+    conditionDisplayName: "Used",
+    imageUrl: `https://i.ebayimg.example/watchlist-${watchlistPosition}.jpg`
   };
 }
 
