@@ -302,7 +302,7 @@ h1 {
   grid-template-columns: 52px minmax(0, 1fr) 132px auto;
 }
 
-.watch-rank {
+.watch-thumbnail {
   align-items: center;
   align-self: start;
   background: #edf3ff;
@@ -314,7 +314,15 @@ h1 {
   font-weight: 900;
   height: 44px;
   justify-content: center;
+  overflow: hidden;
   width: 44px;
+}
+
+.watch-thumbnail img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
 }
 
 .record-art {
@@ -617,7 +625,8 @@ h1 {
     grid-template-columns: 1fr;
   }
 
-  .record-art {
+  .record-art,
+  .watch-thumbnail {
     max-width: 132px;
   }
 

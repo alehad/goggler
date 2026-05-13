@@ -531,6 +531,7 @@ function liveResponseXml(listName) {
       <Item>
         <ItemID>${listName}-001</ItemID>
         <Title>${title}</Title>
+        ${listName === "WatchList" ? "<ListingDetails><EndTime>2026-05-14T20:30:00.000Z</EndTime></ListingDetails>" : ""}
         <SellingStatus><CurrentPrice currencyID="GBP">123.00</CurrentPrice></SellingStatus>
       </Item>
     </ItemArray>

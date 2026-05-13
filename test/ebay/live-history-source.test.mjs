@@ -15,6 +15,7 @@ test("fetches live watchlist, lost, and won lists into the Home feed contract", 
   const calls = [];
   const response = await fetchLiveEbayHistoryResponse(config, "session-access-token", {
     maxPagesPerList: 1,
+    now: new Date("2026-05-13T12:00:00.000Z"),
     fetch: async (_url, init) => {
       const body = String(init.body);
       const list = body.match(/<(WatchList|LostList|WonList)>/)?.[1];
@@ -42,6 +43,8 @@ test("fetches live watchlist, lost, and won lists into the Home feed contract", 
   assert.equal(response.counts.won, 1);
   assert.equal(response.homeFeed.rows[0].section, "watchlist");
   assert.equal(response.homeFeed.rows[0].watchlistPosition, 1);
+  assert.equal(response.homeFeed.rows[0].imageUrl, "https://i.ebayimg.example/watch-001.jpg");
+  assert.equal(response.watchlistItems.every((item) => item.itemId !== "watch-ended"), true);
   assert.equal(JSON.stringify(response).includes("session-access-token"), false);
 });
 
@@ -67,13 +70,21 @@ function responseXml(listName, options = {}) {
         <Title>Quad 33 preamp and 303 power amp pair</Title>
         <Seller><UserID>watch-seller</UserID></Seller>
         <ListingDetails><EndTime>2026-05-14T20:30:00.000Z</EndTime></ListingDetails>
+        <PictureDetails><GalleryURL>https://i.ebayimg.example/watch-001.jpg</GalleryURL></PictureDetails>
         <SellingStatus><CurrentPrice currencyID="GBP">410.00</CurrentPrice></SellingStatus>
         <ConditionDisplayName>Used</ConditionDisplayName>
       </Item>
       <Item>
         <ItemID>watch-002</ItemID>
         <Title>Unrelated watchlist item</Title>
+        <ListingDetails><EndTime>2026-05-15T20:30:00.000Z</EndTime></ListingDetails>
         <SellingStatus><CurrentPrice currencyID="GBP">99.00</CurrentPrice></SellingStatus>
+      </Item>
+      <Item>
+        <ItemID>watch-ended</ItemID>
+        <Title>Ended watchlist item</Title>
+        <ListingDetails><EndTime>2026-05-12T20:30:00.000Z</EndTime></ListingDetails>
+        <SellingStatus><CurrentPrice currencyID="GBP">88.00</CurrentPrice></SellingStatus>
       </Item>`,
     LostList: `
       <Item>

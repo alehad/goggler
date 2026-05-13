@@ -15,6 +15,7 @@ export type EbayBuyingHistoryItem = {
   endTime?: string;
   sellerUserId?: string;
   conditionDisplayName?: string;
+  imageUrl?: string;
   relistingGroupId?: string;
 };
 
@@ -213,8 +214,55 @@ function parseItem(xml: string, list: EbayBuyingListKind): EbayBuyingHistoryItem
     currentPrice: parseCurrentPrice(xml),
     endTime: firstText(firstBlock(xml, "ListingDetails") ?? "", "EndTime"),
     sellerUserId: firstText(firstBlock(xml, "Seller") ?? "", "UserID"),
-    conditionDisplayName: firstText(xml, "ConditionDisplayName")
+    conditionDisplayName: firstText(xml, "ConditionDisplayName"),
+    imageUrl: parseImageUrl(xml)
   };
+}
+
+function parseImageUrl(xml: string): string | undefined {
+  const value = firstText(firstBlock(xml, "PictureDetails") ?? "", "GalleryURL") ?? firstText(xml, "GalleryURL");
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && !isLocalOrPrivateHost(url.hostname) ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isLocalOrPrivateHost(hostname: string): boolean {
+  const host = hostname.toLocaleLowerCase("en-GB").replace(/^\[(.*)\]$/, "$1");
+  if (
+    host === "localhost" ||
+    host === "::1" ||
+    host.startsWith("fc") ||
+    host.startsWith("fd") ||
+    host.startsWith("fe8") ||
+    host.startsWith("fe9") ||
+    host.startsWith("fea") ||
+    host.startsWith("feb") ||
+    host.startsWith("::ffff:")
+  ) {
+    return true;
+  }
+
+  const ipv4Host = host.startsWith("::ffff:") ? host.slice("::ffff:".length) : host;
+  const parts = ipv4Host.split(".").map(Number);
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return false;
+  }
+
+  const [first, second] = parts;
+  return (
+    first === 10 ||
+    first === 127 ||
+    (first === 169 && second === 254) ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168)
+  );
 }
 
 function parseCurrentPrice(xml: string): EbayMoney | undefined {
