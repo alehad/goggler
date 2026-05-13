@@ -27,20 +27,30 @@ type Env = Record<string, string | undefined>;
 
 const DEFAULT_MARKETPLACE_ID = "EBAY_GB";
 const DEFAULT_TRADING_SITE_ID = "3";
-const REQUIRED_CONFIG_KEYS = [
-  "GOGGLER_AUTH_SECRET",
-  "EBAY_CLIENT_ID",
-  "EBAY_CLIENT_SECRET",
-  "EBAY_REDIRECT_URI",
-  "EBAY_OAUTH_SCOPES"
-] as const;
+const REQUIRED_SHARED_CONFIG_KEYS = ["GOGGLER_AUTH_SECRET"] as const;
+
+const CREDENTIAL_KEYS = {
+  sandbox: {
+    clientId: ["EBAY_SANDBOX_CLIENT_ID"],
+    clientSecret: ["EBAY_SANDBOX_CLIENT_SECRET"],
+    redirectUri: ["EBAY_SANDBOX_REDIRECT_URI"],
+    scopes: ["EBAY_SANDBOX_OAUTH_SCOPES"]
+  },
+  production: {
+    clientId: ["EBAY_PRODUCTION_CLIENT_ID"],
+    clientSecret: ["EBAY_PRODUCTION_CLIENT_SECRET"],
+    redirectUri: ["EBAY_PRODUCTION_REDIRECT_URI"],
+    scopes: ["EBAY_PRODUCTION_OAUTH_SCOPES"]
+  }
+} as const;
 
 export function loadEbayConfig(env: Env = process.env): EbayConfig {
   const environment = parseEnvironment(env.EBAY_ENVIRONMENT);
-  const clientId = requireEnv(env, "EBAY_CLIENT_ID");
-  const clientSecret = requireEnv(env, "EBAY_CLIENT_SECRET");
-  const redirectUri = requireEnv(env, "EBAY_REDIRECT_URI");
-  const scopes = parseScopes(requireEnv(env, "EBAY_OAUTH_SCOPES"));
+  const credentialKeys = CREDENTIAL_KEYS[environment];
+  const clientId = requireFirstEnv(env, credentialKeys.clientId);
+  const clientSecret = requireFirstEnv(env, credentialKeys.clientSecret);
+  const redirectUri = requireFirstEnv(env, credentialKeys.redirectUri);
+  const scopes = parseScopes(requireFirstEnv(env, credentialKeys.scopes));
 
   return {
     environment,
@@ -74,7 +84,6 @@ export function buildEbayConsentUrl(config: EbayConfig, state: string): URL {
 }
 
 export function getEbayConfigStatus(env: Env = process.env): EbayConfigStatus {
-  const missing = REQUIRED_CONFIG_KEYS.filter((key) => !env[key]);
   const invalid: string[] = [];
 
   let environment: EbayEnvironment = "sandbox";
@@ -88,7 +97,24 @@ export function getEbayConfigStatus(env: Env = process.env): EbayConfigStatus {
     invalid.push("GOGGLER_AUTH_SECRET");
   }
 
-  const scopeCount = env.EBAY_OAUTH_SCOPES ? parseScopes(env.EBAY_OAUTH_SCOPES).length : 0;
+  const credentialKeys = CREDENTIAL_KEYS[environment];
+  const missing = [
+    ...REQUIRED_SHARED_CONFIG_KEYS.filter((key) => !env[key]),
+    missingCredentialName(env, credentialKeys.clientId),
+    missingCredentialName(env, credentialKeys.clientSecret),
+    missingCredentialName(env, credentialKeys.redirectUri),
+    missingCredentialName(env, credentialKeys.scopes)
+  ].filter((key): key is string => key !== undefined);
+
+  const scopeValue = findFirstEnv(env, credentialKeys.scopes);
+  let scopeCount = 0;
+  if (scopeValue) {
+    try {
+      scopeCount = parseScopes(scopeValue).length;
+    } catch {
+      invalid.push(credentialKeys.scopes[0]);
+    }
+  }
 
   return {
     ready: missing.length === 0 && invalid.length === 0,
@@ -116,16 +142,24 @@ function parseEnvironment(value: string | undefined): EbayEnvironment {
 function parseScopes(value: string): string[] {
   const scopes = value.split(/\s+/).filter(Boolean);
   if (scopes.length === 0) {
-    throw new Error("EBAY_OAUTH_SCOPES must include at least one scope");
+    throw new Error("eBay OAuth scopes must include at least one scope");
   }
 
   return scopes;
 }
 
-function requireEnv(env: Env, name: string): string {
-  const value = env[name];
+function findFirstEnv(env: Env, names: readonly string[]): string | undefined {
+  return names.map((name) => env[name]).find((value): value is string => value !== undefined && value.trim() !== "");
+}
+
+function missingCredentialName(env: Env, names: readonly string[]): string | undefined {
+  return findFirstEnv(env, names) ? undefined : names.join(" or ");
+}
+
+function requireFirstEnv(env: Env, names: readonly string[]): string {
+  const value = findFirstEnv(env, names);
   if (!value) {
-    throw new Error(`${name} is required`);
+    throw new Error(`${names.join(" or ")} is required`);
   }
 
   return value;

@@ -43,15 +43,17 @@ Create `.env.local` from `.env.example` and fill these values:
 DATABASE_URL=
 GOGGLER_AUTH_SECRET=<32+ character local secret>
 EBAY_ENVIRONMENT=sandbox
-EBAY_CLIENT_ID=<Sandbox App ID / Client ID>
-EBAY_CLIENT_SECRET=<Sandbox Cert ID / Client Secret>
-EBAY_REDIRECT_URI=<Sandbox RuName / redirect value>
-EBAY_OAUTH_SCOPES=<scope string from eBay>
+EBAY_SANDBOX_CLIENT_ID=<Sandbox App ID / Client ID>
+EBAY_SANDBOX_CLIENT_SECRET=<Sandbox Cert ID / Client Secret>
+EBAY_SANDBOX_REDIRECT_URI=<Sandbox RuName / redirect value>
+EBAY_SANDBOX_OAUTH_SCOPES=<scope string from eBay>
 EBAY_MARKETPLACE_ID=EBAY_GB
 EBAY_TRADING_SITE_ID=3
 ```
 
 Do not commit `.env.local`.
+
+Sandbox mode requires the explicit `EBAY_SANDBOX_*` variables above. Production mode requires the explicit `EBAY_PRODUCTION_*` variables documented in `docs/ebay-production-readonly-setup.md`.
 
 ## Local Test
 
@@ -68,5 +70,5 @@ Do not commit `.env.local`.
 
 - eBay OAuth token values are session-scoped only. They are not persisted at rest.
 - If the dev server behaves oddly after `npm run build`, stop it, delete `.next`, and restart `npm run dev`.
-- If eBay rejects the redirect URI, verify whether `EBAY_REDIRECT_URI` should be the RuName value rather than the literal localhost callback URL.
+- If eBay rejects the redirect URI, verify whether `EBAY_SANDBOX_REDIRECT_URI` should be the RuName value rather than the literal localhost callback URL.
 - Buying-history import is intentionally out of scope until Sandbox OAuth connect works end to end.

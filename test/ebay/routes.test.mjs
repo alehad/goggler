@@ -14,10 +14,10 @@ import { getEbayOAuthStateStore } from "../../src/ebay/oauth-state.ts";
 
 const ebayEnv = {
   EBAY_ENVIRONMENT: "sandbox",
-  EBAY_CLIENT_ID: "test-client-id",
-  EBAY_CLIENT_SECRET: "test-client-secret",
-  EBAY_REDIRECT_URI: "runame-value",
-  EBAY_OAUTH_SCOPES: "scope-one",
+  EBAY_SANDBOX_CLIENT_ID: "test-client-id",
+  EBAY_SANDBOX_CLIENT_SECRET: "test-client-secret",
+  EBAY_SANDBOX_REDIRECT_URI: "runame-value",
+  EBAY_SANDBOX_OAUTH_SCOPES: "scope-one",
   GOGGLER_AUTH_SECRET: "test-auth-secret-placeholder-32-chars"
 };
 
@@ -37,7 +37,7 @@ test("eBay config status route reports missing fields without auth", async () =>
 
   assert.equal(response.status, 200);
   assert.equal(body.config.ready, false);
-  assert.ok(body.config.missing.includes("EBAY_CLIENT_ID"));
+  assert.ok(body.config.missing.includes("EBAY_SANDBOX_CLIENT_ID"));
   assert.equal(JSON.stringify(body).includes("client-secret"), false);
 });
 
@@ -74,6 +74,33 @@ test("eBay start route redirects signed-in users to eBay consent", async () => {
   assert.equal(url.searchParams.get("redirect_uri"), "runame-value");
   assert.equal(url.searchParams.get("response_type"), "code");
   assert.equal(url.searchParams.get("scope"), "scope-one");
+  assert.ok(url.searchParams.get("state"));
+});
+
+test("eBay start route redirects production users to production eBay consent", async () => {
+  setEbayEnv({
+    EBAY_ENVIRONMENT: "production",
+    EBAY_PRODUCTION_CLIENT_ID: "production-client-id",
+    EBAY_PRODUCTION_CLIENT_SECRET: "production-client-secret",
+    EBAY_PRODUCTION_REDIRECT_URI: "production-runame",
+    EBAY_PRODUCTION_OAUTH_SCOPES: "production-scope"
+  });
+  const cookie = await signInCookie();
+  const response = await startEbayAuth(
+    new NextRequest("https://example.ngrok-free.dev/api/auth/ebay/start", {
+      headers: { cookie }
+    })
+  );
+
+  assert.equal(response.status, 307);
+  const location = response.headers.get("location");
+  assert.ok(location);
+
+  const url = new URL(location);
+  assert.equal(url.origin + url.pathname, "https://auth.ebay.com/oauth2/authorize");
+  assert.equal(url.searchParams.get("client_id"), "production-client-id");
+  assert.equal(url.searchParams.get("redirect_uri"), "production-runame");
+  assert.equal(url.searchParams.get("scope"), "production-scope");
   assert.ok(url.searchParams.get("state"));
 });
 
@@ -462,14 +489,23 @@ function authorizeEbaySession(sessionId) {
   });
 }
 
-function setEbayEnv() {
+function setEbayEnv(overrides = {}) {
   for (const [key, value] of Object.entries(ebayEnv)) {
+    process.env[key] = value;
+  }
+  for (const [key, value] of Object.entries(overrides)) {
     process.env[key] = value;
   }
 }
 
 function clearEbayEnv() {
-  for (const key of Object.keys(ebayEnv)) {
+  for (const key of [
+    ...Object.keys(ebayEnv),
+    "EBAY_PRODUCTION_CLIENT_ID",
+    "EBAY_PRODUCTION_CLIENT_SECRET",
+    "EBAY_PRODUCTION_REDIRECT_URI",
+    "EBAY_PRODUCTION_OAUTH_SCOPES"
+  ]) {
     delete process.env[key];
   }
 }

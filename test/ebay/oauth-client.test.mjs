@@ -5,10 +5,10 @@ import { exchangeEbayAuthorizationCode } from "../../src/ebay/oauth-client.ts";
 
 const config = loadEbayConfig({
   EBAY_ENVIRONMENT: "sandbox",
-  EBAY_CLIENT_ID: "client-id",
-  EBAY_CLIENT_SECRET: "client-secret",
-  EBAY_REDIRECT_URI: "runame-value",
-  EBAY_OAUTH_SCOPES: "scope-one"
+  EBAY_SANDBOX_CLIENT_ID: "client-id",
+  EBAY_SANDBOX_CLIENT_SECRET: "client-secret",
+  EBAY_SANDBOX_REDIRECT_URI: "runame-value",
+  EBAY_SANDBOX_OAUTH_SCOPES: "scope-one"
 });
 
 test("exchanges an eBay authorization code for session-scoped token metadata", async () => {
