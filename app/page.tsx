@@ -761,7 +761,7 @@ function formatEbayStatus(
   }
 
   if (!config) {
-    return "Checking eBay Sandbox configuration";
+    return "Checking eBay configuration";
   }
 
   if (!config.ready) {
@@ -784,7 +784,8 @@ function formatEbayStatus(
 function formatEbayConfigGap(config: EbayConfigStatus["config"]): string {
   const missing = config.missing.length > 0 ? `missing ${config.missing.join(", ")}` : "";
   const invalid = config.invalid.length > 0 ? `invalid ${config.invalid.join(", ")}` : "";
-  return `Sandbox config not ready${missing || invalid ? `: ${[missing, invalid].filter(Boolean).join("; ")}` : ""}`;
+  const label = config.environment === "production" ? "Production" : "Sandbox";
+  return `${label} config not ready${missing || invalid ? `: ${[missing, invalid].filter(Boolean).join("; ")}` : ""}`;
 }
 
 function HistoryRow({ item, sideLabel }: { item: HistoryItem; sideLabel: string }) {
