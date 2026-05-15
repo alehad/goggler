@@ -18,9 +18,10 @@ export type HomeFeedRelistingCandidate = Omit<HomeFeedWatchlistItem, "watchlistP
   candidateId: string;
 };
 
-export type HomeFeedFilter = "all" | "needsAction" | "onWatchlist" | "relistings" | "neverWon" | "resolved";
-export type HomeFeedSection = "watchlist" | "needs_action" | "unresolved" | "resolved";
+export type HomeFeedFilter = "all" | "needsAction" | "won" | "onWatchlist" | "relistings" | "neverWon" | "resolved";
+export type HomeFeedSection = "watchlist" | "needs_action" | "won" | "unresolved" | "resolved";
 export type HomeFeedTag =
+  | "Won"
   | "Lost bid"
   | "Never won"
   | "Eventually won"
@@ -55,6 +56,7 @@ export type HomeFeed = {
     watchlistRelistings: number;
     needsAction: number;
     relistings: number;
+    won: number;
     neverWon: number;
     resolved: number;
   };
@@ -114,7 +116,9 @@ export function buildHomeFeed(input: BuildHomeFeedInput): HomeFeed {
     .filter((item) => item.relistingGroupId !== undefined && wonGroups.has(item.relistingGroupId))
     .map((item) => historyRow(item, "resolved", ["Lost bid", "Eventually won"]));
 
-  const rows = [...watchlistRows, ...needsActionRows, ...unresolvedRows, ...resolvedRows];
+  const wonRows = input.wonItems.map((item) => historyRow(item, "won", ["Won"]));
+
+  const rows = [...watchlistRows, ...needsActionRows, ...wonRows, ...unresolvedRows, ...resolvedRows];
   return {
     rows,
     counts: {
@@ -122,6 +126,7 @@ export function buildHomeFeed(input: BuildHomeFeedInput): HomeFeed {
       watchlistRelistings: watchlistRows.filter((row) => row.tags.includes("Relisting candidate")).length,
       needsAction: needsActionRows.length,
       relistings: watchlistRows.filter((row) => row.tags.includes("Relisting candidate")).length + needsActionRows.length,
+      won: wonRows.length,
       neverWon: rows.filter((row) => row.tags.includes("Never won")).length,
       resolved: resolvedRows.length
     }
@@ -132,6 +137,8 @@ export function filterHomeFeedRows(rows: HomeFeedRow[], filter: HomeFeedFilter):
   switch (filter) {
     case "needsAction":
       return rows.filter((row) => row.section === "needs_action");
+    case "won":
+      return rows.filter((row) => row.section === "won");
     case "onWatchlist":
       return rows.filter((row) => row.section === "watchlist");
     case "relistings":
@@ -179,11 +186,14 @@ function historyRow(item: EbayBuyingHistoryItem, section: HomeFeedSection, tags:
     id: `${section}-${item.itemId}`,
     section,
     title: item.title,
-    originalLostPrice: item.currentPrice,
+    currentPrice: section === "won" ? item.currentPrice : undefined,
+    originalLostPrice: section === "won" ? undefined : item.currentPrice,
     sellerUserId: item.sellerUserId,
     conditionDisplayName: item.conditionDisplayName,
+    imageUrl: item.imageUrl,
     relistingGroupId: item.relistingGroupId,
-    lostItemId: item.itemId,
+    sourceItemId: item.itemId,
+    lostItemId: section === "won" ? undefined : item.itemId,
     matchSignals: [],
     tags,
     actions: []

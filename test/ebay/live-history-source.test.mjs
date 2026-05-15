@@ -39,11 +39,17 @@ test("fetches live watchlist, lost, and won lists into the Home feed contract", 
   assert.equal(response.source, "live");
   assert.equal(response.counts.watchlist, 2);
   assert.equal(response.counts.watchlistRelistings, 1);
-  assert.equal(response.counts.lost, 1);
+  assert.equal(response.counts.lost, 2);
   assert.equal(response.counts.won, 1);
+  assert.equal(response.homeFeed.counts.won, 1);
   assert.equal(response.homeFeed.rows[0].section, "watchlist");
   assert.equal(response.homeFeed.rows[0].watchlistPosition, 1);
   assert.equal(response.homeFeed.rows[0].imageUrl, "https://i.ebayimg.example/watch-001.jpg");
+  assert.equal(
+    response.homeFeed.rows.find((row) => row.section === "unresolved")?.imageUrl,
+    "https://i.ebayimg.example/lost-002.jpg"
+  );
+  assert.equal(response.homeFeed.rows.find((row) => row.section === "won")?.imageUrl, "https://i.ebayimg.example/won-001.jpg");
   assert.equal(response.watchlistItems.every((item) => item.itemId !== "watch-ended"), true);
   assert.equal(JSON.stringify(response).includes("session-access-token"), false);
 });
@@ -90,12 +96,20 @@ function responseXml(listName, options = {}) {
       <Item>
         <ItemID>lost-001</ItemID>
         <Title>Quad 33 preamp and 303 power amp pair</Title>
+        <PictureDetails><GalleryURL>https://i.ebayimg.example/lost-001.jpg</GalleryURL></PictureDetails>
         <SellingStatus><CurrentPrice currencyID="GBP">390.00</CurrentPrice></SellingStatus>
+      </Item>
+      <Item>
+        <ItemID>lost-002</ItemID>
+        <Title>Unmatched lost item with image</Title>
+        <PictureDetails><GalleryURL>https://i.ebayimg.example/lost-002.jpg</GalleryURL></PictureDetails>
+        <SellingStatus><CurrentPrice currencyID="GBP">45.00</CurrentPrice></SellingStatus>
       </Item>`,
     WonList: `
       <Item>
         <ItemID>won-001</ItemID>
         <Title>Rega Fono Mini A2D phono stage</Title>
+        <PictureDetails><GalleryURL>https://i.ebayimg.example/won-001.jpg</GalleryURL></PictureDetails>
         <SellingStatus><CurrentPrice currencyID="GBP">88.00</CurrentPrice></SellingStatus>
       </Item>`
   }[listName];
