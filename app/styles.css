@@ -94,21 +94,6 @@ button {
   z-index: 5;
 }
 
-.setup-chip {
-  align-items: center;
-  background: #e9f8ef;
-  border: 1px solid #bfe8d0;
-  border-radius: 999px;
-  color: var(--good);
-  display: inline-flex;
-  font-size: 13px;
-  font-weight: 800;
-  gap: 6px;
-  min-height: 38px;
-  padding: 0 12px;
-  white-space: nowrap;
-}
-
 .search-box {
   align-items: center;
   background: var(--panel);
@@ -156,6 +141,44 @@ button {
   border: 1px solid var(--line);
   color: #344050;
   padding: 0 12px;
+}
+
+.account-menu {
+  position: relative;
+}
+
+.account-dropdown {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 12px;
+  min-width: 240px;
+  padding: 12px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 20;
+}
+
+.account-dropdown p {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.dropdown-action {
+  align-items: center;
+  background: #fff5f4;
+  border: 1px solid #f2c3be;
+  border-radius: 8px;
+  color: var(--bad);
+  display: inline-flex;
+  font-weight: 800;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 10px;
 }
 
 .secondary-button.compact {
@@ -570,6 +593,11 @@ h1 {
   color: var(--warn);
 }
 
+.status.connected {
+  background: #e8f6ef;
+  color: var(--good);
+}
+
 .account-layout {
   max-width: 900px;
 }
@@ -588,10 +616,6 @@ h1 {
   .brand {
     flex: 1;
     min-width: 180px;
-  }
-
-  .setup-chip {
-    display: none;
   }
 
   .search-box {

@@ -15,6 +15,10 @@ export function getAllowedRequestOrigins(request: NextRequest): Set<string> {
   return new Set([request.nextUrl.origin, getPublicOrigin(request)]);
 }
 
+export function isSecureRequest(request: NextRequest): boolean {
+  return new URL(getPublicOrigin(request)).protocol === "https:";
+}
+
 function firstForwardedValue(value: string | null): string | undefined {
   return value?.split(",")[0]?.trim() || undefined;
 }

@@ -21,13 +21,13 @@ const ebayEnv = {
   GOGGLER_AUTH_SECRET: "test-auth-secret-placeholder-32-chars"
 };
 
-test("eBay start route requires local auth", async () => {
+test("eBay start route creates the internal local session when missing", async () => {
   setEbayEnv();
   const response = await startEbayAuth(new NextRequest("http://localhost:3000/api/auth/ebay/start"));
-  const body = await response.json();
 
-  assert.equal(response.status, 401);
-  assert.equal(body.error, "local_auth_required");
+  assert.equal(response.status, 307);
+  assert.ok(response.headers.get("set-cookie"));
+  assert.ok(response.headers.get("location")?.startsWith("https://auth.sandbox.ebay.com/oauth2/authorize"));
 });
 
 test("eBay config status route reports missing fields without auth", async () => {
@@ -122,7 +122,7 @@ test("eBay start prewarm validates auth and config without redirecting", async (
   assert.equal(sessionAfter.session.id, sessionBefore.session.id);
 });
 
-test("eBay start prewarm requires local auth", async () => {
+test("eBay start prewarm creates the internal local session when missing", async () => {
   setEbayEnv();
   const response = await prewarmEbayAuthStart(
     new NextRequest("http://localhost:3000/api/auth/ebay/start", {
@@ -130,7 +130,8 @@ test("eBay start prewarm requires local auth", async () => {
     })
   );
 
-  assert.equal(response.status, 401);
+  assert.equal(response.status, 204);
+  assert.ok(response.headers.get("set-cookie"));
 });
 
 test("eBay start prewarm reports config errors generically", async () => {
@@ -146,12 +147,22 @@ test("eBay start prewarm reports config errors generically", async () => {
   assert.equal(response.status, 503);
 });
 
-test("eBay session route requires local auth", async () => {
-  const response = await getEbaySession(new NextRequest("http://localhost:3000/api/auth/ebay/session"));
+test("eBay session route creates the internal local session when missing", async () => {
+  const response = await getEbaySession(
+    new NextRequest("http://localhost:3000/api/auth/ebay/session", {
+      headers: {
+        "x-forwarded-host": "example.ngrok-free.dev",
+        "x-forwarded-proto": "https"
+      }
+    })
+  );
   const body = await response.json();
 
-  assert.equal(response.status, 401);
-  assert.equal(body.error, "local_auth_required");
+  assert.equal(response.status, 200);
+  assert.equal(body.connection.connected, false);
+  assert.equal(body.connection.status, "reauth_required");
+  assert.ok(response.headers.get("set-cookie"));
+  assert.match(response.headers.get("set-cookie") ?? "", /;\s*Secure/);
 });
 
 test("eBay session route returns status without token values", async () => {
@@ -226,6 +237,57 @@ test("eBay callback stores token values only in server-side session state", asyn
   assert.equal(body.connection.status, "connected_this_session");
   assert.equal(JSON.stringify(body).includes("access-token"), false);
   assert.equal(JSON.stringify(body).includes("refresh-token"), false);
+});
+
+test("eBay callback stores best-effort public eBay identity without exposing token values", async () => {
+  setEbayEnv({
+    EBAY_SANDBOX_OAUTH_SCOPES: "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly"
+  });
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  const { payload, state } = getEbayOAuthStateStore().createWithPayload({
+    userId: session.user.id,
+    sessionId: session.session.id
+  });
+  sessionStore.addPendingEbayOAuthState(session.session.id, payload.id, new Date(payload.expiresAt));
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    if (String(url).includes("/commerce/identity/v1/user/")) {
+      return jsonResponse({
+        userId: "immutable-ebay-user-id",
+        username: "ebay_saja"
+      });
+    }
+
+    return jsonResponse({
+      access_token: "identity-access-token",
+      expires_in: 7200,
+      token_type: "User Access Token"
+    });
+  };
+
+  try {
+    const callback = await handleEbayCallback(
+      new NextRequest(`http://localhost:3000/api/auth/ebay/callback?code=auth-code&state=${encodeURIComponent(state)}`, {
+        headers: { cookie }
+      })
+    );
+    assert.equal(callback.status, 307);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const statusResponse = await getEbaySession(
+    new NextRequest("http://localhost:3000/api/auth/ebay/session", {
+      headers: { cookie }
+    })
+  );
+  const body = await statusResponse.json();
+
+  assert.equal(body.connection.identity.userId, "immutable-ebay-user-id");
+  assert.equal(body.connection.identity.displayName, "ebay_saja");
+  assert.equal(JSON.stringify(body).includes("identity-access-token"), false);
 });
 
 test("eBay callback can complete from signed pending state when the browser omits the session cookie", async () => {
@@ -319,13 +381,14 @@ test("eBay disconnect route requires local auth", async () => {
   assert.equal(body.error, "local_auth_required");
 });
 
-test("eBay buying history route requires local auth", async () => {
+test("eBay buying history route creates internal local auth and requires eBay auth", async () => {
   process.env.GOGGLER_EBAY_HISTORY_SOURCE = "fixture";
   const response = await getBuyingHistory(new NextRequest("http://localhost:3000/api/ebay/buying-history"));
   const body = await response.json();
 
-  assert.equal(response.status, 401);
-  assert.equal(body.error, "local_auth_required");
+  assert.equal(response.status, 409);
+  assert.equal(body.error, "ebay_reauth_required");
+  assert.ok(response.headers.get("set-cookie"));
 });
 
 test("eBay buying history route requires current-session eBay auth", async () => {
@@ -531,7 +594,7 @@ function liveResponseXml(listName) {
       <Item>
         <ItemID>${listName}-001</ItemID>
         <Title>${title}</Title>
-        ${listName === "WatchList" ? "<ListingDetails><EndTime>2026-05-14T20:30:00.000Z</EndTime></ListingDetails>" : ""}
+        ${listName === "WatchList" ? "<ListingDetails><EndTime>2030-05-14T20:30:00.000Z</EndTime></ListingDetails>" : ""}
         <SellingStatus><CurrentPrice currencyID="GBP">123.00</CurrentPrice></SellingStatus>
       </Item>
     </ItemArray>

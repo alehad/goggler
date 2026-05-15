@@ -39,13 +39,6 @@ type Candidate = {
   condition: string;
 };
 
-type LocalSession = {
-  user: {
-    id: string;
-    displayName: string;
-  } | null;
-};
-
 type EbaySession = {
   connection: {
     connected: boolean;
@@ -53,6 +46,10 @@ type EbaySession = {
     authorizedAt?: string;
     expiresAt?: string;
     scopes: string[];
+    identity?: {
+      userId: string;
+      displayName?: string;
+    };
   };
 };
 
@@ -140,7 +137,10 @@ const tabs = [
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
-  const [localSession, setLocalSession] = useState<LocalSession | null>(null);
+  const [ebaySession, setEbaySession] = useState<EbaySession | null>(null);
+  const [ebayConfigStatus, setEbayConfigStatus] = useState<EbayConfigStatus | null>(null);
+  const [ebayStartReady, setEbayStartReady] = useState(false);
+  const [accountMessage, setAccountMessage] = useState("");
   const [historyState, setHistoryState] = useState<HistoryState>({ status: "idle" });
   const stats = useMemo(() => {
     const prices =
@@ -160,20 +160,18 @@ export default function Home() {
     };
   }, [historyState]);
 
-  async function refreshLocalSession() {
-    const sessionResponse = await fetch("/api/auth/session");
-    setLocalSession(sessionResponse.ok ? ((await sessionResponse.json()) as LocalSession) : { user: null });
+  async function refreshEbayConfigStatus() {
+    const response = await fetch("/api/auth/ebay/config-status");
+    setEbayConfigStatus(response.ok ? ((await response.json()) as EbayConfigStatus) : null);
+  }
+
+  async function refreshEbaySessionState() {
+    await refreshEbayConfigStatus();
+    const ebayResponse = await fetch("/api/auth/ebay/session");
+    setEbaySession(ebayResponse.ok ? ((await ebayResponse.json()) as EbaySession) : null);
   }
 
   async function refreshBuyingHistory() {
-    if (!localSession?.user) {
-      setHistoryState({
-        status: "sign_in_required",
-        message: "Sign in locally and connect eBay to view buying history"
-      });
-      return;
-    }
-
     setHistoryState({ status: "loading" });
     const response = await fetch("/api/ebay/buying-history", { cache: "no-store" });
     const body = await response.json().catch(() => ({}));
@@ -186,8 +184,9 @@ export default function Home() {
     if (response.status === 409) {
       setHistoryState({
         status: "reauth_required",
-        message: "Connect eBay in My goggler to view buying history"
+        message: "Connect eBay from the account button to view buying history"
       });
+      await refreshEbaySessionState();
       return;
     }
 
@@ -206,14 +205,61 @@ export default function Home() {
   }
 
   useEffect(() => {
-    void refreshLocalSession();
+    void refreshEbaySessionState();
   }, []);
 
   useEffect(() => {
     if (activeTab === "dashboard" || activeTab === "tracking" || activeTab === "won") {
       void refreshBuyingHistory();
     }
-  }, [activeTab, localSession?.user?.id]);
+  }, [activeTab]);
+
+  useEffect(() => {
+    const ebayConfig = ebayConfigStatus?.config;
+    const ebayConnection = ebaySession?.connection;
+    if (!ebayConfig?.ready || ebayConnection?.connected) {
+      setEbayStartReady(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setEbayStartReady(false);
+
+    fetch("/api/auth/ebay/start", {
+      cache: "no-store",
+      method: "HEAD",
+      signal: controller.signal
+    })
+      .then((response) => {
+        if (!controller.signal.aborted) {
+          setEbayStartReady(response.ok);
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setEbayStartReady(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [ebayConfigStatus?.config?.ready, ebaySession?.connection?.connected]);
+
+  async function disconnectEbay() {
+    setAccountMessage("");
+    const response = await fetch("/api/auth/ebay/disconnect", { method: "POST" });
+    if (!response.ok) {
+      setAccountMessage("Could not disconnect eBay");
+      return;
+    }
+
+    setHistoryState({ status: "idle" });
+    await refreshEbaySessionState();
+  }
+
+  function connectEbay() {
+    setAccountMessage("");
+    window.location.href = "/api/auth/ebay/start";
+  }
 
   return (
     <main className="app-shell">
@@ -230,18 +276,16 @@ export default function Home() {
             <Search size={18} />
             <input aria-label="Search tracked items" placeholder="Search tracked records, artists, catalogue numbers" />
           </div>
-          <div className="setup-chip" title="Connect from My goggler">
-            <ShieldCheck size={16} />
-            <span>eBay setup</span>
-          </div>
           <button className="icon-button" title="Filters" type="button">
             <SlidersHorizontal size={18} />
           </button>
-          <button className="user-switch" type="button">
-            <CircleUserRound size={18} />
-            <span>{localSession?.user?.displayName ?? "Not signed in"}</span>
-            <ChevronDown size={16} />
-          </button>
+          <EbayAccountControl
+            config={ebayConfigStatus?.config}
+            connection={ebaySession?.connection}
+            disconnectEbay={disconnectEbay}
+            ebayStartReady={ebayStartReady}
+            startEbayConnect={connectEbay}
+          />
         </header>
 
         {activeTab === "dashboard" && <Dashboard historyState={historyState} refreshBuyingHistory={refreshBuyingHistory} />}
@@ -249,9 +293,9 @@ export default function Home() {
         {activeTab === "won" && <Won historyState={historyState} stats={stats} refreshBuyingHistory={refreshBuyingHistory} />}
         {activeTab === "account" && (
           <Account
-            localSession={localSession}
-            refreshLocalSession={refreshLocalSession}
-            clearHistory={() => setHistoryState({ status: "idle" })}
+            ebayConfig={ebayConfigStatus?.config}
+            ebayConnection={ebaySession?.connection}
+            message={accountMessage}
           />
         )}
       </section>
@@ -581,108 +625,83 @@ function Won({
   );
 }
 
-function Account({
-  localSession,
-  refreshLocalSession,
-  clearHistory
+function EbayAccountControl({
+  config,
+  connection,
+  disconnectEbay,
+  ebayStartReady,
+  startEbayConnect
 }: {
-  localSession: LocalSession | null;
-  refreshLocalSession: () => Promise<void>;
-  clearHistory: () => void;
+  config: EbayConfigStatus["config"] | undefined;
+  connection: EbaySession["connection"] | undefined;
+  disconnectEbay: () => Promise<void>;
+  ebayStartReady: boolean;
+  startEbayConnect: () => void;
 }) {
-  const [ebaySession, setEbaySession] = useState<EbaySession | null>(null);
-  const [ebayConfigStatus, setEbayConfigStatus] = useState<EbayConfigStatus | null>(null);
-  const [ebayStartReady, setEbayStartReady] = useState(false);
-  const [message, setMessage] = useState<string>("");
+  const [open, setOpen] = useState(false);
+  const connected = connection?.connected === true;
+  const canConnect = Boolean(config?.ready && ebayStartReady);
 
-  async function refreshEbayConfigStatus() {
-    const response = await fetch("/api/auth/ebay/config-status");
-    setEbayConfigStatus(response.ok ? ((await response.json()) as EbayConfigStatus) : null);
+  if (!connected) {
+    return (
+      <button
+        className="user-switch"
+        disabled={!canConnect}
+        onClick={startEbayConnect}
+        title={formatEbayStatus(connection, config)}
+        type="button"
+      >
+        <Link2 size={18} />
+        <span>{formatEbayConnectLabel(connection, config, ebayStartReady)}</span>
+      </button>
+    );
   }
 
-  async function refreshEbaySessionState() {
-    await refreshEbayConfigStatus();
+  return (
+    <div className="account-menu">
+      <button
+        aria-expanded={open}
+        className="user-switch"
+        onClick={() => setOpen((current) => !current)}
+        title={formatEbayStatus(connection, config)}
+        type="button"
+      >
+        <ShieldCheck size={18} />
+        <span>{formatEbayAccountLabel(connection)}</span>
+        <ChevronDown size={16} />
+      </button>
+      {open && (
+        <div className="account-dropdown">
+          <div>
+            <strong>{formatEbayAccountLabel(connection)}</strong>
+            <p>{formatEbayStatus(connection, config)}</p>
+          </div>
+          <button
+            className="dropdown-action"
+            onClick={() => {
+              setOpen(false);
+              void disconnectEbay();
+            }}
+            type="button"
+          >
+            <X size={16} />
+            <span>Disconnect eBay</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
-    if (localSession?.user) {
-      const ebayResponse = await fetch("/api/auth/ebay/session");
-      setEbaySession(ebayResponse.ok ? ((await ebayResponse.json()) as EbaySession) : null);
-      return;
-    }
-
-    setEbaySession(null);
-  }
-
-  useEffect(() => {
-    void refreshEbaySessionState();
-  }, [localSession?.user?.id]);
-
-  useEffect(() => {
-    const user = localSession?.user;
-    const ebayConfig = ebayConfigStatus?.config;
-    if (!user || !ebayConfig?.ready) {
-      setEbayStartReady(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    setEbayStartReady(false);
-
-    fetch("/api/auth/ebay/start", {
-      cache: "no-store",
-      method: "HEAD",
-      signal: controller.signal
-    })
-      .then((response) => {
-        if (!controller.signal.aborted) {
-          setEbayStartReady(response.ok);
-        }
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) {
-          setEbayStartReady(false);
-        }
-      });
-
-    return () => controller.abort();
-  }, [localSession?.user?.id, ebayConfigStatus?.config?.ready]);
-
-  async function signIn() {
-    setMessage("");
-    const response = await fetch("/api/auth/sign-in", { method: "POST" });
-    if (!response.ok) {
-      setMessage("Could not sign in locally");
-      return;
-    }
-
-    await refreshLocalSession();
-  }
-
-  async function signOut() {
-    setMessage("");
-    await fetch("/api/auth/sign-out", { method: "POST" });
-    clearHistory();
-    await refreshLocalSession();
-  }
-
-  async function disconnectEbay() {
-    setMessage("");
-    const response = await fetch("/api/auth/ebay/disconnect", { method: "POST" });
-    if (!response.ok) {
-      setMessage("Could not disconnect eBay");
-      return;
-    }
-
-    await refreshEbaySessionState();
-    clearHistory();
-  }
-
-  const user = localSession?.user;
-  const ebayConnection = ebaySession?.connection;
-  const ebayConfig = ebayConfigStatus?.config;
-  const ebayConnected = ebayConnection?.connected === true;
-  const canConnectEbay = Boolean(user && ebayConfig?.ready);
-  const canStartEbayConnect = canConnectEbay && ebayStartReady;
-
+function Account({
+  ebayConfig,
+  ebayConnection,
+  message
+}: {
+  ebayConfig: EbayConfigStatus["config"] | undefined;
+  ebayConnection: EbaySession["connection"] | undefined;
+  message: string;
+}) {
   return (
     <section className="content account-layout">
       <div className="section-heading">
@@ -695,34 +714,10 @@ function Account({
       <div className="settings-panel">
         <div className="setting-row">
           <div>
-            <h2>Signed in user</h2>
-            <p>{user ? `${user.displayName} (${user.id})` : "Not signed in"}</p>
-          </div>
-          <button className="secondary-button" onClick={user ? signOut : signIn} type="button">
-            <CircleUserRound size={17} />
-            <span>{user ? "Sign out" : "Sign in"}</span>
-          </button>
-        </div>
-        <div className="setting-row">
-          <div>
-            <h2>eBay UK</h2>
+            <h2>eBay session</h2>
             <p>{formatEbayStatus(ebayConnection, ebayConfig)}</p>
           </div>
-          <button
-            className="secondary-button"
-            disabled={!canStartEbayConnect && !ebayConnected}
-            onClick={
-              ebayConnected
-                ? disconnectEbay
-                : () => {
-                    window.location.href = "/api/auth/ebay/start";
-                  }
-            }
-            type="button"
-          >
-            {ebayConnected ? <X size={17} /> : <Link2 size={17} />}
-            <span>{formatEbayActionLabel(ebayConnected, canConnectEbay, ebayStartReady)}</span>
-          </button>
+          <span className={ebayConnection?.connected ? "status connected" : "status"}>{formatEbayAccountLabel(ebayConnection)}</span>
         </div>
         <div className="setting-row">
           <div>
@@ -740,16 +735,36 @@ function Account({
   );
 }
 
-function formatEbayActionLabel(connected: boolean, canConnect: boolean, startReady: boolean): string {
-  if (connected) {
-    return "Disconnect";
+function formatEbayConnectLabel(
+  connection: EbaySession["connection"] | undefined,
+  config: EbayConfigStatus["config"] | undefined,
+  startReady: boolean
+): string {
+  if (!config) {
+    return "Checking eBay";
   }
 
-  if (canConnect && !startReady) {
+  if (!config.ready) {
+    return "eBay config";
+  }
+
+  if (connection?.status === "reauth_required") {
+    return startReady ? "Reconnect eBay" : "Preparing...";
+  }
+
+  if (!startReady) {
     return "Preparing...";
   }
 
-  return "Connect";
+  return "Connect eBay";
+}
+
+function formatEbayAccountLabel(connection: EbaySession["connection"] | undefined): string {
+  if (!connection?.connected) {
+    return "Connect eBay";
+  }
+
+  return connection.identity?.displayName ?? "Signed into eBay";
 }
 
 function formatEbayStatus(
@@ -757,7 +772,7 @@ function formatEbayStatus(
   config: EbayConfigStatus["config"] | undefined
 ): string {
   if (!connection) {
-    return "Sign in locally before connecting eBay";
+    return "Checking eBay session";
   }
 
   if (!config) {
@@ -769,16 +784,35 @@ function formatEbayStatus(
   }
 
   if (connection.connected) {
-    return connection.expiresAt
-      ? `Connected for this session until ${new Date(connection.expiresAt).toLocaleTimeString()}`
-      : "Connected for this session";
+    const remaining = formatConnectionRemaining(connection.expiresAt);
+    return remaining ? `Connected for ${remaining}` : "Connected for this session";
   }
 
   if (connection.status === "reauth_required") {
-    return "Reconnect eBay for this goggler session";
+    return "Reconnect eBay to refresh this session";
   }
 
   return "Not connected";
+}
+
+function formatConnectionRemaining(expiresAt: string | undefined): string | undefined {
+  if (!expiresAt) {
+    return undefined;
+  }
+
+  const remainingMs = new Date(expiresAt).getTime() - Date.now();
+  if (remainingMs <= 0) {
+    return "less than a minute";
+  }
+
+  const remainingMinutes = Math.ceil(remainingMs / (1000 * 60));
+  if (remainingMinutes < 60) {
+    return `${remainingMinutes} minute${remainingMinutes === 1 ? "" : "s"}`;
+  }
+
+  const remainingHours = Math.floor(remainingMinutes / 60);
+  const extraMinutes = remainingMinutes % 60;
+  return extraMinutes > 0 ? `${remainingHours}h ${extraMinutes}m` : `${remainingHours} hour${remainingHours === 1 ? "" : "s"}`;
 }
 
 function formatEbayConfigGap(config: EbayConfigStatus["config"]): string {
