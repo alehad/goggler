@@ -14,6 +14,7 @@ test("builds Home feed with eBay watchlist items first in watchlist order", () =
   assert.equal(feed.counts.watchlist, 6);
   assert.equal(feed.counts.watchlistRelistings, 2);
   assert.equal(feed.counts.needsAction, 2);
+  assert.equal(feed.counts.won, 7);
   assert.equal(feed.rows.slice(0, 6).every((row) => row.section === "watchlist"), true);
   assert.deepEqual(
     feed.rows.slice(0, 6).map((row) => row.sourceItemId),
@@ -39,12 +40,28 @@ test("filters relisted items that are not already on the eBay watchlist as needs
   assert.equal(needsActionRows.every((row) => row.tags.includes("Not watched")), true);
 });
 
-test("filters resolved and never-won Home rows", () => {
+test("filters won and never-won Home rows", () => {
   const feed = buildFixtureFeed();
 
-  assert.equal(filterHomeFeedRows(feed.rows, "resolved").length, 4);
+  assert.equal(filterHomeFeedRows(feed.rows, "won").length, 7);
   assert.equal(filterHomeFeedRows(feed.rows, "neverWon").length, 6);
   assert.equal(filterHomeFeedRows(feed.rows, "relistings").length, 4);
+  assert.equal(feed.rows.filter((row) => row.section === "resolved").length, 4);
+});
+
+test("preserves thumbnails for all Home feed item classes", () => {
+  const feed = buildFixtureFeed();
+  const watchlistRow = feed.rows.find((row) => row.sourceItemId === "sandbox-watch-001");
+  const needsActionRow = feed.rows.find((row) => row.sourceItemId === "sandbox-candidate-001");
+  const wonRow = feed.rows.find((row) => row.sourceItemId === "sandbox-won-001");
+  const unresolvedRow = feed.rows.find((row) => row.section === "unresolved");
+  const resolvedRow = feed.rows.find((row) => row.section === "resolved");
+
+  assert.match(watchlistRow?.imageUrl ?? "", /watchlist-1\.jpg$/);
+  assert.match(needsActionRow?.imageUrl ?? "", /sandbox-candidate-001\.jpg$/);
+  assert.match(wonRow?.imageUrl ?? "", /sandbox-won-001\.jpg$/);
+  assert.match(unresolvedRow?.imageUrl ?? "", /sandbox-lost-/);
+  assert.match(resolvedRow?.imageUrl ?? "", /sandbox-lost-/);
 });
 
 function buildFixtureFeed() {

@@ -23,7 +23,7 @@ import { useEffect, useMemo, useState } from "react";
 
 type Tab = "dashboard" | "tracking" | "won" | "account";
 type LostFilter = "all" | "neverWon" | "eventuallyWon";
-type HomeFeedFilter = "all" | "needsAction" | "onWatchlist" | "relistings" | "neverWon" | "resolved";
+type HomeFeedFilter = "all" | "onWatchlist" | "relistings" | "won" | "neverWon";
 
 type Candidate = {
   id: string;
@@ -100,6 +100,7 @@ type BuyingHistory = {
       watchlistRelistings: number;
       needsAction: number;
       relistings: number;
+      won: number;
       neverWon: number;
       resolved: number;
     };
@@ -113,7 +114,7 @@ type HistoryState =
 
 type HomeFeedRow = {
   id: string;
-  section: "watchlist" | "needs_action" | "unresolved" | "resolved";
+  section: "watchlist" | "needs_action" | "won" | "unresolved" | "resolved";
   title: string;
   currentPrice?: { value: number; currency: string };
   originalLostPrice?: { value: number; currency: string };
@@ -172,6 +173,7 @@ export default function Home() {
   }
 
   async function refreshBuyingHistory() {
+    const previousHistory = historyState.status === "ready" ? historyState.history : undefined;
     setHistoryState({ status: "loading" });
     const response = await fetch("/api/ebay/buying-history", { cache: "no-store" });
     const body = await response.json().catch(() => ({}));
@@ -191,10 +193,20 @@ export default function Home() {
     }
 
     if (response.status === 501) {
+      if (previousHistory) {
+        setHistoryState({ status: "ready", history: previousHistory });
+        return;
+      }
+
       setHistoryState({
         status: "live_not_implemented",
         message: "Live history import is not implemented yet"
       });
+      return;
+    }
+
+    if (previousHistory && response.status >= 500) {
+      setHistoryState({ status: "ready", history: previousHistory });
       return;
     }
 
@@ -328,7 +340,7 @@ function Dashboard({
   historyState: HistoryState;
   refreshBuyingHistory: () => Promise<void>;
 }) {
-  const [filter, setFilter] = useState<HomeFeedFilter>("all");
+  const [filter, setFilter] = useState<HomeFeedFilter>("onWatchlist");
   const [locallyWatchedIds, setLocallyWatchedIds] = useState<string[]>([]);
   const rows = useMemo(() => {
     if (historyState.status !== "ready") {
@@ -372,19 +384,13 @@ function Dashboard({
               value={String(historyState.history.counts.relistings)}
               detail={`${historyState.history.counts.watchlistRelistings} already watched`}
             />
-            <Metric label="Needs action" value={String(historyState.history.counts.needsAction)} detail="Not watched yet" />
+            <Metric label="Won" value={String(historyState.history.counts.won)} detail="Purchase history" />
+            <Metric label="Never won" value={String(historyState.history.counts.neverWon)} detail="Still unresolved" />
           </div>
 
           <div className="segmented-control home-filters" aria-label="Home feed filter">
             <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")} type="button">
               All
-            </button>
-            <button
-              className={filter === "needsAction" ? "active" : ""}
-              onClick={() => setFilter("needsAction")}
-              type="button"
-            >
-              Needs action
             </button>
             <button
               className={filter === "onWatchlist" ? "active" : ""}
@@ -400,19 +406,15 @@ function Dashboard({
             >
               Relistings
             </button>
+            <button className={filter === "won" ? "active" : ""} onClick={() => setFilter("won")} type="button">
+              Won
+            </button>
             <button
               className={filter === "neverWon" ? "active" : ""}
               onClick={() => setFilter("neverWon")}
               type="button"
             >
               Never won
-            </button>
-            <button
-              className={filter === "resolved" ? "active" : ""}
-              onClick={() => setFilter("resolved")}
-              type="button"
-            >
-              Resolved
             </button>
           </div>
 
@@ -870,16 +872,14 @@ function getHistoryMessage(state: HistoryState): string {
 
 function filterHomeRows(rows: HomeFeedRow[], filter: HomeFeedFilter): HomeFeedRow[] {
   switch (filter) {
-    case "needsAction":
-      return rows.filter((row) => row.section === "needs_action");
     case "onWatchlist":
       return rows.filter((row) => row.section === "watchlist");
     case "relistings":
       return rows.filter((row) => row.tags.includes("Relisting candidate"));
+    case "won":
+      return rows.filter((row) => row.section === "won");
     case "neverWon":
       return rows.filter((row) => row.tags.includes("Never won"));
-    case "resolved":
-      return rows.filter((row) => row.section === "resolved");
     case "all":
       return rows;
   }
@@ -891,6 +891,8 @@ function formatHomeSection(section: HomeFeedRow["section"]): string {
       return "eBay watchlist";
     case "needs_action":
       return "Relisting candidate";
+    case "won":
+      return "Won";
     case "unresolved":
       return "Unresolved lost bid";
     case "resolved":

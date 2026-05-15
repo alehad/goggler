@@ -119,7 +119,8 @@ function historyItem(
     currentPrice: { value, currency: "GBP" },
     endTime: `${date}T20:15:00.000Z`,
     sellerUserId: "sandbox-seller",
-    conditionDisplayName: "Used"
+    conditionDisplayName: "Used",
+    imageUrl: `https://i.ebayimg.example/${itemId}.jpg`
   };
 }
 
@@ -164,6 +165,7 @@ function relistingCandidate(
     currentPrice: { value: 110 + matchConfidence, currency: "GBP" },
     endsAt: `2026-05-${String(matchConfidence - 70).padStart(2, "0")}T20:45:00.000Z`,
     sellerUserId: "candidate-seller",
-    conditionDisplayName: "Used"
+    conditionDisplayName: "Used",
+    imageUrl: `https://i.ebayimg.example/${itemId}.jpg`
   };
 }

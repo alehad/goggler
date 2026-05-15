@@ -274,7 +274,7 @@ h1 {
 .summary-grid {
   display: grid;
   gap: 14px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   margin-bottom: 18px;
 }
 
@@ -322,7 +322,7 @@ h1 {
 }
 
 .home-feed-card {
-  grid-template-columns: 52px minmax(0, 1fr) 132px auto;
+  grid-template-columns: 104px minmax(0, 1fr) 132px auto;
 }
 
 .watch-thumbnail {
@@ -335,10 +335,10 @@ h1 {
   display: grid;
   font-size: 18px;
   font-weight: 900;
-  height: 44px;
+  height: 88px;
   justify-content: center;
   overflow: hidden;
-  width: 44px;
+  width: 88px;
 }
 
 .watch-thumbnail img {
@@ -389,6 +389,16 @@ h1 {
 .setting-row h2 {
   font-size: 16px;
   line-height: 1.35;
+}
+
+.home-feed-card h2 {
+  font-size: 14px;
+}
+
+.home-feed-card .artist,
+.home-feed-card .meta-row span,
+.home-feed-card .listing-side > span {
+  font-size: 12px;
 }
 
 .meta-row,
@@ -496,7 +506,7 @@ h1 {
 }
 
 .segmented-control.home-filters {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .segmented-control button {
