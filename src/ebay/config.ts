@@ -11,6 +11,7 @@ export type EbayConfig = {
   authorizeUrl: string;
   tokenUrl: string;
   tradingApiUrl: string;
+  identityApiUrl: string;
 };
 
 export type EbayConfigStatus = {
@@ -69,7 +70,11 @@ export function loadEbayConfig(env: Env = process.env): EbayConfig {
         ? "https://api.sandbox.ebay.com/identity/v1/oauth2/token"
         : "https://api.ebay.com/identity/v1/oauth2/token",
     tradingApiUrl:
-      environment === "sandbox" ? "https://api.sandbox.ebay.com/ws/api.dll" : "https://api.ebay.com/ws/api.dll"
+      environment === "sandbox" ? "https://api.sandbox.ebay.com/ws/api.dll" : "https://api.ebay.com/ws/api.dll",
+    identityApiUrl:
+      environment === "sandbox"
+        ? "https://apiz.sandbox.ebay.com/commerce/identity/v1/user/"
+        : "https://apiz.ebay.com/commerce/identity/v1/user/"
   };
 }
 

@@ -1,21 +1,25 @@
 import { NextRequest, NextResponse } from "next/server.js";
-import { getCurrentUser } from "../../../../../src/auth/current-user.ts";
+import { getOrCreateCurrentUser } from "../../../../../src/auth/current-user.ts";
 import { sessionStore } from "../../../../../src/auth/local-auth.ts";
 
 export async function GET(request: NextRequest) {
-  const currentUser = getCurrentUser(request);
-  if (!currentUser) {
-    return NextResponse.json({ error: "local_auth_required" }, { status: 401 });
-  }
+  const currentUser = getOrCreateCurrentUser(request);
 
-  const status = sessionStore.getEbayConnectionStatus(currentUser.session.id);
-  return NextResponse.json({
+  const status = sessionStore.getEbayConnectionStatus(currentUser.context.session.id);
+  const response = NextResponse.json({
     connection: {
       connected: status.connected,
       status: status.status,
       authorizedAt: status.authorizedAt?.toISOString(),
       expiresAt: status.expiresAt?.toISOString(),
-      scopes: status.scopes
+      scopes: status.scopes,
+      identity: status.identity
     }
   });
+
+  if (currentUser.setCookie) {
+    response.headers.set("Set-Cookie", currentUser.setCookie);
+  }
+
+  return response;
 }

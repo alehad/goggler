@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server.js";
 import { validateSameOriginRequest } from "../../../../src/auth/csrf.ts";
-import { createSessionCookie } from "../../../../src/auth/session-cookie.ts";
-import { getDefaultLocalUser, sessionStore } from "../../../../src/auth/local-auth.ts";
+import { getOrCreateCurrentUser } from "../../../../src/auth/current-user.ts";
 
 export async function POST(request: NextRequest) {
   const csrf = validateSameOriginRequest(request);
@@ -9,20 +8,18 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_origin" }, { status: 403 });
   }
 
-  const user = getDefaultLocalUser();
-  const { token, session } = sessionStore.createSession(user.id);
+  const currentUser = getOrCreateCurrentUser(request);
 
   const response = NextResponse.json({
     user: {
-      id: user.id,
-      displayName: user.displayName
+      id: currentUser.context.user.id,
+      displayName: currentUser.context.user.displayName
     }
   });
 
-  response.headers.set("Set-Cookie", createSessionCookie(token, session.expiresAt, { secure: isSecureRequest(request) }));
-  return response;
-}
+  if (currentUser.setCookie) {
+    response.headers.set("Set-Cookie", currentUser.setCookie);
+  }
 
-function isSecureRequest(request: NextRequest): boolean {
-  return request.nextUrl.protocol === "https:";
+  return response;
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server.js";
 import { getCurrentUser } from "../../../../../src/auth/current-user.ts";
 import { sessionStore } from "../../../../../src/auth/local-auth.ts";
 import { loadEbayConfig } from "../../../../../src/ebay/config.ts";
+import { fetchEbayAccountIdentity } from "../../../../../src/ebay/identity-client.ts";
 import { exchangeEbayAuthorizationCode } from "../../../../../src/ebay/oauth-client.ts";
 import { getEbayOAuthStateStore } from "../../../../../src/ebay/oauth-state.ts";
 import { getPublicOrigin } from "../../../../../src/http/origin.ts";
@@ -42,7 +43,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const authorization = await exchangeEbayAuthorizationCode(loadEbayConfig(), code);
+    const config = loadEbayConfig();
+    const authorization = await exchangeEbayAuthorizationCode(config, code);
+    authorization.identity = await fetchEbayAccountIdentity(config, authorization.accessToken).catch(() => undefined);
     sessionStore.setEbayAuthorization(sessionContext.session.id, authorization);
   } catch {
     return NextResponse.json({ error: "ebay_token_exchange_failed" }, { status: 502 });

@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server.js";
-import { getCurrentUser } from "../../../../src/auth/current-user.ts";
+import { getOrCreateCurrentUser } from "../../../../src/auth/current-user.ts";
 
 export async function GET(request: NextRequest) {
-  const result = getCurrentUser(request);
+  const currentUser = getOrCreateCurrentUser(request);
 
-  if (!result) {
-    return NextResponse.json({ user: null }, { status: 401 });
-  }
-
-  return NextResponse.json({
+  const response = NextResponse.json({
     user: {
-      id: result.user.id,
-      displayName: result.user.displayName
+      id: currentUser.context.user.id,
+      displayName: currentUser.context.user.displayName
     }
   });
+
+  if (currentUser.setCookie) {
+    response.headers.set("Set-Cookie", currentUser.setCookie);
+  }
+
+  return response;
 }

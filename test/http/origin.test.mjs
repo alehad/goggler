@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { NextRequest } from "next/server.js";
-import { getAllowedRequestOrigins, getPublicOrigin } from "../../src/http/origin.ts";
+import { getAllowedRequestOrigins, getPublicOrigin, isSecureRequest } from "../../src/http/origin.ts";
 
 test("uses the request origin when no forwarded origin is present", () => {
   const request = new NextRequest("http://localhost:3000/api/auth/ebay/callback");
 
   assert.equal(getPublicOrigin(request), "http://localhost:3000");
   assert.deepEqual([...getAllowedRequestOrigins(request)], ["http://localhost:3000"]);
+  assert.equal(isSecureRequest(request), false);
 });
 
 test("uses an allowed forwarded proto and host as the public origin", () => {
@@ -23,6 +24,7 @@ test("uses an allowed forwarded proto and host as the public origin", () => {
     "http://localhost:3000",
     "https://example.ngrok-free.dev"
   ]);
+  assert.equal(isSecureRequest(request), true);
 });
 
 test("ignores untrusted forwarded hosts", () => {

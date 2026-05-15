@@ -22,6 +22,12 @@ export type EbaySessionAuthorization = {
   refreshTokenExpiresAt?: Date;
   scopes: string[];
   authorizedAt: Date;
+  identity?: EbayAccountIdentity;
+};
+
+export type EbayAccountIdentity = {
+  userId: string;
+  displayName?: string;
 };
 
 export type EbayConnectionStatus = {
@@ -30,6 +36,7 @@ export type EbayConnectionStatus = {
   authorizedAt?: Date;
   expiresAt?: Date;
   scopes: string[];
+  identity?: EbayAccountIdentity;
 };
 
 export type SessionWithToken = {
@@ -213,7 +220,8 @@ export class InMemorySessionStore {
       status: "connected_this_session",
       authorizedAt: authorization.authorizedAt,
       expiresAt: authorization.expiresAt,
-      scopes: authorization.scopes
+      scopes: authorization.scopes,
+      identity: authorization.identity
     };
   }
 
