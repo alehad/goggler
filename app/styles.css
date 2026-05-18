@@ -310,6 +310,10 @@ h1 {
   gap: 12px;
 }
 
+.purchase-list {
+  margin-top: 14px;
+}
+
 .candidate-card {
   align-items: stretch;
   background: var(--panel);
@@ -396,6 +400,19 @@ h1 {
   font-size: 14px;
 }
 
+.purchase-card {
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.purchase-card.selected {
+  border-color: #7aa2ff;
+  box-shadow: 0 14px 34px rgba(37, 99, 235, 0.16);
+  transform: translateY(-1px);
+}
+
 .home-feed-card .artist,
 .home-feed-card .meta-row span,
 .home-feed-card .listing-side > span {
@@ -440,6 +457,92 @@ h1 {
   align-items: center;
   display: flex;
   gap: 8px;
+}
+
+.purchase-chart-panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  margin-bottom: 14px;
+  overflow: hidden;
+  padding: 16px;
+}
+
+.chart-heading {
+  align-items: flex-start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.chart-heading h2 {
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.chart-heading p,
+.chart-heading span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.purchase-chart {
+  display: block;
+  height: auto;
+  min-height: 220px;
+  width: 100%;
+}
+
+.chart-axis {
+  stroke: #cbd5e1;
+  stroke-width: 1.5;
+}
+
+.chart-grid {
+  stroke: #d7dee8;
+  stroke-dasharray: 3 6;
+  stroke-width: 1;
+}
+
+.chart-label {
+  fill: var(--muted);
+  font-size: 10px;
+}
+
+.chart-label-end {
+  text-anchor: end;
+}
+
+.purchase-point {
+  cursor: pointer;
+  outline: none;
+}
+
+.purchase-point circle {
+  fill: var(--accent);
+  stroke: var(--panel);
+  stroke-width: 3;
+}
+
+.purchase-point:focus-visible circle,
+.purchase-point.selected circle {
+  fill: #e43137;
+  stroke: #f9c7ca;
+  stroke-width: 4;
+}
+
+.chart-empty {
+  align-items: center;
+  background: var(--panel-soft);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  min-height: 180px;
 }
 
 .listing-side {

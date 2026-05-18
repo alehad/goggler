@@ -23,6 +23,8 @@ import {
   DEFAULT_MATCHING_PREFERENCES,
   type MatchingPreferences
 } from "../src/ebay/matching-preferences.ts";
+import { buildPurchaseAnalytics, type PurchaseChartPoint } from "../src/ebay/purchase-analytics.ts";
+import { safeEbayImageUrl, safeEbayItemUrl } from "../src/http/safe-external-url.ts";
 
 type Tab = "dashboard" | "tracking" | "won" | "account";
 type LostFilter = "all" | "neverWon" | "eventuallyWon";
@@ -80,12 +82,13 @@ type HistoryItem = {
   endTime?: string;
   sellerUserId?: string;
   conditionDisplayName?: string;
+  imageUrl?: string;
   itemWebUrl?: string;
   relistingGroupId?: string;
 };
 
 type BuyingHistory = {
-  source: "fixture";
+  source: "fixture" | "live";
   counts: {
     lost: number;
     won: number;
@@ -150,23 +153,6 @@ export default function Home() {
   const [accountMessage, setAccountMessage] = useState("");
   const [historyState, setHistoryState] = useState<HistoryState>({ status: "idle" });
   const [matchingPreferences, setMatchingPreferences] = useState<MatchingPreferences>(DEFAULT_MATCHING_PREFERENCES);
-  const stats = useMemo(() => {
-    const prices =
-      historyState.status === "ready"
-        ? historyState.history.wonItems.map((item) => item.currentPrice?.value ?? 0).sort((a, b) => a - b)
-        : [];
-    const median =
-      prices.length === 0
-        ? 0
-        : prices.length % 2 === 0
-          ? (prices[prices.length / 2 - 1] + prices[prices.length / 2]) / 2
-          : prices[Math.floor(prices.length / 2)];
-    return {
-      highest: prices.length > 0 ? Math.max(...prices) : 0,
-      lowest: prices.length > 0 ? Math.min(...prices) : 0,
-      median
-    };
-  }, [historyState]);
 
   async function refreshEbayConfigStatus() {
     const response = await fetch("/api/auth/ebay/config-status");
@@ -260,10 +246,8 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (activeTab === "dashboard" || activeTab === "tracking" || activeTab === "won") {
-      void refreshBuyingHistory();
-    }
-  }, [activeTab]);
+    void refreshBuyingHistory();
+  }, []);
 
   useEffect(() => {
     const ebayConfig = ebayConfigStatus?.config;
@@ -341,7 +325,7 @@ export default function Home() {
 
         {activeTab === "dashboard" && <Dashboard historyState={historyState} refreshBuyingHistory={refreshBuyingHistory} />}
         {activeTab === "tracking" && <Tracking historyState={historyState} refreshBuyingHistory={refreshBuyingHistory} />}
-        {activeTab === "won" && <Won historyState={historyState} stats={stats} refreshBuyingHistory={refreshBuyingHistory} />}
+        {activeTab === "won" && <Won historyState={historyState} refreshBuyingHistory={refreshBuyingHistory} />}
         {activeTab === "account" && (
           <Account
             ebayConfig={ebayConfigStatus?.config}
@@ -477,10 +461,13 @@ function Dashboard({
 }
 
 function HomeFeedCard({ row, onAddToWatchlist }: { row: HomeFeedRow; onAddToWatchlist: () => void }) {
+  const imageUrl = safeEbayImageUrl(row.imageUrl);
+  const itemWebUrl = safeEbayItemUrl(row.itemWebUrl);
+
   return (
     <article className="candidate-card home-feed-card">
-      <div className="watch-thumbnail" title={row.imageUrl ? "eBay listing image" : "goggler feed"}>
-        {row.imageUrl ? <img alt="" loading="lazy" referrerPolicy="no-referrer" src={row.imageUrl} /> : <Sparkles size={20} />}
+      <div className="watch-thumbnail" title={imageUrl ? "eBay listing image" : "goggler feed"}>
+        {imageUrl ? <img alt="" loading="lazy" referrerPolicy="no-referrer" src={imageUrl} /> : <Sparkles size={20} />}
       </div>
       <div className="candidate-main">
         <div className="candidate-title-row">
@@ -534,10 +521,10 @@ function HomeFeedCard({ row, onAddToWatchlist }: { row: HomeFeedRow; onAddToWatc
             <X size={18} />
           </button>
         )}
-        {row.actions.includes("open_on_ebay") && (
+        {row.actions.includes("open_on_ebay") && itemWebUrl && (
           <a
             className="icon-button"
-            href={row.itemWebUrl}
+            href={itemWebUrl}
             rel="noopener noreferrer"
             target="_blank"
             title="View on eBay"
@@ -633,13 +620,29 @@ function Tracking({
 
 function Won({
   historyState,
-  stats,
   refreshBuyingHistory
 }: {
   historyState: HistoryState;
-  stats: { highest: number; lowest: number; median: number };
   refreshBuyingHistory: () => Promise<void>;
 }) {
+  const [selectedItemId, setSelectedItemId] = useState<string | undefined>();
+  const analytics = useMemo(
+    () => (historyState.status === "ready" ? buildPurchaseAnalytics(historyState.history.wonItems) : buildPurchaseAnalytics([])),
+    [historyState]
+  );
+  const selectedPoint = analytics.chartPoints.find((point) => point.itemId === selectedItemId);
+
+  useEffect(() => {
+    if (!selectedItemId) {
+      return;
+    }
+
+    document.getElementById(purchaseCardDomId(selectedItemId))?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest"
+    });
+  }, [selectedItemId]);
+
   return (
     <section className="content">
       <div className="section-heading">
@@ -656,21 +659,208 @@ function Won({
       {historyState.status === "ready" ? (
         <>
           <div className="summary-grid">
-            <Metric label="Won items" value={String(historyState.history.counts.won)} detail="Fixture history" />
-            <Metric label="Highest paid" value={formatCurrency(stats.highest)} detail="Won auctions" />
-            <Metric label="Median paid" value={formatCurrency(stats.median)} detail="Won auctions" />
+            <Metric label="Average paid" value={formatMoneyValue(analytics.stats.average)} detail={`${analytics.stats.count} priced wins`} />
+            <Metric label="Lowest paid" value={formatMoneyValue(analytics.stats.lowest)} detail="Won auctions" />
+            <Metric label="Highest paid" value={formatMoneyValue(analytics.stats.highest)} detail="Won auctions" />
           </div>
 
-          <div className="table-panel">
-            {historyState.history.wonItems.map((item) => (
-              <HistoryRow item={item} key={item.itemId} sideLabel="Won" />
-            ))}
-          </div>
+          <PurchaseChart points={analytics.chartPoints} selectedItemId={selectedItemId} onSelect={setSelectedItemId} />
+
+          {historyState.history.wonItems.length > 0 ? (
+            <div className="candidate-list purchase-list">
+              {historyState.history.wonItems.map((item) => (
+                <PurchaseCard item={item} key={item.itemId} selected={item.itemId === selectedPoint?.itemId} />
+              ))}
+            </div>
+          ) : (
+            <div className="empty-panel">
+              <ShoppingBag size={20} />
+              <h2>No purchases yet</h2>
+              <p>Won items will appear here after eBay reports them in your buying history.</p>
+            </div>
+          )}
         </>
       ) : (
         <HistoryEmptyState state={historyState} />
       )}
     </section>
+  );
+}
+
+function PurchaseChart({
+  points,
+  selectedItemId,
+  onSelect
+}: {
+  points: PurchaseChartPoint[];
+  selectedItemId: string | undefined;
+  onSelect: (itemId: string) => void;
+}) {
+  const width = 760;
+  const height = 260;
+  const padding = { top: 22, right: 28, bottom: 42, left: 62 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const minTime = points.length > 0 ? Math.min(...points.map((point) => point.timestamp)) : 0;
+  const maxTime = points.length > 0 ? Math.max(...points.map((point) => point.timestamp)) : 0;
+  const firstPoint = points[0];
+  const lastPoint = points[points.length - 1];
+  const lowestPrice = points.length > 0 ? Math.min(...points.map((point) => point.price.value)) : 0;
+  const highestPrice = points.length > 0 ? Math.max(...points.map((point) => point.price.value)) : 0;
+  const chartCurrency = firstPoint?.price.currency ?? "GBP";
+  const priceStep = highestPrice <= 150 ? 10 : 15;
+  const minPrice = Math.max(0, Math.floor(lowestPrice / priceStep) * priceStep);
+  const maxPrice = points.length > 0 ? Math.ceil((highestPrice * 1.1) / priceStep) * priceStep : 0;
+  const xTicks = points.length > 0 ? weeklyTicks(minTime, maxTime) : [];
+  const yTicks = points.length > 0 ? priceTicks(minPrice, maxPrice, priceStep) : [];
+
+  function xFor(timestamp: number): number {
+    if (maxTime === minTime) {
+      return padding.left + plotWidth / 2;
+    }
+    return padding.left + ((timestamp - minTime) / (maxTime - minTime)) * plotWidth;
+  }
+
+  function yFor(value: number): number {
+    if (maxPrice === minPrice) {
+      return padding.top + plotHeight / 2;
+    }
+    return padding.top + plotHeight - ((value - minPrice) / (maxPrice - minPrice)) * plotHeight;
+  }
+
+  return (
+    <section className="purchase-chart-panel" aria-label="Purchase prices over time">
+      <div className="chart-heading">
+        <div>
+          <h2>Price paid over time</h2>
+          <p>{points.length > 0 ? `${points.length} plotted purchases` : "No dated purchase prices to plot"}</p>
+        </div>
+        {points.length > 0 && <span>{`${formatShortDate(firstPoint.date)} - ${formatShortDate(lastPoint.date)}`}</span>}
+      </div>
+
+      {points.length > 0 ? (
+        <svg className="purchase-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Purchase price scatter plot">
+          <line className="chart-axis" x1={padding.left} x2={padding.left} y1={padding.top} y2={height - padding.bottom} />
+          <line
+            className="chart-axis"
+            x1={padding.left}
+            x2={width - padding.right}
+            y1={height - padding.bottom}
+            y2={height - padding.bottom}
+          />
+          {xTicks.map((tick) => (
+            <line
+              className="chart-grid"
+              key={`x-${tick}`}
+              x1={xFor(tick)}
+              x2={xFor(tick)}
+              y1={padding.top}
+              y2={height - padding.bottom}
+            />
+          ))}
+          {yTicks.map((tick) => (
+            <line
+              className="chart-grid"
+              key={`y-${tick}`}
+              x1={padding.left}
+              x2={width - padding.right}
+              y1={yFor(tick)}
+              y2={yFor(tick)}
+            />
+          ))}
+          <text className="chart-label" x={padding.left} y={height - 12}>
+            {formatShortDate(firstPoint.date)}
+          </text>
+          <text className="chart-label chart-label-end" x={width - padding.right} y={height - 12}>
+            {formatShortDate(lastPoint.date)}
+          </text>
+          <text className="chart-label" x={10} y={yFor(maxPrice) + 4}>
+            {formatMoneyAmount(maxPrice, chartCurrency)}
+          </text>
+          <text className="chart-label" x={10} y={yFor(minPrice) + 4}>
+            {formatMoneyAmount(minPrice, chartCurrency)}
+          </text>
+          {yTicks
+            .filter((tick) => tick !== minPrice && tick !== maxPrice)
+            .map((tick) => (
+              <text className="chart-label" key={`label-${tick}`} x={10} y={yFor(tick) + 4}>
+                {formatMoneyAmount(tick, chartCurrency)}
+              </text>
+            ))}
+          {points.map((point) => {
+            const selected = point.itemId === selectedItemId;
+            return (
+              <g
+                aria-label={`${point.title}, ${formatMoneyValue(point.price)}, ${formatShortDate(point.date)}`}
+                className={selected ? "purchase-point selected" : "purchase-point"}
+                key={point.itemId}
+                onClick={() => onSelect(point.itemId)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelect(point.itemId);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <title>{`${point.title} | ${formatMoneyValue(point.price)} | ${formatShortDate(point.date)}`}</title>
+                <circle cx={xFor(point.timestamp)} cy={yFor(point.price.value)} r={selected ? 8 : 6} />
+              </g>
+            );
+          })}
+        </svg>
+      ) : (
+        <div className="chart-empty">
+          <BarChart3 size={20} />
+          <span>No dated purchases to chart</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PurchaseCard({ item, selected }: { item: HistoryItem; selected: boolean }) {
+  const imageUrl = safeEbayImageUrl(item.imageUrl);
+  const itemWebUrl = safeEbayItemUrl(item.itemWebUrl);
+
+  return (
+    <article
+      className={selected ? "candidate-card home-feed-card purchase-card selected" : "candidate-card home-feed-card purchase-card"}
+      id={purchaseCardDomId(item.itemId)}
+    >
+      <div className="watch-thumbnail" title={imageUrl ? "eBay listing image" : "Purchase"}>
+        {imageUrl ? <img alt="" loading="lazy" referrerPolicy="no-referrer" src={imageUrl} /> : <ShoppingBag size={20} />}
+      </div>
+      <div className="candidate-main">
+        <div className="candidate-title-row">
+          <div>
+            <p className="artist">Won purchase</p>
+            <h2>{item.title}</h2>
+          </div>
+        </div>
+        <div className="meta-row">
+          <span>{item.conditionDisplayName ?? "Condition unknown"}</span>
+          <span>{item.sellerUserId ?? "Unknown seller"}</span>
+          {item.endTime && <span>{formatShortDate(item.endTime)}</span>}
+        </div>
+        <div className="signal-row">
+          <span className="signal">Won</span>
+          {selected && <span className="signal attention">Selected</span>}
+        </div>
+      </div>
+      <div className="listing-side">
+        <strong>{item.currentPrice ? formatMoneyValue(item.currentPrice) : "-"}</strong>
+        <span>paid price</span>
+      </div>
+      <div className="card-actions">
+        {itemWebUrl && (
+          <a className="icon-button" href={itemWebUrl} rel="noopener noreferrer" target="_blank" title="View on eBay">
+            <ExternalLink size={18} />
+          </a>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -961,6 +1151,38 @@ function filterHomeRows(rows: HomeFeedRow[], filter: HomeFeedFilter): HomeFeedRo
   }
 }
 
+function purchaseCardDomId(itemId: string): string {
+  return `purchase-${itemId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
+function weeklyTicks(minTime: number, maxTime: number): number[] {
+  const weekMs = 7 * 24 * 60 * 60 * 1000;
+  const first = startOfWeekUtc(minTime);
+  const last = startOfWeekUtc(maxTime) + weekMs;
+  const ticks: number[] = [];
+
+  for (let tick = first; tick <= last; tick += weekMs) {
+    ticks.push(tick);
+  }
+
+  return ticks;
+}
+
+function startOfWeekUtc(timestamp: number): number {
+  const date = new Date(timestamp);
+  const day = date.getUTCDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + mondayOffset);
+}
+
+function priceTicks(minPrice: number, maxPrice: number, step: number): number[] {
+  const ticks: number[] = [];
+  for (let tick = minPrice; tick <= maxPrice; tick += step) {
+    ticks.push(tick);
+  }
+  return ticks;
+}
+
 function formatHomeSection(section: HomeFeedRow["section"]): string {
   switch (section) {
     case "watchlist":
@@ -986,6 +1208,29 @@ function formatRelativeDate(value: string): string {
     day: "numeric",
     month: "short"
   });
+}
+
+function formatShortDate(value: string): string {
+  return new Date(value).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "2-digit"
+  });
+}
+
+function formatMoneyValue(value: { value: number; currency: string } | undefined): string {
+  if (!value) {
+    return "-";
+  }
+
+  return formatMoneyAmount(value.value, value.currency);
+}
+
+function formatMoneyAmount(value: number, currency: string): string {
+  return new Intl.NumberFormat("en-GB", {
+    currency,
+    style: "currency"
+  }).format(value);
 }
 
 function formatCurrency(value: number): string {
