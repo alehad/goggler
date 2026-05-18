@@ -266,14 +266,8 @@ function isLocalOrPrivateHost(hostname: string): boolean {
   const host = hostname.toLocaleLowerCase("en-GB").replace(/^\[(.*)\]$/, "$1");
   if (
     host === "localhost" ||
-    host === "::1" ||
-    host.startsWith("fc") ||
-    host.startsWith("fd") ||
-    host.startsWith("fe8") ||
-    host.startsWith("fe9") ||
-    host.startsWith("fea") ||
-    host.startsWith("feb") ||
-    host.startsWith("::ffff:")
+    host.endsWith(".localhost") ||
+    host.includes(":")
   ) {
     return true;
   }

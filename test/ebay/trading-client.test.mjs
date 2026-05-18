@@ -149,6 +149,9 @@ test("rejects unsafe listing image URLs", () => {
   const apipaPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { imageUrl: "https://169.254.1.10/item.jpg" }), "WatchList");
   const mappedIpPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { imageUrl: "https://[::ffff:192.168.1.10]/item.jpg" }), "WatchList");
   const linkLocalPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { imageUrl: "https://[fe80::1]/item.jpg" }), "WatchList");
+  const decimalPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { imageUrl: "https://2130706433/item.jpg" }), "WatchList");
+  const hexPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { imageUrl: "https://0x7f000001/item.jpg" }), "WatchList");
+  const octalPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { imageUrl: "https://017700000001/item.jpg" }), "WatchList");
 
   assert.equal(page.items[0].imageUrl, undefined);
   assert.equal(httpPage.items[0].imageUrl, undefined);
@@ -157,6 +160,9 @@ test("rejects unsafe listing image URLs", () => {
   assert.equal(apipaPage.items[0].imageUrl, undefined);
   assert.equal(mappedIpPage.items[0].imageUrl, undefined);
   assert.equal(linkLocalPage.items[0].imageUrl, undefined);
+  assert.equal(decimalPage.items[0].imageUrl, undefined);
+  assert.equal(hexPage.items[0].imageUrl, undefined);
+  assert.equal(octalPage.items[0].imageUrl, undefined);
 });
 
 test("parses trusted eBay item URLs and strips unnecessary URL material", () => {
