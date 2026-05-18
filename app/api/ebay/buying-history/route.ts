@@ -1,13 +1,39 @@
 import { NextRequest, NextResponse } from "next/server.js";
+import { validateSameOriginRequest } from "../../../../src/auth/csrf.ts";
 import { getOrCreateCurrentUser } from "../../../../src/auth/current-user.ts";
 import { loadEbayConfig } from "../../../../src/ebay/config.ts";
 import { getFixtureHistoryResponse } from "../../../../src/ebay/fixture-history-source.ts";
 import { getEbayHistorySourceStatus } from "../../../../src/ebay/history-source.ts";
 import { fetchLiveEbayHistoryResponse } from "../../../../src/ebay/live-history-source.ts";
+import { parseMatchingPreferences } from "../../../../src/ebay/matching-preferences.ts";
 import { requireSessionEbayAccessToken } from "../../../../src/ebay/session-access.ts";
 import { EbayTradingApiError } from "../../../../src/ebay/trading-client.ts";
 
 export async function GET(request: NextRequest) {
+  return handleBuyingHistoryRequest(request, parseMatchingPreferences({}));
+}
+
+export async function POST(request: NextRequest) {
+  const csrf = validateSameOriginRequest(request);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: "invalid_origin" }, { status: 403 });
+  }
+
+  const body = (await request.json().catch(() => ({}))) as Partial<{
+    exactTitleMatch: boolean;
+    criteriaText: string;
+  }>;
+
+  return handleBuyingHistoryRequest(
+    request,
+    parseMatchingPreferences({
+      exactTitleMatch: body.exactTitleMatch,
+      criteriaText: body.criteriaText
+    })
+  );
+}
+
+async function handleBuyingHistoryRequest(request: NextRequest, matchingPreferences = parseMatchingPreferences({})) {
   const currentUser = getOrCreateCurrentUser(request);
 
   const sourceStatus = getEbayHistorySourceStatus();
@@ -29,7 +55,11 @@ export async function GET(request: NextRequest) {
   if (sourceStatus.source === "live") {
     try {
       return withInternalSessionCookie(
-        NextResponse.json(await fetchLiveEbayHistoryResponse(loadEbayConfig(), ebayAccess.accessToken)),
+        NextResponse.json(
+          await fetchLiveEbayHistoryResponse(loadEbayConfig(), ebayAccess.accessToken, {
+            matchingPreferences
+          })
+        ),
         currentUser.setCookie
       );
     } catch (error) {

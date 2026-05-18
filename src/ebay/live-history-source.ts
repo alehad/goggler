@@ -2,6 +2,11 @@ import type { EbayConfig } from "./config.ts";
 import { buildHomeFeed, type HomeFeedWatchlistItem } from "./home-feed.ts";
 import type { EbayHistoryResponse } from "./history-response.ts";
 import {
+  DEFAULT_MATCHING_PREFERENCES,
+  relistingGroupForTitle,
+  type MatchingPreferences
+} from "./matching-preferences.ts";
+import {
   fetchGetMyeBayBuyingPages,
   type EbayBuyingHistoryItem,
   type EbayBuyingListKind
@@ -11,6 +16,7 @@ export type FetchLiveEbayHistoryOptions = {
   fetch?: typeof fetch;
   entriesPerPage?: number;
   maxPagesPerList?: number;
+  matchingPreferences?: MatchingPreferences;
   now?: Date;
 };
 
@@ -21,6 +27,7 @@ export async function fetchLiveEbayHistoryResponse(
 ): Promise<EbayHistoryResponse> {
   const entriesPerPage = options.entriesPerPage ?? 50;
   const maxPages = options.maxPagesPerList ?? 3;
+  const matchingPreferences = options.matchingPreferences ?? DEFAULT_MATCHING_PREFERENCES;
   const now = options.now ?? new Date();
   const fetchOptions = { fetch: options.fetch };
 
@@ -39,12 +46,12 @@ export async function fetchLiveEbayHistoryResponse(
     )
   );
 
-  const lostItems = withTitleRelistingGroups(lostList.items);
-  const wonItems = withTitleRelistingGroups(wonList.items);
+  const lostItems = withRelistingGroups(lostList.items, matchingPreferences);
+  const wonItems = withRelistingGroups(wonList.items, matchingPreferences);
   const lostGroups = new Set(lostItems.map((item) => item.relistingGroupId).filter((value): value is string => Boolean(value)));
   const activeWatchListItems = watchList.items.filter((item) => isActiveListing(item, now));
   const watchlistItems = activeWatchListItems.map((item, index) =>
-    toWatchlistItem(item, index + 1, lostGroups.has(titleRelistingGroup(item.title)))
+    toWatchlistItem(item, index + 1, relistingGroupForTitle(item.title, matchingPreferences), lostGroups)
   );
   const homeFeed = buildHomeFeed({
     lostItems,
@@ -78,18 +85,21 @@ export async function fetchLiveEbayHistoryResponse(
   };
 }
 
-function withTitleRelistingGroups(items: EbayBuyingHistoryItem[]): EbayBuyingHistoryItem[] {
+function withRelistingGroups(items: EbayBuyingHistoryItem[], matchingPreferences: MatchingPreferences): EbayBuyingHistoryItem[] {
   return items.map((item) => ({
     ...item,
-    relistingGroupId: titleRelistingGroup(item.title)
+    relistingGroupId: relistingGroupForTitle(item.title, matchingPreferences)
   }));
 }
 
 function toWatchlistItem(
   item: EbayBuyingHistoryItem,
   watchlistPosition: number,
-  matchedLostItem: boolean
+  relistingGroupId: string | undefined,
+  lostGroups: Set<string>
 ): HomeFeedWatchlistItem {
+  const matchedLostItem = relistingGroupId !== undefined && lostGroups.has(relistingGroupId);
+
   return {
     itemId: item.itemId,
     title: item.title,
@@ -99,9 +109,9 @@ function toWatchlistItem(
     sellerUserId: item.sellerUserId,
     conditionDisplayName: item.conditionDisplayName,
     imageUrl: item.imageUrl,
-    relistingGroupId: matchedLostItem ? titleRelistingGroup(item.title) : undefined,
+    relistingGroupId: matchedLostItem ? relistingGroupId : undefined,
     matchConfidence: matchedLostItem ? 100 : undefined,
-    matchSignals: matchedLostItem ? ["exact title match"] : []
+    matchSignals: matchedLostItem ? ["matching preference"] : []
   };
 }
 
@@ -112,8 +122,4 @@ function isActiveListing(item: EbayBuyingHistoryItem, now: Date): boolean {
 
   const endTime = Date.parse(item.endTime);
   return Number.isFinite(endTime) && endTime > now.getTime();
-}
-
-function titleRelistingGroup(title: string): string {
-  return `title:${title.trim().toLocaleLowerCase("en-GB").replace(/\s+/g, " ")}`;
 }

@@ -548,6 +548,50 @@ h1 {
   margin-top: 4px;
 }
 
+.matching-controls {
+  display: grid;
+  gap: 10px;
+  max-width: 420px;
+  min-width: min(420px, 100%);
+}
+
+.checkbox-control {
+  align-items: center;
+  color: #344050;
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 800;
+  gap: 8px;
+}
+
+.checkbox-control input {
+  accent-color: var(--accent);
+  height: 16px;
+  width: 16px;
+}
+
+.criteria-control {
+  display: grid;
+  gap: 6px;
+}
+
+.criteria-control > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.criteria-control textarea {
+  background: var(--panel-soft);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  min-height: 78px;
+  padding: 10px;
+  resize: vertical;
+  width: 100%;
+}
+
 .history-side {
   align-items: center;
   display: flex;
