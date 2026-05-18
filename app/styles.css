@@ -132,6 +132,7 @@ button {
   background: var(--panel);
   border: 1px solid var(--line);
   color: #344050;
+  text-decoration: none;
   width: 40px;
 }
 

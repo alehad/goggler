@@ -45,6 +45,7 @@ test("fetches live watchlist, lost, and won lists into the Home feed contract", 
   assert.equal(response.homeFeed.rows[0].section, "watchlist");
   assert.equal(response.homeFeed.rows[0].watchlistPosition, 1);
   assert.equal(response.homeFeed.rows[0].imageUrl, "https://i.ebayimg.example/watch-001.jpg");
+  assert.equal(response.homeFeed.rows[0].itemWebUrl, "https://www.ebay.co.uk/itm/watch-001");
   assert.equal(
     response.homeFeed.rows.find((row) => row.section === "unresolved")?.imageUrl,
     "https://i.ebayimg.example/lost-002.jpg"
@@ -99,7 +100,10 @@ function responseXml(listName, options = {}) {
         <ItemID>watch-001</ItemID>
         <Title>${watchTitle}</Title>
         <Seller><UserID>watch-seller</UserID></Seller>
-        <ListingDetails><EndTime>2026-05-14T20:30:00.000Z</EndTime></ListingDetails>
+        <ListingDetails>
+          <EndTime>2026-05-14T20:30:00.000Z</EndTime>
+          <ViewItemURL>https://www.ebay.co.uk/itm/watch-001?mkcid=1</ViewItemURL>
+        </ListingDetails>
         <PictureDetails><GalleryURL>https://i.ebayimg.example/watch-001.jpg</GalleryURL></PictureDetails>
         <SellingStatus><CurrentPrice currencyID="GBP">410.00</CurrentPrice></SellingStatus>
         <ConditionDisplayName>Used</ConditionDisplayName>

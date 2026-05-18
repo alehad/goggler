@@ -109,6 +109,7 @@ function toWatchlistItem(
     sellerUserId: item.sellerUserId,
     conditionDisplayName: item.conditionDisplayName,
     imageUrl: item.imageUrl,
+    itemWebUrl: item.itemWebUrl,
     relistingGroupId: matchedLostItem ? relistingGroupId : undefined,
     matchConfidence: matchedLostItem ? 100 : undefined,
     matchSignals: matchedLostItem ? ["matching preference"] : []
