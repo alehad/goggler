@@ -120,7 +120,8 @@ function historyItem(
     endTime: `${date}T20:15:00.000Z`,
     sellerUserId: "sandbox-seller",
     conditionDisplayName: "Used",
-    imageUrl: `https://i.ebayimg.example/${itemId}.jpg`
+    imageUrl: `https://i.ebayimg.example/${itemId}.jpg`,
+    itemWebUrl: `https://www.ebay.co.uk/itm/${itemId}`
   };
 }
 
@@ -143,7 +144,8 @@ function watchlistItem(
     endsAt: `2026-05-${String(11 + watchlistPosition).padStart(2, "0")}T19:30:00.000Z`,
     sellerUserId: "watchlist-seller",
     conditionDisplayName: "Used",
-    imageUrl: `https://i.ebayimg.example/watchlist-${watchlistPosition}.jpg`
+    imageUrl: `https://i.ebayimg.example/watchlist-${watchlistPosition}.jpg`,
+    itemWebUrl: `https://www.ebay.co.uk/itm/${itemId}`
   };
 }
 
@@ -166,6 +168,7 @@ function relistingCandidate(
     endsAt: `2026-05-${String(matchConfidence - 70).padStart(2, "0")}T20:45:00.000Z`,
     sellerUserId: "candidate-seller",
     conditionDisplayName: "Used",
-    imageUrl: `https://i.ebayimg.example/${itemId}.jpg`
+    imageUrl: `https://i.ebayimg.example/${itemId}.jpg`,
+    itemWebUrl: `https://www.ebay.co.uk/itm/${itemId}`
   };
 }

@@ -37,7 +37,20 @@ test("filters relisted items that are not already on the eBay watchlist as needs
 
   assert.equal(needsActionRows.length, 2);
   assert.equal(needsActionRows.every((row) => row.actions.includes("add_to_watchlist")), true);
+  assert.equal(needsActionRows.every((row) => row.actions.includes("open_on_ebay")), true);
+  assert.equal(needsActionRows.every((row) => row.itemWebUrl?.startsWith("https://www.ebay.co.uk/itm/")), true);
   assert.equal(needsActionRows.every((row) => row.tags.includes("Not watched")), true);
+});
+
+test("omits eBay open action when an active row has no trusted item URL", () => {
+  const feed = buildHomeFeed({
+    lostItems: mockLostBidItems,
+    wonItems: mockWonItems,
+    watchlistItems: mockWatchlistItems.map((item) => ({ ...item, itemWebUrl: undefined })),
+    relistingCandidates: mockRelistingCandidates.map((item) => ({ ...item, itemWebUrl: undefined }))
+  });
+
+  assert.equal(feed.rows.filter((row) => row.actions.includes("open_on_ebay")).length, 0);
 });
 
 test("filters won and never-won Home rows", () => {

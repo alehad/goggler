@@ -16,6 +16,7 @@ export type EbayBuyingHistoryItem = {
   sellerUserId?: string;
   conditionDisplayName?: string;
   imageUrl?: string;
+  itemWebUrl?: string;
   relistingGroupId?: string;
 };
 
@@ -215,7 +216,8 @@ function parseItem(xml: string, list: EbayBuyingListKind): EbayBuyingHistoryItem
     endTime: firstText(firstBlock(xml, "ListingDetails") ?? "", "EndTime"),
     sellerUserId: firstText(firstBlock(xml, "Seller") ?? "", "UserID"),
     conditionDisplayName: firstText(xml, "ConditionDisplayName"),
-    imageUrl: parseImageUrl(xml)
+    imageUrl: parseImageUrl(xml),
+    itemWebUrl: parseItemWebUrl(xml)
   };
 }
 
@@ -231,6 +233,33 @@ function parseImageUrl(xml: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function parseItemWebUrl(xml: string): string | undefined {
+  const value = firstText(firstBlock(xml, "ListingDetails") ?? "", "ViewItemURL");
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLocaleLowerCase("en-GB");
+    if (url.protocol !== "https:" || isLocalOrPrivateHost(hostname) || !isTrustedEbayItemHost(hostname)) {
+      return undefined;
+    }
+
+    url.username = "";
+    url.password = "";
+    url.hash = "";
+    url.search = "";
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function isTrustedEbayItemHost(hostname: string): boolean {
+  return hostname === "ebay.co.uk" || hostname === "www.ebay.co.uk" || hostname === "ebay.com" || hostname === "www.ebay.com";
 }
 
 function isLocalOrPrivateHost(hostname: string): boolean {

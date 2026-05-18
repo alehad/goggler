@@ -136,7 +136,8 @@ test("parses normalized buying history pages", () => {
     endTime: "2026-01-12T20:15:00.000Z",
     sellerUserId: "sandbox-seller",
     conditionDisplayName: "Used",
-    imageUrl: "https://i.ebayimg.example/sandbox-lost-001.jpg"
+    imageUrl: "https://i.ebayimg.example/sandbox-lost-001.jpg",
+    itemWebUrl: "https://www.ebay.co.uk/itm/sandbox-lost-001"
   });
 });
 
@@ -156,6 +157,29 @@ test("rejects unsafe listing image URLs", () => {
   assert.equal(apipaPage.items[0].imageUrl, undefined);
   assert.equal(mappedIpPage.items[0].imageUrl, undefined);
   assert.equal(linkLocalPage.items[0].imageUrl, undefined);
+});
+
+test("parses trusted eBay item URLs and strips unnecessary URL material", () => {
+  const page = parseGetMyeBayBuyingResponse(
+    responseXml("WatchList", {
+      itemWebUrl: "https://user:password@www.ebay.co.uk/itm/sandbox-lost-001?mkcid=1#tracking"
+    }),
+    "WatchList"
+  );
+
+  assert.equal(page.items[0].itemWebUrl, "https://www.ebay.co.uk/itm/sandbox-lost-001");
+});
+
+test("rejects unsafe eBay item URLs", () => {
+  const javascriptPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { itemWebUrl: "javascript:alert(1)" }), "WatchList");
+  const httpPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { itemWebUrl: "http://www.ebay.co.uk/itm/1" }), "WatchList");
+  const otherHostPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { itemWebUrl: "https://example.test/itm/1" }), "WatchList");
+  const localhostPage = parseGetMyeBayBuyingResponse(responseXml("WatchList", { itemWebUrl: "https://localhost/itm/1" }), "WatchList");
+
+  assert.equal(javascriptPage.items[0].itemWebUrl, undefined);
+  assert.equal(httpPage.items[0].itemWebUrl, undefined);
+  assert.equal(otherHostPage.items[0].itemWebUrl, undefined);
+  assert.equal(localhostPage.items[0].itemWebUrl, undefined);
 });
 
 test("fetches and parses GetMyeBayBuying pages", async () => {
@@ -205,6 +229,7 @@ function responseXml(listName, options = {}) {
   const totalPages = options.totalPages ?? 3;
   const totalEntries = options.totalEntries ?? 48;
   const imageUrl = options.imageUrl ?? "https://i.ebayimg.example/sandbox-lost-001.jpg";
+  const itemWebUrl = options.itemWebUrl ?? "https://www.ebay.co.uk/itm/sandbox-lost-001";
   return `<?xml version="1.0" encoding="utf-8"?>
 <GetMyeBayBuyingResponse xmlns="urn:ebay:apis:eBLBaseComponents">
   <Ack>Success</Ack>
@@ -223,6 +248,7 @@ function responseXml(listName, options = {}) {
         </Seller>
         <ListingDetails>
           <EndTime>2026-01-12T20:15:00.000Z</EndTime>
+          <ViewItemURL>${itemWebUrl}</ViewItemURL>
         </ListingDetails>
         <PictureDetails>
           <GalleryURL>${imageUrl}</GalleryURL>

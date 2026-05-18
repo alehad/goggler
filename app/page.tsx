@@ -80,6 +80,7 @@ type HistoryItem = {
   endTime?: string;
   sellerUserId?: string;
   conditionDisplayName?: string;
+  itemWebUrl?: string;
   relistingGroupId?: string;
 };
 
@@ -126,6 +127,7 @@ type HomeFeedRow = {
   sellerUserId?: string;
   conditionDisplayName?: string;
   imageUrl?: string;
+  itemWebUrl?: string;
   watchlistPosition?: number;
   matchConfidence?: number;
   matchSignals: string[];
@@ -533,9 +535,15 @@ function HomeFeedCard({ row, onAddToWatchlist }: { row: HomeFeedRow; onAddToWatc
           </button>
         )}
         {row.actions.includes("open_on_ebay") && (
-          <button className="icon-button" title="Open on eBay" type="button">
+          <a
+            className="icon-button"
+            href={row.itemWebUrl}
+            rel="noopener noreferrer"
+            target="_blank"
+            title="View on eBay"
+          >
             <ExternalLink size={18} />
-          </button>
+          </a>
         )}
       </div>
     </article>

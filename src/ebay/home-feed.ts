@@ -9,6 +9,7 @@ export type HomeFeedWatchlistItem = {
   sellerUserId?: string;
   conditionDisplayName?: string;
   imageUrl?: string;
+  itemWebUrl?: string;
   relistingGroupId?: string;
   matchConfidence?: number;
   matchSignals?: string[];
@@ -39,6 +40,7 @@ export type HomeFeedRow = {
   sellerUserId?: string;
   conditionDisplayName?: string;
   imageUrl?: string;
+  itemWebUrl?: string;
   watchlistPosition?: number;
   matchConfidence?: number;
   matchSignals: string[];
@@ -88,7 +90,7 @@ export function buildHomeFeed(input: BuildHomeFeedInput): HomeFeed {
           "On eBay watchlist",
           ...(lostItem ? ["Lost bid" as const, "Relisting candidate" as const, "Never won" as const] : [])
         ],
-        actions: ["open_on_ebay"]
+        actions: item.itemWebUrl ? ["open_on_ebay"] : []
       });
     });
 
@@ -102,7 +104,7 @@ export function buildHomeFeed(input: BuildHomeFeedInput): HomeFeed {
         lostItem,
         section: "needs_action",
         tags: ["Relisting candidate", "Not watched", ...(lostItem ? ["Lost bid" as const, "Never won" as const] : [])],
-        actions: ["add_to_watchlist", "open_on_ebay", "confirm_match", "dismiss"]
+        actions: ["add_to_watchlist", ...(item.itemWebUrl ? ["open_on_ebay" as const] : []), "confirm_match", "dismiss"]
       });
     });
 
@@ -170,6 +172,7 @@ function activeListingRow(input: {
     sellerUserId: input.item.sellerUserId,
     conditionDisplayName: input.item.conditionDisplayName,
     imageUrl: input.item.imageUrl,
+    itemWebUrl: input.item.itemWebUrl,
     watchlistPosition: "watchlistPosition" in input.item ? input.item.watchlistPosition : undefined,
     matchConfidence: input.item.matchConfidence,
     matchSignals: input.item.matchSignals ?? [],
@@ -191,6 +194,7 @@ function historyRow(item: EbayBuyingHistoryItem, section: HomeFeedSection, tags:
     sellerUserId: item.sellerUserId,
     conditionDisplayName: item.conditionDisplayName,
     imageUrl: item.imageUrl,
+    itemWebUrl: item.itemWebUrl,
     relistingGroupId: item.relistingGroupId,
     sourceItemId: item.itemId,
     lostItemId: section === "won" ? undefined : item.itemId,
