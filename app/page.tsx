@@ -12,7 +12,6 @@ import {
   House,
   Link2,
   Search,
-  Settings,
   ShieldCheck,
   ShoppingBag,
   SlidersHorizontal,
@@ -20,10 +19,15 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import {
+  DEFAULT_MATCHING_PREFERENCES,
+  type MatchingPreferences
+} from "../src/ebay/matching-preferences.ts";
 
 type Tab = "dashboard" | "tracking" | "won" | "account";
 type LostFilter = "all" | "neverWon" | "eventuallyWon";
 type HomeFeedFilter = "all" | "onWatchlist" | "relistings" | "won" | "neverWon";
+const MATCHING_PREFERENCES_STORAGE_KEY = "goggler.matchingPreferences";
 
 type Candidate = {
   id: string;
@@ -143,6 +147,7 @@ export default function Home() {
   const [ebayStartReady, setEbayStartReady] = useState(false);
   const [accountMessage, setAccountMessage] = useState("");
   const [historyState, setHistoryState] = useState<HistoryState>({ status: "idle" });
+  const [matchingPreferences, setMatchingPreferences] = useState<MatchingPreferences>(DEFAULT_MATCHING_PREFERENCES);
   const stats = useMemo(() => {
     const prices =
       historyState.status === "ready"
@@ -175,7 +180,12 @@ export default function Home() {
   async function refreshBuyingHistory() {
     const previousHistory = historyState.status === "ready" ? historyState.history : undefined;
     setHistoryState({ status: "loading" });
-    const response = await fetch("/api/ebay/buying-history", { cache: "no-store" });
+    const response = await fetch("/api/ebay/buying-history", {
+      body: JSON.stringify(matchingPreferences),
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      method: "POST"
+    });
     const body = await response.json().catch(() => ({}));
 
     if (response.ok) {
@@ -215,6 +225,33 @@ export default function Home() {
       message: body.error ? `History unavailable: ${body.error}` : "History is unavailable"
     });
   }
+
+  useEffect(() => {
+    const storedPreferences = window.localStorage.getItem(MATCHING_PREFERENCES_STORAGE_KEY);
+    if (!storedPreferences) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(storedPreferences) as Partial<MatchingPreferences>;
+      setMatchingPreferences({
+        exactTitleMatch:
+          typeof parsed.exactTitleMatch === "boolean"
+            ? parsed.exactTitleMatch
+            : DEFAULT_MATCHING_PREFERENCES.exactTitleMatch,
+        criteriaText:
+          typeof parsed.criteriaText === "string" && parsed.criteriaText.trim()
+            ? parsed.criteriaText
+            : DEFAULT_MATCHING_PREFERENCES.criteriaText
+      });
+    } catch {
+      setMatchingPreferences(DEFAULT_MATCHING_PREFERENCES);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(MATCHING_PREFERENCES_STORAGE_KEY, JSON.stringify(matchingPreferences));
+  }, [matchingPreferences]);
 
   useEffect(() => {
     void refreshEbaySessionState();
@@ -307,7 +344,9 @@ export default function Home() {
           <Account
             ebayConfig={ebayConfigStatus?.config}
             ebayConnection={ebaySession?.connection}
+            matchingPreferences={matchingPreferences}
             message={accountMessage}
+            setMatchingPreferences={setMatchingPreferences}
           />
         )}
       </section>
@@ -698,11 +737,15 @@ function EbayAccountControl({
 function Account({
   ebayConfig,
   ebayConnection,
-  message
+  matchingPreferences,
+  message,
+  setMatchingPreferences
 }: {
   ebayConfig: EbayConfigStatus["config"] | undefined;
   ebayConnection: EbaySession["connection"] | undefined;
+  matchingPreferences: MatchingPreferences;
   message: string;
+  setMatchingPreferences: (preferences: MatchingPreferences) => void;
 }) {
   return (
     <section className="content account-layout">
@@ -724,12 +767,37 @@ function Account({
         <div className="setting-row">
           <div>
             <h2>Matching preferences</h2>
-            <p>Exact relisting signals only</p>
+            <p>Applies when buying history is refreshed</p>
           </div>
-          <button className="secondary-button" type="button">
-            <Settings size={17} />
-            <span>Edit</span>
-          </button>
+          <div className="matching-controls">
+            <label className="checkbox-control">
+              <input
+                checked={matchingPreferences.exactTitleMatch}
+                onChange={(event) =>
+                  setMatchingPreferences({
+                    ...matchingPreferences,
+                    exactTitleMatch: event.target.checked
+                  })
+                }
+                type="checkbox"
+              />
+              <span>Exact title match</span>
+            </label>
+            <label className="criteria-control">
+              <span>Criteria</span>
+              <textarea
+                onChange={(event) =>
+                  setMatchingPreferences({
+                    ...matchingPreferences,
+                    criteriaText: event.target.value
+                  })
+                }
+                rows={3}
+                spellCheck={false}
+                value={matchingPreferences.criteriaText}
+              />
+            </label>
+          </div>
         </div>
       </div>
       {message && <p className="form-message">{message}</p>}

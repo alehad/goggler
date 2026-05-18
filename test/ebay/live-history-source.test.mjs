@@ -68,12 +68,36 @@ test("returns truncation warnings when a live list exceeds the safety limit", as
   assert.deepEqual(response.warnings, ["WatchList truncated after 1 pages"]);
 });
 
+test("uses configured catalogue criteria before exact title matching", async () => {
+  const response = await fetchLiveEbayHistoryResponse(config, "session-access-token", {
+    maxPagesPerList: 1,
+    now: new Date("2026-05-13T12:00:00.000Z"),
+    matchingPreferences: {
+      exactTitleMatch: false,
+      criteriaText: String.raw`TBM\s*\d{1,4}; PAP\s*\d{1,4}`
+    },
+    fetch: async (_url, init) => {
+      const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
+      return new Response(responseXml(list, { catalogueTitles: true }), {
+        headers: { "Content-Type": "text/xml" }
+      });
+    }
+  });
+
+  const matchedWatch = response.homeFeed.rows.find((row) => row.sourceItemId === "watch-001");
+  assert.equal(matchedWatch?.relistingGroupId, "criteria:TBM17");
+  assert.equal(matchedWatch?.tags.includes("Relisting candidate"), true);
+  assert.equal(response.counts.watchlistRelistings, 1);
+});
+
 function responseXml(listName, options = {}) {
+  const watchTitle = options.catalogueTitles ? "Blue Note style LP TBM17 clean copy" : "Quad 33 preamp and 303 power amp pair";
+  const lostTitle = options.catalogueTitles ? "Three Blind Mice jazz record TBM 17" : "Quad 33 preamp and 303 power amp pair";
   const items = {
     WatchList: `
       <Item>
         <ItemID>watch-001</ItemID>
-        <Title>Quad 33 preamp and 303 power amp pair</Title>
+        <Title>${watchTitle}</Title>
         <Seller><UserID>watch-seller</UserID></Seller>
         <ListingDetails><EndTime>2026-05-14T20:30:00.000Z</EndTime></ListingDetails>
         <PictureDetails><GalleryURL>https://i.ebayimg.example/watch-001.jpg</GalleryURL></PictureDetails>
@@ -95,7 +119,7 @@ function responseXml(listName, options = {}) {
     LostList: `
       <Item>
         <ItemID>lost-001</ItemID>
-        <Title>Quad 33 preamp and 303 power amp pair</Title>
+        <Title>${lostTitle}</Title>
         <PictureDetails><GalleryURL>https://i.ebayimg.example/lost-001.jpg</GalleryURL></PictureDetails>
         <SellingStatus><CurrentPrice currencyID="GBP">390.00</CurrentPrice></SellingStatus>
       </Item>

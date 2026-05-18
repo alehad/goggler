@@ -7,7 +7,7 @@ import { GET as startEbayAuth, HEAD as prewarmEbayAuthStart } from "../../app/ap
 import { GET as handleEbayCallback } from "../../app/api/auth/ebay/callback/route.ts";
 import { GET as getEbaySession } from "../../app/api/auth/ebay/session/route.ts";
 import { POST as disconnectEbay } from "../../app/api/auth/ebay/disconnect/route.ts";
-import { GET as getBuyingHistory } from "../../app/api/ebay/buying-history/route.ts";
+import { GET as getBuyingHistory, POST as postBuyingHistory } from "../../app/api/ebay/buying-history/route.ts";
 import { readSessionToken } from "../../src/auth/session-cookie.ts";
 import { sessionStore } from "../../src/auth/local-auth.ts";
 import { getEbayOAuthStateStore } from "../../src/ebay/oauth-state.ts";
@@ -434,6 +434,48 @@ test("eBay buying history route serves fixture history after eBay connection", a
   assert.equal(body.wonItems.length, 7);
   assert.equal(body.watchlistItems.length, 6);
   assert.equal(body.homeFeed.rows.slice(0, 6).every((row) => row.section === "watchlist"), true);
+  assert.equal(JSON.stringify(body).includes("access-token"), false);
+});
+
+test("eBay buying history route rejects matching preference updates from invalid origins", async () => {
+  process.env.GOGGLER_EBAY_HISTORY_SOURCE = "fixture";
+  const response = await postBuyingHistory(
+    new NextRequest("http://localhost:3000/api/ebay/buying-history", {
+      body: JSON.stringify({ exactTitleMatch: false, criteriaText: String.raw`TBM\s*\d{1,4}` }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST"
+    })
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 403);
+  assert.equal(body.error, "invalid_origin");
+});
+
+test("eBay buying history route accepts matching preferences from same origin", async () => {
+  process.env.GOGGLER_EBAY_HISTORY_SOURCE = "fixture";
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  authorizeEbaySession(session.session.id);
+
+  const response = await postBuyingHistory(
+    new NextRequest("http://localhost:3000/api/ebay/buying-history", {
+      body: JSON.stringify({
+        exactTitleMatch: false,
+        criteriaText: String.raw`TBM\s*\d{1,4}; PAP\s*\d{1,4}`
+      }),
+      headers: {
+        "Content-Type": "application/json",
+        cookie,
+        origin: "http://localhost:3000"
+      },
+      method: "POST"
+    })
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.source, "fixture");
   assert.equal(JSON.stringify(body).includes("access-token"), false);
 });
 
