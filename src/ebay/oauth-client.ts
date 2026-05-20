@@ -2,6 +2,8 @@ import type { EbayConfig } from "./config.ts";
 import type { EbaySessionAuthorization } from "../auth/session-store.ts";
 
 export const EBAY_MARKETPLACE_INSIGHTS_SCOPE = "https://api.ebay.com/oauth/api_scope/buy.marketplace.insights";
+export const EBAY_BROWSE_SCOPE = "https://api.ebay.com/oauth/api_scope";
+const EBAY_APPLICATION_SCOPES = [EBAY_MARKETPLACE_INSIGHTS_SCOPE, EBAY_BROWSE_SCOPE] as const;
 
 export type EbayTokenResponse = {
   access_token: string;
@@ -69,9 +71,13 @@ export async function exchangeEbayAuthorizationCode(
 
 export async function getEbayApplicationAccessToken(
   config: EbayConfig,
-  options: { now?: Date; fetch?: typeof fetch } = {}
+  options: { now?: Date; fetch?: typeof fetch; scope?: string } = {}
 ): Promise<EbayApplicationAuthorization> {
   const fetchImpl = options.fetch ?? fetch;
+  const scope = options.scope ?? EBAY_MARKETPLACE_INSIGHTS_SCOPE;
+  if (!isAllowedApplicationScope(scope)) {
+    throw new EbayOAuthError("eBay application token scope is not allowed");
+  }
   const response = await fetchImpl(config.tokenUrl, {
     method: "POST",
     headers: {
@@ -80,7 +86,7 @@ export async function getEbayApplicationAccessToken(
     },
     body: new URLSearchParams({
       grant_type: "client_credentials",
-      scope: EBAY_MARKETPLACE_INSIGHTS_SCOPE
+      scope
     })
   });
 
@@ -94,9 +100,13 @@ export async function getEbayApplicationAccessToken(
     accessToken: token.access_token,
     tokenType: token.token_type,
     expiresAt: new Date(now.getTime() + token.expires_in * 1000),
-    scopes: [EBAY_MARKETPLACE_INSIGHTS_SCOPE],
+    scopes: [scope],
     authorizedAt: now
   };
+}
+
+function isAllowedApplicationScope(scope: string): scope is (typeof EBAY_APPLICATION_SCOPES)[number] {
+  return EBAY_APPLICATION_SCOPES.some((allowedScope) => allowedScope === scope);
 }
 
 function validateTokenResponse(value: unknown): EbayTokenResponse {

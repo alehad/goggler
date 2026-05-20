@@ -6,7 +6,7 @@ import {
   mockWatchlistItems,
   mockWonItems
 } from "../../src/ebay/buying-history-fixtures.ts";
-import { buildHomeFeed, filterHomeFeedRows } from "../../src/ebay/home-feed.ts";
+import { buildHomeFeed, filterHomeFeedRows, searchHomeFeedRows } from "../../src/ebay/home-feed.ts";
 
 test("builds Home feed with eBay watchlist items first in watchlist order", () => {
   const feed = buildFixtureFeed();
@@ -75,6 +75,21 @@ test("preserves thumbnails for all Home feed item classes", () => {
   assert.match(wonRow?.imageUrl ?? "", /sandbox-won-001\.jpg$/);
   assert.match(unresolvedRow?.imageUrl ?? "", /sandbox-lost-/);
   assert.match(resolvedRow?.imageUrl ?? "", /sandbox-lost-/);
+});
+
+test("searches loaded Home feed rows across titles and status tags", () => {
+  const feed = buildFixtureFeed();
+
+  const watchlistResults = searchHomeFeedRows(feed.rows, "watchlist");
+  const relistingResults = searchHomeFeedRows(feed.rows, "relisting candidate");
+  const neverWonResults = searchHomeFeedRows(feed.rows, "never won");
+  const titleResults = searchHomeFeedRows(feed.rows, "Quad");
+
+  assert.equal(watchlistResults.every((row) => row.tags.includes("On eBay watchlist")), true);
+  assert.equal(relistingResults.every((row) => row.tags.includes("Relisting candidate")), true);
+  assert.equal(neverWonResults.every((row) => row.tags.includes("Never won")), true);
+  assert.ok(titleResults.length > 0);
+  assert.equal(searchHomeFeedRows(feed.rows, "no such record").length, 0);
 });
 
 function buildFixtureFeed() {

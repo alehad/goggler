@@ -18,6 +18,7 @@ test("loads sandbox eBay configuration with defaults", () => {
   assert.equal(config.authorizeUrl, "https://auth.sandbox.ebay.com/oauth2/authorize");
   assert.equal(config.tokenUrl, "https://api.sandbox.ebay.com/identity/v1/oauth2/token");
   assert.equal(config.tradingApiUrl, "https://api.sandbox.ebay.com/ws/api.dll");
+  assert.equal(config.browseApiUrl, "https://api.sandbox.ebay.com/buy/browse/v1/item_summary/search");
   assert.equal(
     config.marketplaceInsightsApiUrl,
     "https://api.sandbox.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search"
@@ -64,6 +65,7 @@ test("loads production eBay endpoints from production-specific credentials", () 
   assert.equal(config.authorizeUrl, "https://auth.ebay.com/oauth2/authorize");
   assert.equal(config.tokenUrl, "https://api.ebay.com/identity/v1/oauth2/token");
   assert.equal(config.tradingApiUrl, "https://api.ebay.com/ws/api.dll");
+  assert.equal(config.browseApiUrl, "https://api.ebay.com/buy/browse/v1/item_summary/search");
   assert.equal(config.marketplaceInsightsApiUrl, "https://api.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search");
 });
 

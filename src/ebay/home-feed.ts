@@ -19,9 +19,10 @@ export type HomeFeedRelistingCandidate = Omit<HomeFeedWatchlistItem, "watchlistP
   candidateId: string;
 };
 
-export type HomeFeedFilter = "all" | "needsAction" | "won" | "onWatchlist" | "relistings" | "neverWon" | "resolved";
-export type HomeFeedSection = "watchlist" | "needs_action" | "won" | "unresolved" | "resolved";
+export type HomeFeedFilter = "all" | "needsAction" | "won" | "onWatchlist" | "relistings" | "neverWon" | "resolved" | "search";
+export type HomeFeedSection = "watchlist" | "needs_action" | "won" | "unresolved" | "resolved" | "search_result";
 export type HomeFeedTag =
+  | "Live eBay listing"
   | "Won"
   | "Lost bid"
   | "Never won"
@@ -62,6 +63,15 @@ export type HomeFeed = {
     neverWon: number;
     resolved: number;
   };
+};
+
+type SearchableHomeFeedRow = {
+  title: string;
+  sellerUserId?: string;
+  conditionDisplayName?: string;
+  section: string;
+  tags: readonly string[];
+  matchSignals: readonly string[];
 };
 
 type BuildHomeFeedInput = {
@@ -150,8 +160,28 @@ export function filterHomeFeedRows(rows: HomeFeedRow[], filter: HomeFeedFilter):
     case "resolved":
       return rows.filter((row) => row.section === "resolved");
     case "all":
+    case "search":
       return rows;
   }
+}
+
+export function searchHomeFeedRows<Row extends SearchableHomeFeedRow>(rows: Row[], query: string): Row[] {
+  const terms = normalizedSearchTerms(query);
+  if (terms.length === 0) {
+    return [];
+  }
+
+  return rows.filter((row) => {
+    const searchText = normalizedSearchText([
+      row.title,
+      row.sellerUserId,
+      row.conditionDisplayName,
+      row.tags.join(" "),
+      row.matchSignals.join(" "),
+      row.section
+    ]);
+    return terms.every((term) => searchText.includes(term));
+  });
 }
 
 function activeListingRow(input: {
@@ -206,4 +236,12 @@ function historyRow(item: EbayBuyingHistoryItem, section: HomeFeedSection, tags:
 
 function groups(items: { relistingGroupId?: string }[]): Set<string> {
   return new Set(items.map((item) => item.relistingGroupId).filter((value): value is string => Boolean(value)));
+}
+
+function normalizedSearchTerms(query: string): string[] {
+  return normalizedSearchText([query]).split(" ").filter(Boolean).slice(0, 8);
+}
+
+function normalizedSearchText(values: Array<string | undefined>): string {
+  return values.join(" ").toLocaleLowerCase("en-GB").replace(/\s+/g, " ").trim();
 }
