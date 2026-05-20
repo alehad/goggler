@@ -91,9 +91,39 @@ test("uses configured catalogue criteria before exact title matching", async () 
   assert.equal(response.counts.watchlistRelistings, 1);
 });
 
+test("uses default generic record ids before exact title matching", async () => {
+  const response = await fetchLiveEbayHistoryResponse(config, "session-access-token", {
+    maxPagesPerList: 1,
+    now: new Date("2026-05-13T12:00:00.000Z"),
+    matchingPreferences: {
+      exactTitleMatch: false,
+      criteriaText: String.raw`\b[A-Z]{1,5}\d{1,6}\b`
+    },
+    fetch: async (_url, init) => {
+      const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
+      return new Response(responseXml(list, { genericCatalogueTitles: true }), {
+        headers: { "Content-Type": "text/xml" }
+      });
+    }
+  });
+
+  const matchedWatch = response.homeFeed.rows.find((row) => row.sourceItemId === "watch-001");
+  assert.equal(matchedWatch?.relistingGroupId, "criteria:BNJ71001");
+  assert.equal(matchedWatch?.tags.includes("Relisting candidate"), true);
+  assert.equal(response.counts.watchlistRelistings, 1);
+});
+
 function responseXml(listName, options = {}) {
-  const watchTitle = options.catalogueTitles ? "Blue Note style LP TBM17 clean copy" : "Quad 33 preamp and 303 power amp pair";
-  const lostTitle = options.catalogueTitles ? "Three Blind Mice jazz record TBM 17" : "Quad 33 preamp and 303 power amp pair";
+  const watchTitle = options.genericCatalogueTitles
+    ? "Blue Note style LP BNJ71001 clean copy"
+    : options.catalogueTitles
+      ? "Blue Note style LP TBM17 clean copy"
+      : "Quad 33 preamp and 303 power amp pair";
+  const lostTitle = options.genericCatalogueTitles
+    ? "Japanese jazz record BNJ71001 original"
+    : options.catalogueTitles
+      ? "Three Blind Mice jazz record TBM 17"
+      : "Quad 33 preamp and 303 power amp pair";
   const items = {
     WatchList: `
       <Item>

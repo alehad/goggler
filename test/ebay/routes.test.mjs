@@ -636,8 +636,8 @@ test("eBay market history route fetches marketplace insights with an app token",
     const response = await postMarketHistory(
       new NextRequest("http://localhost:3000/api/ebay/market-history", {
         body: JSON.stringify({
-          title: "The record title TBM2005 promo",
-          criteriaText: String.raw`TBM\s*\d{1,4}; PAP\s*\d{1,4}`
+          title: "The record title BNJ71001 promo",
+          criteriaText: String.raw`\b[A-Z]{1,5}\d{1,6}\b`
         }),
         headers: {
           "Content-Type": "application/json",
@@ -651,12 +651,12 @@ test("eBay market history route fetches marketplace insights with an app token",
 
     assert.equal(response.status, 200);
     assert.equal(body.status, "ready");
-    assert.equal(body.history.query, "TBM2005");
+    assert.equal(body.history.query, "BNJ71001");
     assert.equal(body.history.querySource, "catalogue_id");
     assert.equal(body.history.lookbackDays, 90);
     assert.equal(body.history.sales.length, 1);
     assert.equal(JSON.stringify(body).includes("app-token"), false);
-    assert.equal(requestedUrls.some((url) => url.includes("q=TBM2005")), true);
+    assert.equal(requestedUrls.some((url) => url.includes("q=BNJ71001")), true);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -674,8 +674,8 @@ test("eBay market history route reports the catalogue-id query when upstream acc
     const response = await postMarketHistory(
       new NextRequest("http://localhost:3000/api/ebay/market-history", {
         body: JSON.stringify({
-          title: "TSUYOSHI YAMAMOTO TRIO BLUES FOR TEE THREE BLIND MICE TBM-2541 Japan VINYL LP",
-          criteriaText: String.raw`TBM\s*\d{1,4}; PAP\s*\d{1,4}`
+          title: "JAPANESE JAZZ QUARTET EXAMPLE LABEL BNJ71001 Japan VINYL LP",
+          criteriaText: String.raw`\b[A-Z]{1,5}\d{1,6}\b`
         }),
         headers: {
           "Content-Type": "application/json",
@@ -689,7 +689,7 @@ test("eBay market history route reports the catalogue-id query when upstream acc
 
     assert.equal(response.status, 502);
     assert.equal(body.error, "market_history_unavailable");
-    assert.equal(body.query, "TBM2541");
+    assert.equal(body.query, "BNJ71001");
     assert.equal(body.querySource, "catalogue_id");
     assert.equal(JSON.stringify(body).includes("denied"), false);
   } finally {

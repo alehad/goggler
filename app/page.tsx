@@ -21,6 +21,7 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_MATCHING_PREFERENCES,
+  LEGACY_DEFAULT_MATCHING_CRITERIA_TEXTS,
   type MatchingPreferences
 } from "../src/ebay/matching-preferences.ts";
 import { buildPurchaseAnalytics, type PurchaseChartPoint } from "../src/ebay/purchase-analytics.ts";
@@ -257,10 +258,7 @@ export default function Home() {
           typeof parsed.exactTitleMatch === "boolean"
             ? parsed.exactTitleMatch
             : DEFAULT_MATCHING_PREFERENCES.exactTitleMatch,
-        criteriaText:
-          typeof parsed.criteriaText === "string" && parsed.criteriaText.trim()
-            ? parsed.criteriaText
-            : DEFAULT_MATCHING_PREFERENCES.criteriaText
+        criteriaText: storedCriteriaText(parsed.criteriaText)
       });
     } catch {
       setMatchingPreferences(DEFAULT_MATCHING_PREFERENCES);
@@ -1324,6 +1322,18 @@ function getHistoryMessage(state: HistoryState): string {
     case "unavailable":
       return state.message;
   }
+}
+
+function storedCriteriaText(value: unknown): string {
+  if (typeof value !== "string" || !value.trim()) {
+    return DEFAULT_MATCHING_PREFERENCES.criteriaText;
+  }
+
+  return LEGACY_DEFAULT_MATCHING_CRITERIA_TEXTS.includes(
+    value.trim() as (typeof LEGACY_DEFAULT_MATCHING_CRITERIA_TEXTS)[number]
+  )
+    ? DEFAULT_MATCHING_PREFERENCES.criteriaText
+    : value;
 }
 
 function marketHistoryDetail(state: MarketHistoryState): string {

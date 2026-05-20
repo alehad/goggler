@@ -5,7 +5,11 @@ export type MatchingPreferences = {
   criteriaText: string;
 };
 
-export const DEFAULT_MATCHING_CRITERIA_TEXT = String.raw`TBM[-\s]*\d{1,4}; PAP[-\s]*\d{1,4}`;
+export const DEFAULT_MATCHING_CRITERIA_TEXT = String.raw`\b[A-Z]{1,5}\d{1,6}\b`;
+export const LEGACY_DEFAULT_MATCHING_CRITERIA_TEXTS = [
+  String.raw`TBM\s*\d{1,4}; PAP\s*\d{1,4}`,
+  String.raw`TBM[-\s]*\d{1,4}; PAP[-\s]*\d{1,4}`
+] as const;
 
 export const DEFAULT_MATCHING_PREFERENCES: MatchingPreferences = {
   exactTitleMatch: true,
@@ -90,7 +94,7 @@ function normalizeCriterionMatch(value: string): string {
 }
 
 function builtInCatalogueIdForTitle(title: string): string | undefined {
-  const match = title.slice(0, MAX_MATCH_TITLE_LENGTH).match(/\b(?:TBM|PAP)[-\s]*\d{1,4}\b/i);
+  const match = title.slice(0, MAX_MATCH_TITLE_LENGTH).match(/\b[A-Z]{1,5}\d{1,6}\b/i);
   return match?.[0] ? normalizeCriterionMatch(match[0]) : undefined;
 }
 
