@@ -5,7 +5,7 @@ export type MatchingPreferences = {
   criteriaText: string;
 };
 
-export const DEFAULT_MATCHING_CRITERIA_TEXT = String.raw`TBM\s*\d{1,4}; PAP\s*\d{1,4}`;
+export const DEFAULT_MATCHING_CRITERIA_TEXT = String.raw`TBM[-\s]*\d{1,4}; PAP[-\s]*\d{1,4}`;
 
 export const DEFAULT_MATCHING_PREFERENCES: MatchingPreferences = {
   exactTitleMatch: true,
@@ -28,9 +28,9 @@ export function parseMatchingPreferences(input: {
 }
 
 export function relistingGroupForTitle(title: string, preferences: MatchingPreferences): string | undefined {
-  const criteriaGroup = criteriaRelistingGroup(title, preferences.criteriaText);
-  if (criteriaGroup) {
-    return criteriaGroup;
+  const criteriaMatch = criteriaMatchForTitle(title, preferences.criteriaText);
+  if (criteriaMatch) {
+    return `criteria:${normalizeCriterionMatch(criteriaMatch)}`;
   }
 
   if (!preferences.exactTitleMatch) {
@@ -40,20 +40,24 @@ export function relistingGroupForTitle(title: string, preferences: MatchingPrefe
   return titleRelistingGroup(title);
 }
 
-export function titleRelistingGroup(title: string): string {
-  return `title:${normalizeTitle(title)}`;
-}
-
-function criteriaRelistingGroup(title: string, criteriaText: string): string | undefined {
+export function criteriaMatchForTitle(title: string, criteriaText: string): string | undefined {
   const boundedTitle = title.slice(0, MAX_MATCH_TITLE_LENGTH);
   for (const criterion of parseCriteria(criteriaText)) {
     const match = boundedTitle.match(criterion);
     if (match?.[0]) {
-      return `criteria:${normalizeCriterionMatch(match[0])}`;
+      return normalizeCriterionMatch(match[0]);
     }
   }
 
   return undefined;
+}
+
+export function catalogueIdForTitle(title: string, criteriaText: string): string | undefined {
+  return criteriaMatchForTitle(title, criteriaText) ?? builtInCatalogueIdForTitle(title);
+}
+
+export function titleRelistingGroup(title: string): string {
+  return `title:${normalizeTitle(title)}`;
 }
 
 function parseCriteria(criteriaText: string): RegExp[] {
@@ -82,7 +86,12 @@ function normalizeTitle(title: string): string {
 }
 
 function normalizeCriterionMatch(value: string): string {
-  return value.trim().toLocaleUpperCase("en-GB").replace(/\s+/g, "");
+  return value.trim().toLocaleUpperCase("en-GB").replace(/[-\s]+/g, "");
+}
+
+function builtInCatalogueIdForTitle(title: string): string | undefined {
+  const match = title.slice(0, MAX_MATCH_TITLE_LENGTH).match(/\b(?:TBM|PAP)[-\s]*\d{1,4}\b/i);
+  return match?.[0] ? normalizeCriterionMatch(match[0]) : undefined;
 }
 
 function parseBoolean(value: string | boolean | null | undefined, fallback: boolean): boolean {

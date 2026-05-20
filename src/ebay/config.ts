@@ -12,6 +12,7 @@ export type EbayConfig = {
   tokenUrl: string;
   tradingApiUrl: string;
   identityApiUrl: string;
+  marketplaceInsightsApiUrl: string;
 };
 
 export type EbayConfigStatus = {
@@ -74,7 +75,11 @@ export function loadEbayConfig(env: Env = process.env): EbayConfig {
     identityApiUrl:
       environment === "sandbox"
         ? "https://apiz.sandbox.ebay.com/commerce/identity/v1/user/"
-        : "https://apiz.ebay.com/commerce/identity/v1/user/"
+        : "https://apiz.ebay.com/commerce/identity/v1/user/",
+    marketplaceInsightsApiUrl:
+      environment === "sandbox"
+        ? "https://api.sandbox.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search"
+        : "https://api.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search"
   };
 }
 

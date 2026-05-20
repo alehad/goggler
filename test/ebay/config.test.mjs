@@ -18,6 +18,10 @@ test("loads sandbox eBay configuration with defaults", () => {
   assert.equal(config.authorizeUrl, "https://auth.sandbox.ebay.com/oauth2/authorize");
   assert.equal(config.tokenUrl, "https://api.sandbox.ebay.com/identity/v1/oauth2/token");
   assert.equal(config.tradingApiUrl, "https://api.sandbox.ebay.com/ws/api.dll");
+  assert.equal(
+    config.marketplaceInsightsApiUrl,
+    "https://api.sandbox.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search"
+  );
   assert.equal(config.marketplaceId, "EBAY_GB");
   assert.equal(config.tradingSiteId, "3");
   assert.deepEqual(config.scopes, ["scope-one", "scope-two"]);
@@ -60,6 +64,7 @@ test("loads production eBay endpoints from production-specific credentials", () 
   assert.equal(config.authorizeUrl, "https://auth.ebay.com/oauth2/authorize");
   assert.equal(config.tokenUrl, "https://api.ebay.com/identity/v1/oauth2/token");
   assert.equal(config.tradingApiUrl, "https://api.ebay.com/ws/api.dll");
+  assert.equal(config.marketplaceInsightsApiUrl, "https://api.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search");
 });
 
 test("does not allow production mode to fall back to sandbox credential variables", () => {
