@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { loadEbayConfig } from "../../src/ebay/config.ts";
-import { exchangeEbayAuthorizationCode } from "../../src/ebay/oauth-client.ts";
+import {
+  EBAY_MARKETPLACE_INSIGHTS_SCOPE,
+  exchangeEbayAuthorizationCode,
+  getEbayApplicationAccessToken
+} from "../../src/ebay/oauth-client.ts";
 
 const config = loadEbayConfig({
   EBAY_ENVIRONMENT: "sandbox",
@@ -48,6 +52,30 @@ test("normalizes eBay token exchange failures", async () => {
       }),
     /status 401/
   );
+});
+
+test("requests an eBay application token for marketplace insights", async () => {
+  let request;
+  const authorization = await getEbayApplicationAccessToken(config, {
+    now: new Date("2026-05-07T10:00:00.000Z"),
+    fetch: async (url, init) => {
+      request = { url, init };
+      return jsonResponse({
+        access_token: "app-access-token",
+        expires_in: 7200,
+        token_type: "Application Access Token"
+      });
+    }
+  });
+
+  assert.equal(request.url, "https://api.sandbox.ebay.com/identity/v1/oauth2/token");
+  assert.equal(request.init.method, "POST");
+  assert.equal(request.init.headers.Authorization, `Basic ${Buffer.from("client-id:client-secret").toString("base64")}`);
+  assert.equal(request.init.body.get("grant_type"), "client_credentials");
+  assert.equal(request.init.body.get("scope"), EBAY_MARKETPLACE_INSIGHTS_SCOPE);
+  assert.equal(authorization.accessToken, "app-access-token");
+  assert.equal(authorization.expiresAt.toISOString(), "2026-05-07T12:00:00.000Z");
+  assert.deepEqual(authorization.scopes, [EBAY_MARKETPLACE_INSIGHTS_SCOPE]);
 });
 
 function jsonResponse(body) {

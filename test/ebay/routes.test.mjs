@@ -8,6 +8,7 @@ import { GET as handleEbayCallback } from "../../app/api/auth/ebay/callback/rout
 import { GET as getEbaySession } from "../../app/api/auth/ebay/session/route.ts";
 import { POST as disconnectEbay } from "../../app/api/auth/ebay/disconnect/route.ts";
 import { GET as getBuyingHistory, POST as postBuyingHistory } from "../../app/api/ebay/buying-history/route.ts";
+import { POST as postMarketHistory } from "../../app/api/ebay/market-history/route.ts";
 import { readSessionToken } from "../../src/auth/session-cookie.ts";
 import { sessionStore } from "../../src/auth/local-auth.ts";
 import { getEbayOAuthStateStore } from "../../src/ebay/oauth-state.ts";
@@ -561,6 +562,136 @@ test("eBay buying history route hides upstream live eBay failure details", async
     assert.deepEqual(body, { error: "live_history_error" });
     assert.equal(serialized.includes("Failure"), false);
     assert.equal(serialized.includes("access-token"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("eBay market history route rejects invalid origins", async () => {
+  const response = await postMarketHistory(
+    new NextRequest("http://localhost:3000/api/ebay/market-history", {
+      body: JSON.stringify({ title: "TBM2005" }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST"
+    })
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 403);
+  assert.equal(body.error, "invalid_origin");
+});
+
+test("eBay market history route requires current-session eBay auth", async () => {
+  const cookie = await signInCookie();
+  const response = await postMarketHistory(
+    new NextRequest("http://localhost:3000/api/ebay/market-history", {
+      body: JSON.stringify({ title: "TBM2005" }),
+      headers: {
+        "Content-Type": "application/json",
+        cookie,
+        origin: "http://localhost:3000"
+      },
+      method: "POST"
+    })
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 409);
+  assert.equal(body.error, "ebay_reauth_required");
+});
+
+test("eBay market history route fetches marketplace insights with an app token", async () => {
+  setEbayEnv();
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  authorizeEbaySession(session.session.id);
+  const requestedUrls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    requestedUrls.push(String(url));
+    if (String(url).includes("/identity/v1/oauth2/token")) {
+      assert.equal(init.body.get("grant_type"), "client_credentials");
+      return jsonResponse({
+        access_token: "app-token",
+        expires_in: 7200,
+        token_type: "Application Access Token"
+      });
+    }
+
+    assert.equal(init.headers.Authorization, "Bearer app-token");
+    assert.equal(init.headers["X-EBAY-C-MARKETPLACE-ID"], "EBAY_GB");
+    return jsonResponse({
+      itemSales: [
+        {
+          itemId: "sale-001",
+          title: "TBM2005 sold record",
+          price: { value: "24", currency: "USD" },
+          itemEndDate: "2026-05-10T10:00:00.000Z"
+        }
+      ]
+    });
+  };
+
+  try {
+    const response = await postMarketHistory(
+      new NextRequest("http://localhost:3000/api/ebay/market-history", {
+        body: JSON.stringify({
+          title: "The record title TBM2005 promo",
+          criteriaText: String.raw`TBM\s*\d{1,4}; PAP\s*\d{1,4}`
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          cookie,
+          origin: "http://localhost:3000"
+        },
+        method: "POST"
+      })
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.status, "ready");
+    assert.equal(body.history.query, "TBM2005");
+    assert.equal(body.history.querySource, "catalogue_id");
+    assert.equal(body.history.lookbackDays, 90);
+    assert.equal(body.history.sales.length, 1);
+    assert.equal(JSON.stringify(body).includes("app-token"), false);
+    assert.equal(requestedUrls.some((url) => url.includes("q=TBM2005")), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("eBay market history route reports the catalogue-id query when upstream access is unavailable", async () => {
+  setEbayEnv();
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  authorizeEbaySession(session.session.id);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("denied", { status: 403 });
+
+  try {
+    const response = await postMarketHistory(
+      new NextRequest("http://localhost:3000/api/ebay/market-history", {
+        body: JSON.stringify({
+          title: "TSUYOSHI YAMAMOTO TRIO BLUES FOR TEE THREE BLIND MICE TBM-2541 Japan VINYL LP",
+          criteriaText: String.raw`TBM\s*\d{1,4}; PAP\s*\d{1,4}`
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          cookie,
+          origin: "http://localhost:3000"
+        },
+        method: "POST"
+      })
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 502);
+    assert.equal(body.error, "market_history_unavailable");
+    assert.equal(body.query, "TBM2541");
+    assert.equal(body.querySource, "catalogue_id");
+    assert.equal(JSON.stringify(body).includes("denied"), false);
   } finally {
     globalThis.fetch = originalFetch;
   }

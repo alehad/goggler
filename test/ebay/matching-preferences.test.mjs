@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   DEFAULT_MATCHING_CRITERIA_TEXT,
+  catalogueIdForTitle,
   parseMatchingPreferences,
   relistingGroupForTitle
 } from "../../src/ebay/matching-preferences.ts";
@@ -13,6 +14,7 @@ test("defaults matching preferences to exact title plus TBM and PAP criteria", (
   assert.equal(preferences.criteriaText, DEFAULT_MATCHING_CRITERIA_TEXT);
   assert.equal(relistingGroupForTitle("Japanese LP TBM17 original", preferences), "criteria:TBM17");
   assert.equal(relistingGroupForTitle("PAP 2005 promo pressing", preferences), "criteria:PAP2005");
+  assert.equal(relistingGroupForTitle("Japanese LP TBM-2541 original", preferences), "criteria:TBM2541");
 });
 
 test("uses exact title fallback when criteria do not match", () => {
@@ -58,4 +60,10 @@ test("ignores unsafe regex criteria", () => {
 
   assert.equal(relistingGroupForTitle("aaaaaaaaaaaaaaaa!", preferences), "title:aaaaaaaaaaaaaaaa!");
   assert.equal(relistingGroupForTitle("TBM 17 pressing", preferences), "criteria:TBM17");
+});
+
+test("extracts catalogue ids for market-history queries even when saved criteria are older", () => {
+  assert.equal(catalogueIdForTitle("Three Blind Mice TBM2541 Japan vinyl", String.raw`TBM\s*\d{1,4}`), "TBM2541");
+  assert.equal(catalogueIdForTitle("Three Blind Mice TBM-2541 Japan vinyl", String.raw`TBM\s*\d{1,4}`), "TBM2541");
+  assert.equal(catalogueIdForTitle("PAP 2005 promo pressing", String.raw`TBM\s*\d{1,4}`), "PAP2005");
 });
