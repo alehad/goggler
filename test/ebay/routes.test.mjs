@@ -8,6 +8,7 @@ import { GET as handleEbayCallback } from "../../app/api/auth/ebay/callback/rout
 import { GET as getEbaySession } from "../../app/api/auth/ebay/session/route.ts";
 import { POST as disconnectEbay } from "../../app/api/auth/ebay/disconnect/route.ts";
 import { GET as getBuyingHistory, POST as postBuyingHistory } from "../../app/api/ebay/buying-history/route.ts";
+import { POST as postEbaySearch } from "../../app/api/ebay/search/route.ts";
 import { POST as postMarketHistory } from "../../app/api/ebay/market-history/route.ts";
 import { readSessionToken } from "../../src/auth/session-cookie.ts";
 import { sessionStore } from "../../src/auth/local-auth.ts";
@@ -692,6 +693,105 @@ test("eBay market history route reports the catalogue-id query when upstream acc
     assert.equal(body.query, "BNJ71001");
     assert.equal(body.querySource, "catalogue_id");
     assert.equal(JSON.stringify(body).includes("denied"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("eBay live search route rejects invalid origins", async () => {
+  const response = await postEbaySearch(
+    new NextRequest("http://localhost:3000/api/ebay/search", {
+      body: JSON.stringify({ query: "KENNY BURRELL" }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST"
+    })
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 403);
+  assert.equal(body.error, "invalid_origin");
+});
+
+test("eBay live search route requires current-session eBay auth", async () => {
+  const cookie = await signInCookie();
+  const response = await postEbaySearch(
+    new NextRequest("http://localhost:3000/api/ebay/search", {
+      body: JSON.stringify({ query: "KENNY BURRELL" }),
+      headers: {
+        "Content-Type": "application/json",
+        cookie,
+        origin: "http://localhost:3000"
+      },
+      method: "POST"
+    })
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 409);
+  assert.equal(body.error, "ebay_reauth_required");
+});
+
+test("eBay live search route fetches Browse results with an app token", async () => {
+  setEbayEnv();
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  authorizeEbaySession(session.session.id);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).includes("/identity/v1/oauth2/token")) {
+      assert.equal(init.body.get("grant_type"), "client_credentials");
+      assert.equal(init.body.get("scope"), "https://api.ebay.com/oauth/api_scope");
+      return jsonResponse({
+        access_token: "browse-app-token",
+        expires_in: 7200,
+        token_type: "Application Access Token"
+      });
+    }
+
+    const requestUrl = new URL(String(url));
+    assert.equal(requestUrl.origin + requestUrl.pathname, "https://api.sandbox.ebay.com/buy/browse/v1/item_summary/search");
+    assert.equal(requestUrl.searchParams.get("q"), "KENNY BURRELL");
+    assert.equal(requestUrl.searchParams.get("filter"), "buyingOptions:{AUCTION|FIXED_PRICE}");
+    assert.equal(init.headers.Authorization, "Bearer browse-app-token");
+    return jsonResponse({
+      total: 1,
+      itemSummaries: [
+        {
+          itemId: "v1|123|0",
+          title: "Kenny Burrell BNJ71001 LP",
+          price: { value: "24.50", currency: "GBP" },
+          itemWebUrl: "https://www.ebay.co.uk/itm/123",
+          seller: { username: "record-seller" },
+          condition: "Used"
+        }
+      ]
+    });
+  };
+
+  try {
+    const response = await postEbaySearch(
+      new NextRequest("http://localhost:3000/api/ebay/search", {
+        body: JSON.stringify({
+          query: "KENNY BURRELL",
+          criteriaText: String.raw`\b[A-Z]{1,5}\d{1,6}\b`
+        }),
+        headers: {
+          "Content-Type": "application/json",
+          cookie,
+          origin: "http://localhost:3000"
+        },
+        method: "POST"
+      })
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.source, "live");
+    assert.equal(body.query, "KENNY BURRELL");
+    assert.equal(body.rows.length, 1);
+    assert.equal(body.rows[0].section, "search_result");
+    assert.equal(body.rows[0].relistingGroupId, "criteria:BNJ71001");
+    assert.equal(JSON.stringify(body).includes("browse-app-token"), false);
   } finally {
     globalThis.fetch = originalFetch;
   }

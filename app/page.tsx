@@ -18,7 +18,7 @@ import {
   Sparkles,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
   DEFAULT_MATCHING_PREFERENCES,
   LEGACY_DEFAULT_MATCHING_CRITERIA_TEXTS,
@@ -29,7 +29,7 @@ import { safeEbayImageUrl, safeEbayItemUrl } from "../src/http/safe-external-url
 
 type Tab = "dashboard" | "tracking" | "won" | "account";
 type LostFilter = "all" | "neverWon" | "eventuallyWon";
-type HomeFeedFilter = "all" | "onWatchlist" | "relistings" | "won" | "neverWon";
+type HomeFeedFilter = "search" | "all" | "onWatchlist" | "relistings" | "won" | "neverWon";
 const MATCHING_PREFERENCES_STORAGE_KEY = "goggler.matchingPreferences";
 
 type Candidate = {
@@ -151,9 +151,15 @@ type MarketHistoryState =
   | { status: "ready"; history: MarketHistory }
   | { status: "unavailable"; message: string };
 
+type HomeSearchState =
+  | { status: "idle" }
+  | { status: "loading"; query: string }
+  | { status: "ready"; query: string; rows: HomeFeedRow[]; total?: number }
+  | { status: "unavailable"; query: string; message: string };
+
 type HomeFeedRow = {
   id: string;
-  section: "watchlist" | "needs_action" | "won" | "unresolved" | "resolved";
+  section: "watchlist" | "needs_action" | "won" | "unresolved" | "resolved" | "search_result";
   title: string;
   currentPrice?: { value: number; currency: string };
   originalLostPrice?: { value: number; currency: string };
@@ -165,6 +171,9 @@ type HomeFeedRow = {
   watchlistPosition?: number;
   matchConfidence?: number;
   matchSignals: string[];
+  relistingGroupId?: string;
+  sourceItemId?: string;
+  lostItemId?: string;
   tags: string[];
   actions: string[];
 };
@@ -184,6 +193,9 @@ export default function Home() {
   const [accountMessage, setAccountMessage] = useState("");
   const [historyState, setHistoryState] = useState<HistoryState>({ status: "idle" });
   const [matchingPreferences, setMatchingPreferences] = useState<MatchingPreferences>(DEFAULT_MATCHING_PREFERENCES);
+  const [searchDraft, setSearchDraft] = useState("");
+  const [homeSearchQuery, setHomeSearchQuery] = useState("");
+  const [homeSearchState, setHomeSearchState] = useState<HomeSearchState>({ status: "idle" });
 
   async function refreshEbayConfigStatus() {
     const response = await fetch("/api/auth/ebay/config-status");
@@ -324,6 +336,45 @@ export default function Home() {
     window.location.href = "/api/auth/ebay/start";
   }
 
+  async function executeHomeSearch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = searchDraft.trim();
+    setHomeSearchQuery(query);
+    if (query) {
+      setActiveTab("dashboard");
+      setHomeSearchState({ status: "loading", query });
+      const response = await fetch("/api/ebay/search", {
+        body: JSON.stringify({
+          query,
+          exactTitleMatch: matchingPreferences.exactTitleMatch,
+          criteriaText: matchingPreferences.criteriaText
+        }),
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+      const body = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        setHomeSearchState({
+          status: "ready",
+          query,
+          rows: Array.isArray(body.rows) ? (body.rows as HomeFeedRow[]) : [],
+          total: typeof body.total === "number" ? body.total : undefined
+        });
+        return;
+      }
+
+      setHomeSearchState({
+        status: "unavailable",
+        query,
+        message: body.error ? `Search unavailable: ${body.error}` : "Search is unavailable"
+      });
+    } else {
+      setHomeSearchState({ status: "idle" });
+    }
+  }
+
   return (
     <main className="app-shell">
       <section className="workspace">
@@ -335,10 +386,21 @@ export default function Home() {
               <span>eBay UK tracker</span>
             </div>
           </div>
-          <div className="search-box">
+          <form className="search-box" onSubmit={executeHomeSearch}>
             <Search size={18} />
-            <input aria-label="Search tracked items" placeholder="Search tracked records, artists, catalogue numbers" />
-          </div>
+            <input
+              aria-label="Search tracked items"
+              onChange={(event) => {
+                setSearchDraft(event.target.value);
+                if (!event.target.value.trim()) {
+                  setHomeSearchQuery("");
+                  setHomeSearchState({ status: "idle" });
+                }
+              }}
+              placeholder="Search tracked records, artists, catalogue numbers"
+              value={searchDraft}
+            />
+          </form>
           <button className="icon-button" title="Filters" type="button">
             <SlidersHorizontal size={18} />
           </button>
@@ -351,7 +413,19 @@ export default function Home() {
           />
         </header>
 
-        {activeTab === "dashboard" && <Dashboard historyState={historyState} refreshBuyingHistory={refreshBuyingHistory} />}
+        {activeTab === "dashboard" && (
+          <Dashboard
+            historyState={historyState}
+            searchQuery={homeSearchQuery}
+            searchState={homeSearchState}
+            clearSearch={() => {
+              setHomeSearchQuery("");
+              setSearchDraft("");
+              setHomeSearchState({ status: "idle" });
+            }}
+            refreshBuyingHistory={refreshBuyingHistory}
+          />
+        )}
         {activeTab === "tracking" && <Tracking historyState={historyState} refreshBuyingHistory={refreshBuyingHistory} />}
         {activeTab === "won" && (
           <Won
@@ -393,14 +467,22 @@ export default function Home() {
 }
 
 function Dashboard({
+  clearSearch,
   historyState,
+  searchQuery,
+  searchState,
   refreshBuyingHistory
 }: {
+  clearSearch: () => void;
   historyState: HistoryState;
+  searchQuery: string;
+  searchState: HomeSearchState;
   refreshBuyingHistory: () => Promise<void>;
 }) {
   const [filter, setFilter] = useState<HomeFeedFilter>("onWatchlist");
   const [locallyWatchedIds, setLocallyWatchedIds] = useState<string[]>([]);
+  const [activeSearchQuery, setActiveSearchQuery] = useState("");
+  const trimmedSearchQuery = searchQuery.trim();
   const rows = useMemo(() => {
     if (historyState.status !== "ready") {
       return [];
@@ -418,8 +500,18 @@ function Dashboard({
       };
     });
 
-    return filterHomeRows(updatedRows, filter);
-  }, [filter, historyState, locallyWatchedIds]);
+    return filter === "search" ? searchRowsForState(searchState, updatedRows) : filterHomeRows(updatedRows, filter);
+  }, [filter, historyState, locallyWatchedIds, searchState]);
+
+  useEffect(() => {
+    if (trimmedSearchQuery && trimmedSearchQuery !== activeSearchQuery) {
+      setActiveSearchQuery(trimmedSearchQuery);
+      setFilter("search");
+    } else if (!trimmedSearchQuery && filter === "search") {
+      setActiveSearchQuery("");
+      setFilter("onWatchlist");
+    }
+  }, [activeSearchQuery, filter, trimmedSearchQuery]);
 
   return (
     <section className="content">
@@ -452,6 +544,14 @@ function Dashboard({
               All
             </button>
             <button
+              className={filter === "search" ? "active" : ""}
+              disabled={!trimmedSearchQuery}
+              onClick={() => setFilter("search")}
+              type="button"
+            >
+              Search
+            </button>
+            <button
               className={filter === "onWatchlist" ? "active" : ""}
               onClick={() => setFilter("onWatchlist")}
               type="button"
@@ -477,20 +577,76 @@ function Dashboard({
             </button>
           </div>
 
-          <div className="candidate-list">
-            {rows.map((row) => (
-              <HomeFeedCard
-                key={row.id}
-                row={row}
-                onAddToWatchlist={() => setLocallyWatchedIds((ids) => [...new Set([...ids, row.id])])}
-              />
-            ))}
-          </div>
+          {filter === "search" && searchState.status === "loading" && (
+            <div className="empty-panel">
+              <Search size={20} />
+              <h2>Searching eBay</h2>
+              <p>{`Looking for "${searchState.query}" in live listings.`}</p>
+            </div>
+          )}
+
+          {filter === "search" && searchState.status === "unavailable" && (
+            <div className="empty-panel">
+              <Search size={20} />
+              <h2>Search unavailable</h2>
+              <p>{searchState.message}</p>
+              <button
+                className="secondary-button compact"
+                onClick={() => {
+                  clearSearch();
+                  setFilter("onWatchlist");
+                }}
+                type="button"
+              >
+                On watchlist
+              </button>
+            </div>
+          )}
+
+          {filter === "search" && searchState.status === "ready" && rows.length > 0 && (
+            <div className="search-results-strip">
+              <span>{`${rows.length} live result${rows.length === 1 ? "" : "s"}`}</span>
+              <strong>{searchState.query}</strong>
+            </div>
+          )}
+
+          {filter === "search" && searchState.status === "ready" && rows.length === 0 ? (
+            <SearchEmptyState
+              query={searchState.query}
+              onReturnToWatchlist={() => {
+                clearSearch();
+                setFilter("onWatchlist");
+              }}
+            />
+          ) : filter === "search" && searchState.status !== "ready" ? null : (
+            <div className="candidate-list">
+              {rows.map((row) => (
+                <HomeFeedCard
+                  key={row.id}
+                  row={row}
+                  onAddToWatchlist={() => setLocallyWatchedIds((ids) => [...new Set([...ids, row.id])])}
+                />
+              ))}
+            </div>
+          )}
         </>
       ) : (
         <HistoryEmptyState state={historyState} />
       )}
     </section>
+  );
+}
+
+function SearchEmptyState({ onReturnToWatchlist, query }: { onReturnToWatchlist: () => void; query: string }) {
+  return (
+    <div className="empty-panel">
+      <Search size={20} />
+      <h2>No search results</h2>
+      <p>{`No live eBay listings match "${query}".`}</p>
+      <button className="secondary-button compact" onClick={onReturnToWatchlist} type="button">
+        On watchlist
+      </button>
+    </div>
   );
 }
 
@@ -1356,6 +1512,8 @@ function marketHistoryUnavailableMessage(body: { error?: unknown; query?: unknow
 
 function filterHomeRows(rows: HomeFeedRow[], filter: HomeFeedFilter): HomeFeedRow[] {
   switch (filter) {
+    case "search":
+      return rows;
     case "onWatchlist":
       return rows.filter((row) => row.section === "watchlist");
     case "relistings":
@@ -1367,6 +1525,58 @@ function filterHomeRows(rows: HomeFeedRow[], filter: HomeFeedFilter): HomeFeedRo
     case "all":
       return rows;
   }
+}
+
+function searchRowsForState(searchState: HomeSearchState, loadedRows: HomeFeedRow[]): HomeFeedRow[] {
+  if (searchState.status !== "ready") {
+    return [];
+  }
+
+  return searchState.rows.map((row) => tagLiveSearchRow(row, loadedRows));
+}
+
+function tagLiveSearchRow(row: HomeFeedRow, loadedRows: HomeFeedRow[]): HomeFeedRow {
+  const tags = new Set(row.tags);
+  const normalizedUrl = normalizedEbayUrl(row.itemWebUrl);
+  const normalizedTitle = normalizeSearchComparable(row.title);
+  const sameUrlRows = normalizedUrl ? loadedRows.filter((loadedRow) => normalizedEbayUrl(loadedRow.itemWebUrl) === normalizedUrl) : [];
+  const sameTitleRows = loadedRows.filter((loadedRow) => normalizeSearchComparable(loadedRow.title) === normalizedTitle);
+  const sameGroupRows = row.relistingGroupId
+    ? loadedRows.filter((loadedRow) => loadedRow.relistingGroupId === row.relistingGroupId)
+    : [];
+  const matchedRows = [...sameUrlRows, ...sameGroupRows, ...sameTitleRows];
+  const onWatchlist = matchedRows.some((loadedRow) => loadedRow.section === "watchlist");
+  const neverWon = matchedRows.some((loadedRow) => loadedRow.tags.includes("Never won"));
+  const won = matchedRows.some((loadedRow) => loadedRow.tags.includes("Won"));
+
+  if (onWatchlist) {
+    tags.add("On eBay watchlist");
+  }
+  if (neverWon) {
+    tags.add("Relisting candidate");
+    tags.add("Never won");
+    if (!onWatchlist) {
+      tags.add("Not watched");
+    }
+  }
+  if (won) {
+    tags.add("Won");
+  }
+
+  return {
+    ...row,
+    tags: [...tags],
+    actions: [...new Set([...row.actions, ...(row.itemWebUrl ? ["open_on_ebay" as const] : [])])]
+  };
+}
+
+function normalizedEbayUrl(value: string | undefined): string | undefined {
+  const safeUrl = safeEbayItemUrl(value);
+  return safeUrl ? new URL(safeUrl).toString() : undefined;
+}
+
+function normalizeSearchComparable(value: string): string {
+  return value.trim().toLocaleLowerCase("en-GB").replace(/\s+/g, " ");
 }
 
 function purchaseCardDomId(itemId: string): string {
@@ -1403,6 +1613,8 @@ function priceTicks(minPrice: number, maxPrice: number, step: number): number[] 
 
 function formatHomeSection(section: HomeFeedRow["section"]): string {
   switch (section) {
+    case "search_result":
+      return "Live eBay listing";
     case "watchlist":
       return "eBay watchlist";
     case "needs_action":

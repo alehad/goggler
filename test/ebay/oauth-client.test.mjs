@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { loadEbayConfig } from "../../src/ebay/config.ts";
 import {
+  EBAY_BROWSE_SCOPE,
   EBAY_MARKETPLACE_INSIGHTS_SCOPE,
   exchangeEbayAuthorizationCode,
   getEbayApplicationAccessToken
@@ -76,6 +77,43 @@ test("requests an eBay application token for marketplace insights", async () => 
   assert.equal(authorization.accessToken, "app-access-token");
   assert.equal(authorization.expiresAt.toISOString(), "2026-05-07T12:00:00.000Z");
   assert.deepEqual(authorization.scopes, [EBAY_MARKETPLACE_INSIGHTS_SCOPE]);
+});
+
+test("requests an eBay application token for browse search", async () => {
+  let request;
+  const authorization = await getEbayApplicationAccessToken(config, {
+    scope: EBAY_BROWSE_SCOPE,
+    fetch: async (url, init) => {
+      request = { url, init };
+      return jsonResponse({
+        access_token: "browse-app-token",
+        expires_in: 7200,
+        token_type: "Application Access Token"
+      });
+    }
+  });
+
+  assert.equal(request.init.body.get("grant_type"), "client_credentials");
+  assert.equal(request.init.body.get("scope"), EBAY_BROWSE_SCOPE);
+  assert.equal(authorization.accessToken, "browse-app-token");
+  assert.deepEqual(authorization.scopes, [EBAY_BROWSE_SCOPE]);
+});
+
+test("rejects unsupported eBay application token scopes before making a request", async () => {
+  let fetchCalls = 0;
+  await assert.rejects(
+    () =>
+      getEbayApplicationAccessToken(config, {
+        scope: "https://api.ebay.com/oauth/api_scope/not.allowed",
+        fetch: async () => {
+          fetchCalls += 1;
+          return jsonResponse({});
+        }
+      }),
+    /scope is not allowed/
+  );
+
+  assert.equal(fetchCalls, 0);
 });
 
 function jsonResponse(body) {
