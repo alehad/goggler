@@ -2,6 +2,7 @@ import type { EbayConfig } from "./config.ts";
 import type { HomeFeedRow } from "./home-feed.ts";
 import type { EbayMoney } from "./trading-client.ts";
 import { relistingGroupForTitle, type MatchingPreferences } from "./matching-preferences.ts";
+import { safeEbayImageUrl, safeEbayItemUrl } from "../http/safe-external-url.ts";
 
 export type EbayBrowseSearchResponse = {
   source: "live";
@@ -23,7 +24,7 @@ export async function fetchEbayBrowseSearchResponse(
   config: EbayConfig,
   appAccessToken: string,
   query: string,
-  options: { fetch?: typeof fetch; limit?: number; matchingPreferences: MatchingPreferences } 
+  options: { categoryIds?: string[]; fetch?: typeof fetch; limit?: number; matchingPreferences: MatchingPreferences }
 ): Promise<EbayBrowseSearchResponse> {
   assertTrustedBrowseApiUrl(config);
   const boundedQuery = boundedBrowseQuery(query);
@@ -35,6 +36,10 @@ export async function fetchEbayBrowseSearchResponse(
   url.searchParams.set("q", boundedQuery);
   url.searchParams.set("limit", String(options.limit ?? 50));
   url.searchParams.set("filter", "buyingOptions:{AUCTION|FIXED_PRICE}");
+  const categoryIds = boundedCategoryIds(options.categoryIds ?? []);
+  if (categoryIds.length > 0) {
+    url.searchParams.set("category_ids", categoryIds.join(","));
+  }
 
   const response = await (options.fetch ?? fetch)(url, {
     headers: {
@@ -62,6 +67,11 @@ export function boundedBrowseQuery(query: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 120);
+}
+
+function boundedCategoryIds(categoryIds: string[]): string[] {
+  return [...new Set(categoryIds.map((categoryId) => categoryId.trim()).filter((categoryId) => /^\d{1,12}$/.test(categoryId)))]
+    .slice(0, 3);
 }
 
 function parseBrowseRows(body: unknown, matchingPreferences: MatchingPreferences): HomeFeedRow[] {
@@ -93,11 +103,12 @@ function parseBrowseRow(raw: unknown, matchingPreferences: MatchingPreferences):
   }
 
   const price = moneyValue(item.price) ?? moneyValue(item.currentBidPrice);
-  const itemWebUrl = stringValue(item.itemWebUrl);
-  const imageUrl = imageUrlValue(item.image) ?? firstImageUrlValue(item.thumbnailImages);
+  const itemWebUrl = safeEbayItemUrl(stringValue(item.itemWebUrl));
+  const imageUrl = safeEbayImageUrl(imageUrlValue(item.image) ?? firstImageUrlValue(item.thumbnailImages));
   const endsAt = stringValue(item.itemEndDate);
   const sellerUserId = sellerUserIdValue(item.seller);
   const conditionDisplayName = stringValue(item.condition);
+  const category = categoryValue(item);
   const relistingGroupId = relistingGroupForTitle(title, matchingPreferences);
   const buyingOptions = Array.isArray(item.buyingOptions) ? item.buyingOptions.filter((value): value is string => typeof value === "string") : [];
 
@@ -109,6 +120,8 @@ function parseBrowseRow(raw: unknown, matchingPreferences: MatchingPreferences):
     endsAt,
     sellerUserId,
     conditionDisplayName,
+    categoryId: category?.categoryId,
+    categoryName: category?.categoryName,
     imageUrl,
     itemWebUrl,
     matchSignals: buyingOptions,
@@ -156,6 +169,27 @@ function sellerUserIdValue(raw: unknown): string | undefined {
   }
 
   return stringValue((raw as { username?: unknown }).username);
+}
+
+function categoryValue(item: Record<string, unknown>): { categoryId?: string; categoryName?: string } | undefined {
+  const categories = item.categories;
+  if (Array.isArray(categories)) {
+    for (const rawCategory of categories) {
+      if (!rawCategory || typeof rawCategory !== "object") {
+        continue;
+      }
+      const category = rawCategory as Record<string, unknown>;
+      const categoryId = stringValue(category.categoryId);
+      const categoryName = stringValue(category.categoryName);
+      if (categoryId || categoryName) {
+        return { categoryId, categoryName };
+      }
+    }
+  }
+
+  const categoryId = stringValue(item.categoryId) ?? stringValue(item.primaryCategoryId);
+  const categoryName = stringValue(item.categoryName) ?? stringValue(item.primaryCategoryName);
+  return categoryId || categoryName ? { categoryId, categoryName } : undefined;
 }
 
 function numberValue(value: unknown): number | undefined {

@@ -42,6 +42,22 @@ test("filters relisted items that are not already on the eBay watchlist as needs
   assert.equal(needsActionRows.every((row) => row.tags.includes("Not watched")), true);
 });
 
+test("tags active rows by listing format when buying options are available", () => {
+  const feed = buildHomeFeed({
+    lostItems: mockLostBidItems,
+    wonItems: mockWonItems,
+    watchlistItems: [],
+    relistingCandidates: [
+      { ...mockRelistingCandidates[0], matchSignals: ["AUCTION"] },
+      { ...mockRelistingCandidates[1], matchSignals: ["FIXED_PRICE"] }
+    ]
+  });
+
+  const needsActionRows = filterHomeFeedRows(feed.rows, "needsAction");
+  assert.equal(needsActionRows.some((row) => row.tags.includes("Auction")), true);
+  assert.equal(needsActionRows.some((row) => row.tags.includes("Buy now")), true);
+});
+
 test("omits eBay open action when an active row has no trusted item URL", () => {
   const feed = buildHomeFeed({
     lostItems: mockLostBidItems,

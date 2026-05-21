@@ -136,6 +136,8 @@ test("parses normalized buying history pages", () => {
     endTime: "2026-01-12T20:15:00.000Z",
     sellerUserId: "sandbox-seller",
     conditionDisplayName: "Used",
+    categoryId: "176985",
+    categoryName: "Records",
     imageUrl: "https://i.ebayimg.example/sandbox-lost-001.jpg",
     itemWebUrl: "https://www.ebay.co.uk/itm/sandbox-lost-001"
   });
@@ -262,6 +264,10 @@ function responseXml(listName, options = {}) {
         <SellingStatus>
           <CurrentPrice currencyID="GBP">214.25</CurrentPrice>
         </SellingStatus>
+        <PrimaryCategory>
+          <CategoryID>176985</CategoryID>
+          <CategoryName>Records</CategoryName>
+        </PrimaryCategory>
         <ConditionDisplayName>Used</ConditionDisplayName>
       </Item>
       <Item>

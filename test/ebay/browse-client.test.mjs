@@ -29,6 +29,7 @@ test("fetches and normalizes live eBay Browse search rows", async () => {
             itemEndDate: "2026-05-23T10:00:00.000Z",
             itemWebUrl: "https://www.ebay.co.uk/itm/123",
             image: { imageUrl: "https://i.ebayimg.com/images/g/example/s-l500.jpg" },
+            categories: [{ categoryId: "176985", categoryName: "Records" }],
             seller: { username: "record-seller" },
             condition: "Used",
             buyingOptions: ["AUCTION"]
@@ -51,9 +52,49 @@ test("fetches and normalizes live eBay Browse search rows", async () => {
   assert.equal(response.rows[0].title, "Kenny Burrell BNJ71001 LP");
   assert.deepEqual(response.rows[0].currentPrice, { value: 24.5, currency: "GBP" });
   assert.equal(response.rows[0].sellerUserId, "record-seller");
+  assert.equal(response.rows[0].categoryId, "176985");
+  assert.equal(response.rows[0].categoryName, "Records");
+  assert.equal(response.rows[0].imageUrl, "https://i.ebayimg.com/images/g/example/s-l500.jpg");
+  assert.equal(response.rows[0].itemWebUrl, "https://www.ebay.co.uk/itm/123");
   assert.equal(response.rows[0].relistingGroupId, "criteria:BNJ71001");
   assert.deepEqual(response.rows[0].tags, ["Live eBay listing"]);
   assert.equal(JSON.stringify(response).includes("app-token"), false);
+});
+
+test("can constrain live eBay Browse search to trusted category ids", async () => {
+  let requestUrl;
+  await fetchEbayBrowseSearchResponse(config, "app-token", "BNJ71001", {
+    categoryIds: ["176985", "not-a-category", "176985"],
+    matchingPreferences: DEFAULT_MATCHING_PREFERENCES,
+    fetch: async (url) => {
+      requestUrl = new URL(String(url));
+      return jsonResponse({ itemSummaries: [] });
+    }
+  });
+
+  assert.equal(requestUrl.searchParams.get("category_ids"), "176985");
+});
+
+test("drops unsafe live eBay Browse URLs before returning rows", async () => {
+  const response = await fetchEbayBrowseSearchResponse(config, "app-token", "KENNY BURRELL", {
+    matchingPreferences: DEFAULT_MATCHING_PREFERENCES,
+    fetch: async () =>
+      jsonResponse({
+        itemSummaries: [
+          {
+            itemId: "v1|123|0",
+            title: "Kenny Burrell BNJ71001 LP",
+            price: { value: "24.50", currency: "GBP" },
+            itemWebUrl: "https://example.test/itm/123",
+            image: { imageUrl: "https://localhost/image.jpg" }
+          }
+        ]
+      })
+  });
+
+  assert.equal(response.rows[0].itemWebUrl, undefined);
+  assert.equal(response.rows[0].imageUrl, undefined);
+  assert.deepEqual(response.rows[0].actions, []);
 });
 
 test("bounds live Browse search queries", () => {
