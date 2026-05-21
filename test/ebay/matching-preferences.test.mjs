@@ -14,9 +14,10 @@ test("defaults matching preferences to exact title plus generic record id criter
   assert.equal(preferences.criteriaText, DEFAULT_MATCHING_CRITERIA_TEXT);
   assert.equal(relistingGroupForTitle("Japanese LP TBM17 original", preferences), "criteria:TBM17");
   assert.equal(relistingGroupForTitle("Blue Note BNJ71001 promo pressing", preferences), "criteria:BNJ71001");
+  assert.equal(relistingGroupForTitle("Blue Note BNJ-71001 promo pressing", preferences), "criteria:BNJ71001");
   assert.equal(relistingGroupForTitle("Archive reissue ABCDE123456 vinyl", preferences), "criteria:ABCDE123456");
   assert.equal(relistingGroupForTitle("PAP 2005 promo pressing", preferences), "title:pap 2005 promo pressing");
-  assert.equal(relistingGroupForTitle("Japanese LP TBM-2541 original", preferences), "title:japanese lp tbm-2541 original");
+  assert.equal(relistingGroupForTitle("Japanese LP TBM-2541 original", preferences), "criteria:TBM2541");
 });
 
 test("uses exact title fallback when criteria do not match", () => {
@@ -66,6 +67,7 @@ test("ignores unsafe regex criteria", () => {
 
 test("extracts catalogue ids for market-history queries", () => {
   assert.equal(catalogueIdForTitle("Blue Note BNJ71001 promo pressing", DEFAULT_MATCHING_CRITERIA_TEXT), "BNJ71001");
+  assert.equal(catalogueIdForTitle("Blue Note BNJ-71001 promo pressing", DEFAULT_MATCHING_CRITERIA_TEXT), "BNJ71001");
   assert.equal(catalogueIdForTitle("Archive reissue ABCDE123456 vinyl", DEFAULT_MATCHING_CRITERIA_TEXT), "ABCDE123456");
   assert.equal(catalogueIdForTitle("Too many letters ABCDEF1234 vinyl", DEFAULT_MATCHING_CRITERIA_TEXT), undefined);
   assert.equal(catalogueIdForTitle("Too many digits ABC1234567 vinyl", DEFAULT_MATCHING_CRITERIA_TEXT), undefined);

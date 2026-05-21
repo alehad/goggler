@@ -15,6 +15,8 @@ export type EbayBuyingHistoryItem = {
   endTime?: string;
   sellerUserId?: string;
   conditionDisplayName?: string;
+  categoryId?: string;
+  categoryName?: string;
   imageUrl?: string;
   itemWebUrl?: string;
   relistingGroupId?: string;
@@ -216,6 +218,8 @@ function parseItem(xml: string, list: EbayBuyingListKind): EbayBuyingHistoryItem
     endTime: firstText(firstBlock(xml, "ListingDetails") ?? "", "EndTime"),
     sellerUserId: firstText(firstBlock(xml, "Seller") ?? "", "UserID"),
     conditionDisplayName: firstText(xml, "ConditionDisplayName"),
+    categoryId: firstText(firstBlock(xml, "PrimaryCategory") ?? "", "CategoryID"),
+    categoryName: firstText(firstBlock(xml, "PrimaryCategory") ?? "", "CategoryName"),
     imageUrl: parseImageUrl(xml),
     itemWebUrl: parseItemWebUrl(xml)
   };

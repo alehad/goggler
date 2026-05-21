@@ -1,11 +1,14 @@
 import type { EbayConfig } from "./config.ts";
 import { buildHomeFeed, type HomeFeedWatchlistItem } from "./home-feed.ts";
 import type { EbayHistoryResponse } from "./history-response.ts";
+import { fetchLiveRelistingCandidates, liveRelistingSearchRequests } from "./live-relisting-discovery.ts";
 import {
   DEFAULT_MATCHING_PREFERENCES,
+  catalogueIdForTitle,
   relistingGroupForTitle,
   type MatchingPreferences
 } from "./matching-preferences.ts";
+import { EBAY_BROWSE_SCOPE, getEbayApplicationAccessToken, type EbayApplicationAuthorization } from "./oauth-client.ts";
 import {
   fetchGetMyeBayBuyingPages,
   type EbayBuyingHistoryItem,
@@ -51,18 +54,19 @@ export async function fetchLiveEbayHistoryResponse(
   const lostGroups = new Set(lostItems.map((item) => item.relistingGroupId).filter((value): value is string => Boolean(value)));
   const activeWatchListItems = watchList.items.filter((item) => isActiveListing(item, now));
   const watchlistItems = activeWatchListItems.map((item, index) =>
-    toWatchlistItem(item, index + 1, relistingGroupForTitle(item.title, matchingPreferences), lostGroups)
+    toWatchlistItem(item, index + 1, groupForHistoryTitle(item.title, matchingPreferences), lostGroups)
   );
+  const warnings = [watchList, lostList, wonList].flatMap((page) =>
+    page.truncated ? [`${page.list} truncated after ${page.pagesFetched} pages`] : []
+  );
+  const relistingCandidates = await discoverRelistingCandidates(config, lostItems, wonItems, matchingPreferences, fetchOptions, warnings);
   const homeFeed = buildHomeFeed({
     lostItems,
     wonItems,
     watchlistItems,
-    relistingCandidates: []
+    relistingCandidates
   });
   const wonGroups = new Set(wonItems.map((item) => item.relistingGroupId).filter((value): value is string => Boolean(value)));
-  const warnings = [watchList, lostList, wonList].flatMap((page) =>
-    page.truncated ? [`${page.list} truncated after ${page.pagesFetched} pages`] : []
-  );
 
   return {
     source: "live",
@@ -79,7 +83,7 @@ export async function fetchLiveEbayHistoryResponse(
     lostItems,
     wonItems,
     watchlistItems,
-    relistingCandidates: [],
+    relistingCandidates,
     homeFeed,
     warnings: warnings.length > 0 ? warnings : undefined
   };
@@ -88,8 +92,51 @@ export async function fetchLiveEbayHistoryResponse(
 function withRelistingGroups(items: EbayBuyingHistoryItem[], matchingPreferences: MatchingPreferences): EbayBuyingHistoryItem[] {
   return items.map((item) => ({
     ...item,
-    relistingGroupId: relistingGroupForTitle(item.title, matchingPreferences)
+    relistingGroupId: groupForHistoryTitle(item.title, matchingPreferences)
   }));
+}
+
+async function discoverRelistingCandidates(
+  config: EbayConfig,
+  lostItems: EbayBuyingHistoryItem[],
+  wonItems: EbayBuyingHistoryItem[],
+  matchingPreferences: MatchingPreferences,
+  fetchOptions: { fetch?: typeof fetch },
+  warnings: string[]
+) {
+  if (liveRelistingSearchRequests({ lostItems, wonItems, matchingPreferences }).length === 0) {
+    return [];
+  }
+
+  try {
+    const appToken = await getCachedBrowseApplicationAccessToken(config, fetchOptions);
+    return await fetchLiveRelistingCandidates(config, appToken.accessToken, { lostItems, wonItems, matchingPreferences }, fetchOptions);
+  } catch {
+    warnings.push("Live relisting search unavailable");
+    return [];
+  }
+}
+
+const browseApplicationTokenCache = new Map<string, EbayApplicationAuthorization>();
+
+async function getCachedBrowseApplicationAccessToken(
+  config: EbayConfig,
+  fetchOptions: { fetch?: typeof fetch }
+): Promise<EbayApplicationAuthorization> {
+  const cacheKey = `${config.tokenUrl}|${config.clientId}|${EBAY_BROWSE_SCOPE}`;
+  const cached = browseApplicationTokenCache.get(cacheKey);
+  if (cached && cached.expiresAt.getTime() - 60_000 > Date.now()) {
+    return cached;
+  }
+
+  const appToken = await getEbayApplicationAccessToken(config, { fetch: fetchOptions.fetch, scope: EBAY_BROWSE_SCOPE });
+  browseApplicationTokenCache.set(cacheKey, appToken);
+  return appToken;
+}
+
+function groupForHistoryTitle(title: string, matchingPreferences: MatchingPreferences): string | undefined {
+  const catalogueId = catalogueIdForTitle(title, matchingPreferences.criteriaText);
+  return catalogueId ? `criteria:${catalogueId}` : relistingGroupForTitle(title, matchingPreferences);
 }
 
 function toWatchlistItem(
@@ -108,6 +155,8 @@ function toWatchlistItem(
     endsAt: item.endTime,
     sellerUserId: item.sellerUserId,
     conditionDisplayName: item.conditionDisplayName,
+    categoryId: item.categoryId,
+    categoryName: item.categoryName,
     imageUrl: item.imageUrl,
     itemWebUrl: item.itemWebUrl,
     relistingGroupId: matchedLostItem ? relistingGroupId : undefined,

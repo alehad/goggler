@@ -8,6 +8,8 @@ export type HomeFeedWatchlistItem = {
   endsAt?: string;
   sellerUserId?: string;
   conditionDisplayName?: string;
+  categoryId?: string;
+  categoryName?: string;
   imageUrl?: string;
   itemWebUrl?: string;
   relistingGroupId?: string;
@@ -29,7 +31,9 @@ export type HomeFeedTag =
   | "Eventually won"
   | "Relisting candidate"
   | "On eBay watchlist"
-  | "Not watched";
+  | "Not watched"
+  | "Auction"
+  | "Buy now";
 
 export type HomeFeedRow = {
   id: string;
@@ -40,6 +44,8 @@ export type HomeFeedRow = {
   endsAt?: string;
   sellerUserId?: string;
   conditionDisplayName?: string;
+  categoryId?: string;
+  categoryName?: string;
   imageUrl?: string;
   itemWebUrl?: string;
   watchlistPosition?: number;
@@ -98,7 +104,8 @@ export function buildHomeFeed(input: BuildHomeFeedInput): HomeFeed {
         section: "watchlist",
         tags: [
           "On eBay watchlist",
-          ...(lostItem ? ["Lost bid" as const, "Relisting candidate" as const, "Never won" as const] : [])
+          ...(lostItem ? ["Lost bid" as const, "Relisting candidate" as const, "Never won" as const] : []),
+          ...listingFormatTags(item.matchSignals)
         ],
         actions: item.itemWebUrl ? ["open_on_ebay"] : []
       });
@@ -113,7 +120,12 @@ export function buildHomeFeed(input: BuildHomeFeedInput): HomeFeed {
         item,
         lostItem,
         section: "needs_action",
-        tags: ["Relisting candidate", "Not watched", ...(lostItem ? ["Lost bid" as const, "Never won" as const] : [])],
+        tags: [
+          "Relisting candidate",
+          "Not watched",
+          ...(lostItem ? ["Lost bid" as const, "Never won" as const] : []),
+          ...listingFormatTags(item.matchSignals)
+        ],
         actions: ["add_to_watchlist", ...(item.itemWebUrl ? ["open_on_ebay" as const] : []), "confirm_match", "dismiss"]
       });
     });
@@ -201,6 +213,8 @@ function activeListingRow(input: {
     endsAt: input.item.endsAt,
     sellerUserId: input.item.sellerUserId,
     conditionDisplayName: input.item.conditionDisplayName,
+    categoryId: input.item.categoryId,
+    categoryName: input.item.categoryName,
     imageUrl: input.item.imageUrl,
     itemWebUrl: input.item.itemWebUrl,
     watchlistPosition: "watchlistPosition" in input.item ? input.item.watchlistPosition : undefined,
@@ -223,6 +237,8 @@ function historyRow(item: EbayBuyingHistoryItem, section: HomeFeedSection, tags:
     originalLostPrice: section === "won" ? undefined : item.currentPrice,
     sellerUserId: item.sellerUserId,
     conditionDisplayName: item.conditionDisplayName,
+    categoryId: item.categoryId,
+    categoryName: item.categoryName,
     imageUrl: item.imageUrl,
     itemWebUrl: item.itemWebUrl,
     relistingGroupId: item.relistingGroupId,
@@ -236,6 +252,14 @@ function historyRow(item: EbayBuyingHistoryItem, section: HomeFeedSection, tags:
 
 function groups(items: { relistingGroupId?: string }[]): Set<string> {
   return new Set(items.map((item) => item.relistingGroupId).filter((value): value is string => Boolean(value)));
+}
+
+function listingFormatTags(matchSignals: readonly string[] | undefined): HomeFeedTag[] {
+  const normalizedSignals = new Set((matchSignals ?? []).map((signal) => signal.toLocaleUpperCase("en-GB")));
+  return [
+    ...(normalizedSignals.has("AUCTION") ? ["Auction" as const] : []),
+    ...(normalizedSignals.has("FIXED_PRICE") || normalizedSignals.has("BUY_IT_NOW") ? ["Buy now" as const] : [])
+  ];
 }
 
 function normalizedSearchTerms(query: string): string[] {

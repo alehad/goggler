@@ -113,14 +113,69 @@ test("uses default generic record ids before exact title matching", async () => 
   assert.equal(response.counts.watchlistRelistings, 1);
 });
 
+test("discovers live relisting candidates for unresolved lost record ids", async () => {
+  const calls = [];
+  const response = await fetchLiveEbayHistoryResponse(config, "session-access-token", {
+    maxPagesPerList: 1,
+    now: new Date("2026-05-13T12:00:00.000Z"),
+    fetch: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.includes("/identity/v1/oauth2/token")) {
+        calls.push({ type: "app-token", body: String(init.body) });
+        return Response.json({
+          access_token: "app-access-token",
+          expires_in: 7200,
+          token_type: "Bearer"
+        });
+      }
+
+      if (urlText.includes("/buy/browse/v1/item_summary/search")) {
+        calls.push({ type: "browse", query: new URL(urlText).searchParams.get("q"), token: init.headers.Authorization });
+        return Response.json({
+          total: 1,
+          itemSummaries: [
+            {
+              itemId: "live-bnj-1",
+              title: "Blue Note BNJ-71001 promo pressing live auction",
+              price: { value: "51.00", currency: "GBP" },
+              itemWebUrl: "https://www.ebay.co.uk/itm/live-bnj-1",
+              image: { imageUrl: "https://i.ebayimg.com/images/g/live-bnj-1/s-l500.jpg" },
+              categories: [{ categoryId: "176985", categoryName: "Records" }],
+              buyingOptions: ["AUCTION"]
+            }
+          ]
+        });
+      }
+
+      const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
+      return new Response(responseXml(list, { genericCatalogueTitles: true, noWatchlistMatch: true }), {
+        headers: { "Content-Type": "text/xml" }
+      });
+    }
+  });
+
+  assert.equal(calls.find((call) => call.type === "app-token")?.body.includes("client_credentials"), true);
+  assert.equal(calls.find((call) => call.type === "browse")?.query, "BNJ71001");
+  assert.equal(calls.find((call) => call.type === "browse")?.token, "Bearer app-access-token");
+  assert.equal(response.relistingCandidates.length, 1);
+  assert.equal(response.relistingCandidates[0].itemId, "live-bnj-1");
+  const relistingRow = response.homeFeed.rows.find((row) => row.sourceItemId === "live-bnj-1");
+  assert.equal(relistingRow?.section, "needs_action");
+  assert.equal(relistingRow?.categoryId, "176985");
+  assert.equal(relistingRow?.tags.includes("Auction"), true);
+  assert.equal(response.counts.relistings, 1);
+});
+
 function responseXml(listName, options = {}) {
   const watchTitle = options.genericCatalogueTitles
-    ? "Blue Note style LP BNJ71001 clean copy"
+    ? options.noWatchlistMatch
+      ? "Different watchlist item"
+      : "Blue Note style LP BNJ71001 clean copy"
     : options.catalogueTitles
       ? "Blue Note style LP TBM17 clean copy"
       : "Quad 33 preamp and 303 power amp pair";
   const lostTitle = options.genericCatalogueTitles
-    ? "Japanese jazz record BNJ71001 original"
+    ? "Japanese jazz record BNJ-71001 original"
     : options.catalogueTitles
       ? "Three Blind Mice jazz record TBM 17"
       : "Quad 33 preamp and 303 power amp pair";
@@ -156,6 +211,10 @@ function responseXml(listName, options = {}) {
         <Title>${lostTitle}</Title>
         <PictureDetails><GalleryURL>https://i.ebayimg.example/lost-001.jpg</GalleryURL></PictureDetails>
         <SellingStatus><CurrentPrice currencyID="GBP">390.00</CurrentPrice></SellingStatus>
+        <PrimaryCategory>
+          <CategoryID>176985</CategoryID>
+          <CategoryName>Records</CategoryName>
+        </PrimaryCategory>
       </Item>
       <Item>
         <ItemID>lost-002</ItemID>
