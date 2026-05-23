@@ -22,6 +22,7 @@ export type HomeFeedRelistingCandidate = Omit<HomeFeedWatchlistItem, "watchlistP
 };
 
 export type HomeFeedFilter = "all" | "needsAction" | "won" | "onWatchlist" | "relistings" | "neverWon" | "resolved" | "search";
+export type RelistingFormatFilter = "both" | "auction" | "buyNow";
 export type HomeFeedSection = "watchlist" | "needs_action" | "won" | "unresolved" | "resolved" | "search_result";
 export type HomeFeedTag =
   | "Live eBay listing"
@@ -157,7 +158,11 @@ export function buildHomeFeed(input: BuildHomeFeedInput): HomeFeed {
   };
 }
 
-export function filterHomeFeedRows(rows: HomeFeedRow[], filter: HomeFeedFilter): HomeFeedRow[] {
+export function filterHomeFeedRows(
+  rows: HomeFeedRow[],
+  filter: HomeFeedFilter,
+  relistingFormatFilter: RelistingFormatFilter = "both"
+): HomeFeedRow[] {
   switch (filter) {
     case "needsAction":
       return rows.filter((row) => row.section === "needs_action");
@@ -166,7 +171,9 @@ export function filterHomeFeedRows(rows: HomeFeedRow[], filter: HomeFeedFilter):
     case "onWatchlist":
       return rows.filter((row) => row.section === "watchlist");
     case "relistings":
-      return rows.filter((row) => row.tags.includes("Relisting candidate"));
+      return rows
+        .filter((row) => row.tags.includes("Relisting candidate"))
+        .filter((row) => relistingFormatFilter === "both" || row.tags.includes(formatTagForRelistingFilter(relistingFormatFilter)));
     case "neverWon":
       return rows.filter((row) => row.tags.includes("Never won"));
     case "resolved":
@@ -175,6 +182,10 @@ export function filterHomeFeedRows(rows: HomeFeedRow[], filter: HomeFeedFilter):
     case "search":
       return rows;
   }
+}
+
+function formatTagForRelistingFilter(filter: Exclude<RelistingFormatFilter, "both">): "Auction" | "Buy now" {
+  return filter === "auction" ? "Auction" : "Buy now";
 }
 
 export function searchHomeFeedRows<Row extends SearchableHomeFeedRow>(rows: Row[], query: string): Row[] {

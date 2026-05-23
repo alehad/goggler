@@ -645,6 +645,17 @@ h1 {
   grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
+.relisting-format-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: -4px 0 14px;
+}
+
+.segmented-control.relisting-format-filter {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 0;
+}
+
 .segmented-control button {
   background: transparent;
   border: 0;
@@ -907,6 +918,10 @@ h1 {
 
   .segmented-control.home-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .relisting-format-toolbar {
+    justify-content: stretch;
   }
 
   .segmented-control button {

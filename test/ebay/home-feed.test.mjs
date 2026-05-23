@@ -58,6 +58,30 @@ test("tags active rows by listing format when buying options are available", () 
   assert.equal(needsActionRows.some((row) => row.tags.includes("Buy now")), true);
 });
 
+test("filters relistings by listing format", () => {
+  const feed = buildHomeFeed({
+    lostItems: mockLostBidItems,
+    wonItems: mockWonItems,
+    watchlistItems: [],
+    relistingCandidates: [
+      { ...mockRelistingCandidates[0], matchSignals: ["AUCTION"] },
+      { ...mockRelistingCandidates[1], matchSignals: ["FIXED_PRICE"] }
+    ]
+  });
+
+  const allRelistings = filterHomeFeedRows(feed.rows, "relistings");
+  const auctionRelistings = filterHomeFeedRows(feed.rows, "relistings", "auction");
+  const buyNowRelistings = filterHomeFeedRows(feed.rows, "relistings", "buyNow");
+  const allRows = filterHomeFeedRows(feed.rows, "all", "auction");
+
+  assert.equal(allRelistings.length, 2);
+  assert.equal(auctionRelistings.length, 1);
+  assert.equal(auctionRelistings[0].tags.includes("Auction"), true);
+  assert.equal(buyNowRelistings.length, 1);
+  assert.equal(buyNowRelistings[0].tags.includes("Buy now"), true);
+  assert.equal(allRows.length, feed.rows.length);
+});
+
 test("omits eBay open action when an active row has no trusted item URL", () => {
   const feed = buildHomeFeed({
     lostItems: mockLostBidItems,
