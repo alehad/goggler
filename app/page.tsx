@@ -30,6 +30,7 @@ import { safeEbayImageUrl, safeEbayItemUrl } from "../src/http/safe-external-url
 type Tab = "dashboard" | "tracking" | "won" | "account";
 type LostFilter = "all" | "neverWon" | "eventuallyWon";
 type HomeFeedFilter = "search" | "all" | "onWatchlist" | "relistings" | "won" | "neverWon";
+type RelistingFormatFilter = "both" | "auction" | "buyNow";
 const MATCHING_PREFERENCES_STORAGE_KEY = "goggler.matchingPreferences";
 
 type Candidate = {
@@ -480,6 +481,7 @@ function Dashboard({
   refreshBuyingHistory: () => Promise<void>;
 }) {
   const [filter, setFilter] = useState<HomeFeedFilter>("onWatchlist");
+  const [relistingFormatFilter, setRelistingFormatFilter] = useState<RelistingFormatFilter>("both");
   const [locallyWatchedIds, setLocallyWatchedIds] = useState<string[]>([]);
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
   const trimmedSearchQuery = searchQuery.trim();
@@ -500,8 +502,8 @@ function Dashboard({
       };
     });
 
-    return filter === "search" ? searchRowsForState(searchState, updatedRows) : filterHomeRows(updatedRows, filter);
-  }, [filter, historyState, locallyWatchedIds, searchState]);
+    return filter === "search" ? searchRowsForState(searchState, updatedRows) : filterHomeRows(updatedRows, filter, relistingFormatFilter);
+  }, [filter, historyState, locallyWatchedIds, relistingFormatFilter, searchState]);
 
   useEffect(() => {
     if (trimmedSearchQuery && trimmedSearchQuery !== activeSearchQuery) {
@@ -576,6 +578,34 @@ function Dashboard({
               Never won
             </button>
           </div>
+
+          {filter === "relistings" && (
+            <div className="relisting-format-toolbar">
+              <div className="segmented-control relisting-format-filter" aria-label="Relisting listing format filter">
+                <button
+                  className={relistingFormatFilter === "both" ? "active" : ""}
+                  onClick={() => setRelistingFormatFilter("both")}
+                  type="button"
+                >
+                  Both
+                </button>
+                <button
+                  className={relistingFormatFilter === "auction" ? "active" : ""}
+                  onClick={() => setRelistingFormatFilter("auction")}
+                  type="button"
+                >
+                  Auction
+                </button>
+                <button
+                  className={relistingFormatFilter === "buyNow" ? "active" : ""}
+                  onClick={() => setRelistingFormatFilter("buyNow")}
+                  type="button"
+                >
+                  Buy now
+                </button>
+              </div>
+            </div>
+          )}
 
           {filter === "search" && searchState.status === "loading" && (
             <div className="empty-panel">
@@ -1510,14 +1540,20 @@ function marketHistoryUnavailableMessage(body: { error?: unknown; query?: unknow
   return body.error ? `Recent sold history unavailable${query}: ${body.error}` : `Recent sold history is unavailable${query}`;
 }
 
-function filterHomeRows(rows: HomeFeedRow[], filter: HomeFeedFilter): HomeFeedRow[] {
+function filterHomeRows(
+  rows: HomeFeedRow[],
+  filter: HomeFeedFilter,
+  relistingFormatFilter: RelistingFormatFilter = "both"
+): HomeFeedRow[] {
   switch (filter) {
     case "search":
       return rows;
     case "onWatchlist":
       return rows.filter((row) => row.section === "watchlist");
     case "relistings":
-      return rows.filter((row) => row.tags.includes("Relisting candidate"));
+      return rows
+        .filter((row) => row.tags.includes("Relisting candidate"))
+        .filter((row) => relistingFormatFilter === "both" || row.tags.includes(formatTagForRelistingFilter(relistingFormatFilter)));
     case "won":
       return rows.filter((row) => row.section === "won");
     case "neverWon":
@@ -1525,6 +1561,10 @@ function filterHomeRows(rows: HomeFeedRow[], filter: HomeFeedFilter): HomeFeedRo
     case "all":
       return rows;
   }
+}
+
+function formatTagForRelistingFilter(filter: Exclude<RelistingFormatFilter, "both">): "Auction" | "Buy now" {
+  return filter === "auction" ? "Auction" : "Buy now";
 }
 
 function searchRowsForState(searchState: HomeSearchState, loadedRows: HomeFeedRow[]): HomeFeedRow[] {
