@@ -160,6 +160,7 @@ type HomeSearchState =
 
 type HomeFeedRow = {
   id: string;
+  modelList: "ebay" | "relisting_candidate" | "search";
   section: "watchlist" | "needs_action" | "won" | "unresolved" | "resolved" | "search_result";
   title: string;
   currentPrice?: { value: number; currency: string };
@@ -1549,15 +1550,15 @@ function filterHomeRows(
     case "search":
       return rows;
     case "onWatchlist":
-      return rows.filter((row) => row.section === "watchlist");
+      return rows.filter((row) => row.modelList === "ebay" && row.section === "watchlist");
     case "relistings":
       return rows
-        .filter((row) => row.tags.includes("Relisting candidate"))
+        .filter((row) => row.modelList === "relisting_candidate")
         .filter((row) => relistingFormatFilter === "both" || row.tags.includes(formatTagForRelistingFilter(relistingFormatFilter)));
     case "won":
-      return rows.filter((row) => row.section === "won");
+      return rows.filter((row) => row.modelList === "ebay" && row.section === "won");
     case "neverWon":
-      return rows.filter((row) => row.tags.includes("Never won"));
+      return rows.filter((row) => row.modelList === "ebay" && row.section === "unresolved");
     case "all":
       return rows;
   }
@@ -1586,7 +1587,7 @@ function tagLiveSearchRow(row: HomeFeedRow, loadedRows: HomeFeedRow[]): HomeFeed
     : [];
   const matchedRows = [...sameUrlRows, ...sameGroupRows, ...sameTitleRows];
   const onWatchlist = matchedRows.some((loadedRow) => loadedRow.section === "watchlist");
-  const neverWon = matchedRows.some((loadedRow) => loadedRow.tags.includes("Never won"));
+  const neverWon = matchedRows.some((loadedRow) => loadedRow.modelList === "ebay" && loadedRow.section === "unresolved");
   const won = matchedRows.some((loadedRow) => loadedRow.tags.includes("Won"));
 
   if (onWatchlist) {
