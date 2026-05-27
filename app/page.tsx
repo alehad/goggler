@@ -117,40 +117,10 @@ type BuyingHistory = {
   };
 };
 
-type MarketSale = {
-  itemId: string;
-  title: string;
-  price: {
-    value: number;
-    currency: string;
-  };
-  soldAt: string;
-  imageUrl?: string;
-  itemWebUrl?: string;
-};
-
-type MarketHistory = {
-  query: string;
-  querySource?: "catalogue_id" | "title";
-  lookbackDays: number;
-  sales: MarketSale[];
-  stats: {
-    highest?: { value: number; currency: string };
-    median?: { value: number; currency: string };
-    lowest?: { value: number; currency: string };
-    count: number;
-  };
-};
-
 type HistoryState =
   | { status: "idle" | "loading" }
   | { status: "ready"; history: BuyingHistory }
   | { status: "sign_in_required" | "reauth_required" | "live_not_implemented" | "unavailable"; message: string };
-
-type MarketHistoryState =
-  | { status: "idle" | "loading" }
-  | { status: "ready"; history: MarketHistory }
-  | { status: "unavailable"; message: string };
 
 type HomeSearchState =
   | { status: "idle" }
@@ -432,7 +402,6 @@ export default function Home() {
         {activeTab === "won" && (
           <Won
             historyState={historyState}
-            matchingPreferences={matchingPreferences}
             refreshBuyingHistory={refreshBuyingHistory}
           />
         )}
@@ -841,16 +810,12 @@ function Tracking({
 
 function Won({
   historyState,
-  matchingPreferences,
   refreshBuyingHistory
 }: {
   historyState: HistoryState;
-  matchingPreferences: MatchingPreferences;
   refreshBuyingHistory: () => Promise<void>;
 }) {
   const [selectedItemId, setSelectedItemId] = useState<string | undefined>();
-  const [purchaseView, setPurchaseView] = useState<"all" | "selected">("all");
-  const [marketHistoryState, setMarketHistoryState] = useState<MarketHistoryState>({ status: "idle" });
   const analytics = useMemo(
     () => (historyState.status === "ready" ? buildPurchaseAnalytics(historyState.history.wonItems) : buildPurchaseAnalytics([])),
     [historyState]
@@ -858,23 +823,9 @@ function Won({
   const selectedItem =
     historyState.status === "ready" ? historyState.history.wonItems.find((item) => item.itemId === selectedItemId) : undefined;
   const selectedPoint = analytics.chartPoints.find((point) => point.itemId === selectedItemId);
-  const marketChartPoints = useMemo(
-    () =>
-      marketHistoryState.status === "ready"
-        ? marketHistoryState.history.sales.map((sale) => ({
-            itemId: sale.itemId,
-            title: sale.title,
-            price: sale.price,
-            timestamp: Date.parse(sale.soldAt),
-            date: sale.soldAt
-          }))
-        : [],
-    [marketHistoryState]
-  );
 
   function selectPurchase(itemId: string) {
     setSelectedItemId(itemId);
-    setPurchaseView("selected");
   }
 
   useEffect(() => {
@@ -887,52 +838,6 @@ function Won({
       block: "center"
     });
   }, [selectedItemId]);
-
-  useEffect(() => {
-    if (purchaseView !== "selected" || !selectedItem) {
-      return;
-    }
-
-    let cancelled = false;
-    setMarketHistoryState({ status: "loading" });
-    fetch("/api/ebay/market-history", {
-      body: JSON.stringify({
-        title: selectedItem.title,
-        exactTitleMatch: matchingPreferences.exactTitleMatch,
-        criteriaText: matchingPreferences.criteriaText
-      }),
-      cache: "no-store",
-      headers: { "Content-Type": "application/json" },
-      method: "POST"
-    })
-      .then(async (response) => {
-        const body = await response.json().catch(() => ({}));
-        if (cancelled) {
-          return;
-        }
-
-        if (response.ok && body.status === "ready") {
-          setMarketHistoryState({ status: "ready", history: body.history as MarketHistory });
-          return;
-        }
-
-        setMarketHistoryState({
-          status: "unavailable",
-          message: marketHistoryUnavailableMessage(body)
-        });
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setMarketHistoryState({ status: "unavailable", message: "Recent sold history is unavailable" });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [matchingPreferences, purchaseView, selectedItem]);
-
-  const showingSelectedMarket = purchaseView === "selected" && selectedItem !== undefined;
 
   return (
     <section className="content">
@@ -950,69 +855,12 @@ function Won({
       {historyState.status === "ready" ? (
         <>
           <div className="summary-grid">
-            {showingSelectedMarket ? (
-              <>
-                <Metric label="Paid by me" value={formatMoneyValue(selectedItem.currentPrice)} detail="Selected purchase" />
-                <Metric
-                  label="Highest sold"
-                  value={formatMoneyValue(marketHistoryState.status === "ready" ? marketHistoryState.history.stats.highest : undefined)}
-                  detail={marketHistoryDetail(marketHistoryState)}
-                />
-                <Metric
-                  label="Median sold"
-                  value={formatMoneyValue(marketHistoryState.status === "ready" ? marketHistoryState.history.stats.median : undefined)}
-                  detail="Recent comparable sales"
-                />
-                <Metric
-                  label="Lowest sold"
-                  value={formatMoneyValue(marketHistoryState.status === "ready" ? marketHistoryState.history.stats.lowest : undefined)}
-                  detail={`Last ${marketHistoryState.status === "ready" ? marketHistoryState.history.lookbackDays : 90} days`}
-                />
-              </>
-            ) : (
-              <>
-                <Metric label="Average paid" value={formatMoneyValue(analytics.stats.average)} detail={`${analytics.stats.count} priced wins`} />
-                <Metric label="Lowest paid" value={formatMoneyValue(analytics.stats.lowest)} detail="Won auctions" />
-                <Metric label="Highest paid" value={formatMoneyValue(analytics.stats.highest)} detail="Won auctions" />
-              </>
-            )}
+            <Metric label="Average paid" value={formatMoneyValue(analytics.stats.average)} detail={`${analytics.stats.count} priced wins`} />
+            <Metric label="Lowest paid" value={formatMoneyValue(analytics.stats.lowest)} detail="Won auctions" />
+            <Metric label="Highest paid" value={formatMoneyValue(analytics.stats.highest)} detail="Won auctions" />
           </div>
 
-          {showingSelectedMarket && (
-            <div className="purchase-view-strip">
-              <div>
-                <span>Recent sold history</span>
-                <strong>{selectedItem.title}</strong>
-              </div>
-              <button
-                className="secondary-button"
-                onClick={() => {
-                  setPurchaseView("all");
-                  setMarketHistoryState({ status: "idle" });
-                }}
-                type="button"
-              >
-                All purchases
-              </button>
-            </div>
-          )}
-
-          {showingSelectedMarket ? (
-            <PurchaseChart
-              emptyLabel={marketHistoryState.status === "loading" ? "Loading recent sold history" : "No recent comparable sales to chart"}
-              points={marketChartPoints}
-              subtitle={
-                marketHistoryState.status === "ready"
-                  ? `${marketHistoryState.history.sales.length} sold matches for "${marketHistoryState.history.query}"`
-                  : marketHistoryState.status === "unavailable"
-                    ? marketHistoryState.message
-                    : "Checking recent sold listings"
-              }
-              title="90-day sold price history"
-            />
-          ) : (
-            <PurchaseChart points={analytics.chartPoints} selectedItemId={selectedItemId} onSelect={selectPurchase} />
-          )}
+          <PurchaseChart points={analytics.chartPoints} selectedItemId={selectedItemId} onSelect={selectPurchase} />
 
           {historyState.history.wonItems.length > 0 ? (
             <div className="candidate-list purchase-list">
@@ -1521,24 +1369,6 @@ function storedCriteriaText(value: unknown): string {
   )
     ? DEFAULT_MATCHING_PREFERENCES.criteriaText
     : value;
-}
-
-function marketHistoryDetail(state: MarketHistoryState): string {
-  switch (state.status) {
-    case "ready":
-      return `${state.history.stats.count} sold matches`;
-    case "loading":
-      return "Loading recent sales";
-    case "idle":
-      return "Select a purchase";
-    case "unavailable":
-      return "Unavailable";
-  }
-}
-
-function marketHistoryUnavailableMessage(body: { error?: unknown; query?: unknown }): string {
-  const query = typeof body.query === "string" && body.query.trim() ? ` for ${body.query}` : "";
-  return body.error ? `Recent sold history unavailable${query}: ${body.error}` : `Recent sold history is unavailable${query}`;
 }
 
 function filterHomeRows(
