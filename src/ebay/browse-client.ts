@@ -114,6 +114,7 @@ function parseBrowseRow(raw: unknown, matchingPreferences: MatchingPreferences):
 
   return {
     id: `search-${itemId}`,
+    modelList: "search",
     section: "search_result",
     title,
     currentPrice: price,

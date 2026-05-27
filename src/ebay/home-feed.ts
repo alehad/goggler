@@ -23,6 +23,7 @@ export type HomeFeedRelistingCandidate = Omit<HomeFeedWatchlistItem, "watchlistP
 
 export type HomeFeedFilter = "all" | "needsAction" | "won" | "onWatchlist" | "relistings" | "neverWon" | "resolved" | "search";
 export type RelistingFormatFilter = "both" | "auction" | "buyNow";
+export type HomeFeedModelList = "ebay" | "relisting_candidate" | "search";
 export type HomeFeedSection = "watchlist" | "needs_action" | "won" | "unresolved" | "resolved" | "search_result";
 export type HomeFeedTag =
   | "Live eBay listing"
@@ -38,6 +39,7 @@ export type HomeFeedTag =
 
 export type HomeFeedRow = {
   id: string;
+  modelList: HomeFeedModelList;
   section: HomeFeedSection;
   title: string;
   currentPrice?: { value: number; currency: string };
@@ -60,6 +62,8 @@ export type HomeFeedRow = {
 };
 
 export type HomeFeed = {
+  ebayRows: HomeFeedRow[];
+  relistingRows: HomeFeedRow[];
   rows: HomeFeedRow[];
   counts: {
     watchlist: number;
@@ -91,7 +95,6 @@ type BuildHomeFeedInput = {
 export function buildHomeFeed(input: BuildHomeFeedInput): HomeFeed {
   const wonGroups = groups(input.wonItems);
   const watchlistGroups = groups(input.watchlistItems);
-  const candidateGroups = groups(input.relistingCandidates);
   const lostByGroup = new Map(input.lostItems.map((item) => [item.relistingGroupId, item]));
 
   const watchlistRows = [...input.watchlistItems]
@@ -133,8 +136,6 @@ export function buildHomeFeed(input: BuildHomeFeedInput): HomeFeed {
 
   const unresolvedRows = input.lostItems
     .filter((item) => item.relistingGroupId === undefined || !wonGroups.has(item.relistingGroupId))
-    .filter((item) => item.relistingGroupId === undefined || !watchlistGroups.has(item.relistingGroupId))
-    .filter((item) => item.relistingGroupId === undefined || !candidateGroups.has(item.relistingGroupId))
     .map((item) => historyRow(item, "unresolved", ["Lost bid", "Never won"]));
 
   const resolvedRows = input.lostItems
@@ -143,16 +144,20 @@ export function buildHomeFeed(input: BuildHomeFeedInput): HomeFeed {
 
   const wonRows = input.wonItems.map((item) => historyRow(item, "won", ["Won"]));
 
-  const rows = [...watchlistRows, ...needsActionRows, ...wonRows, ...unresolvedRows, ...resolvedRows];
+  const ebayRows = [...watchlistRows, ...wonRows, ...unresolvedRows, ...resolvedRows];
+  const relistingRows = needsActionRows;
+  const rows = [...watchlistRows, ...relistingRows, ...wonRows, ...unresolvedRows, ...resolvedRows];
   return {
+    ebayRows,
+    relistingRows,
     rows,
     counts: {
       watchlist: watchlistRows.length,
       watchlistRelistings: watchlistRows.filter((row) => row.tags.includes("Relisting candidate")).length,
-      needsAction: needsActionRows.length,
-      relistings: watchlistRows.filter((row) => row.tags.includes("Relisting candidate")).length + needsActionRows.length,
+      needsAction: relistingRows.length,
+      relistings: relistingRows.length,
       won: wonRows.length,
-      neverWon: rows.filter((row) => row.tags.includes("Never won")).length,
+      neverWon: unresolvedRows.length,
       resolved: resolvedRows.length
     }
   };
@@ -165,19 +170,19 @@ export function filterHomeFeedRows(
 ): HomeFeedRow[] {
   switch (filter) {
     case "needsAction":
-      return rows.filter((row) => row.section === "needs_action");
+      return rows.filter((row) => row.modelList === "relisting_candidate" && row.section === "needs_action");
     case "won":
-      return rows.filter((row) => row.section === "won");
+      return rows.filter((row) => row.modelList === "ebay" && row.section === "won");
     case "onWatchlist":
-      return rows.filter((row) => row.section === "watchlist");
+      return rows.filter((row) => row.modelList === "ebay" && row.section === "watchlist");
     case "relistings":
       return rows
-        .filter((row) => row.tags.includes("Relisting candidate"))
+        .filter((row) => row.modelList === "relisting_candidate")
         .filter((row) => relistingFormatFilter === "both" || row.tags.includes(formatTagForRelistingFilter(relistingFormatFilter)));
     case "neverWon":
-      return rows.filter((row) => row.tags.includes("Never won"));
+      return rows.filter((row) => row.modelList === "ebay" && row.section === "unresolved");
     case "resolved":
-      return rows.filter((row) => row.section === "resolved");
+      return rows.filter((row) => row.modelList === "ebay" && row.section === "resolved");
     case "all":
     case "search":
       return rows;
@@ -217,6 +222,7 @@ function activeListingRow(input: {
 }): HomeFeedRow {
   return {
     id: input.id,
+    modelList: input.section === "needs_action" ? "relisting_candidate" : "ebay",
     section: input.section,
     title: input.item.title,
     currentPrice: input.item.currentPrice,
@@ -242,6 +248,7 @@ function activeListingRow(input: {
 function historyRow(item: EbayBuyingHistoryItem, section: HomeFeedSection, tags: HomeFeedTag[]): HomeFeedRow {
   return {
     id: `${section}-${item.itemId}`,
+    modelList: "ebay",
     section,
     title: item.title,
     currentPrice: section === "won" ? item.currentPrice : undefined,

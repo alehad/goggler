@@ -48,8 +48,10 @@ test("fetches live watchlist, lost, and won lists into the Home feed contract", 
   assert.equal(response.homeFeed.rows[0].itemWebUrl, "https://www.ebay.co.uk/itm/watch-001");
   assert.equal(
     response.homeFeed.rows.find((row) => row.section === "unresolved")?.imageUrl,
-    "https://i.ebayimg.example/lost-002.jpg"
+    "https://i.ebayimg.example/lost-001.jpg"
   );
+  assert.equal(response.homeFeed.ebayRows.every((row) => row.modelList === "ebay"), true);
+  assert.equal(response.homeFeed.relistingRows.every((row) => row.modelList === "relisting_candidate"), true);
   assert.equal(response.homeFeed.rows.find((row) => row.section === "won")?.imageUrl, "https://i.ebayimg.example/won-001.jpg");
   assert.equal(response.watchlistItems.every((item) => item.itemId !== "watch-ended"), true);
   assert.equal(JSON.stringify(response).includes("session-access-token"), false);

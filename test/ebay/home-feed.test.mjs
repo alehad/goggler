@@ -15,6 +15,8 @@ test("builds Home feed with eBay watchlist items first in watchlist order", () =
   assert.equal(feed.counts.watchlistRelistings, 2);
   assert.equal(feed.counts.needsAction, 2);
   assert.equal(feed.counts.won, 7);
+  assert.equal(feed.ebayRows.every((row) => row.modelList === "ebay"), true);
+  assert.equal(feed.relistingRows.every((row) => row.modelList === "relisting_candidate"), true);
   assert.equal(feed.rows.slice(0, 6).every((row) => row.section === "watchlist"), true);
   assert.deepEqual(
     feed.rows.slice(0, 6).map((row) => row.sourceItemId),
@@ -98,8 +100,24 @@ test("filters won and never-won Home rows", () => {
 
   assert.equal(filterHomeFeedRows(feed.rows, "won").length, 7);
   assert.equal(filterHomeFeedRows(feed.rows, "neverWon").length, 6);
-  assert.equal(filterHomeFeedRows(feed.rows, "relistings").length, 4);
+  assert.equal(filterHomeFeedRows(feed.rows, "relistings").length, 2);
   assert.equal(feed.rows.filter((row) => row.section === "resolved").length, 4);
+});
+
+test("keeps never-won eBay history separate from relisting candidates", () => {
+  const feed = buildHomeFeed({
+    lostItems: mockLostBidItems,
+    wonItems: mockWonItems,
+    watchlistItems: [],
+    relistingCandidates: mockRelistingCandidates
+  });
+
+  const neverWonRows = filterHomeFeedRows(feed.rows, "neverWon");
+  const relistingRows = filterHomeFeedRows(feed.rows, "relistings");
+
+  assert.equal(neverWonRows.length, 6);
+  assert.equal(neverWonRows.every((row) => row.modelList === "ebay" && row.section === "unresolved"), true);
+  assert.equal(relistingRows.every((row) => row.modelList === "relisting_candidate"), true);
 });
 
 test("preserves thumbnails for all Home feed item classes", () => {

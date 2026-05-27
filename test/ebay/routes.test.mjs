@@ -430,7 +430,7 @@ test("eBay buying history route serves fixture history after eBay connection", a
     watchlist: 6,
     watchlistRelistings: 2,
     needsAction: 2,
-    relistings: 4
+    relistings: 2
   });
   assert.equal(body.lostItems.length, 10);
   assert.equal(body.wonItems.length, 7);
