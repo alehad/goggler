@@ -1,0 +1,18 @@
+# ngrok Traffic Policy fallback for local goggler development.
+#
+# Prefer ngrok/oauth.yml. Use this fallback only if full tunnel OAuth breaks the
+# eBay browser callback by dropping or changing the callback `code` or `state`.
+#
+# This policy keeps app UI/API routes behind ngrok OAuth but lets only the eBay
+# callback route reach goggler directly. The callback remains protected by
+# goggler's HMAC-signed OAuth state validation, 10-minute TTL, session binding
+# when available, pending state replay protection, and server-side eBay
+# authorization-code exchange.
+on_http_request:
+  - expressions:
+      - "req.url.path != '/api/auth/ebay/callback'"
+    actions:
+      - type: oauth
+        config:
+          provider: google
+          auth_id: goggler-dev

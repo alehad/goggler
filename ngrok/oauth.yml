@@ -1,0 +1,10 @@
+# ngrok Traffic Policy for local goggler development.
+# Default mode: require OAuth before any public tunnel request reaches the app.
+# Start with:
+#   ngrok http 3000 --traffic-policy-file ngrok/oauth.yml
+on_http_request:
+  - actions:
+      - type: oauth
+        config:
+          provider: google
+          auth_id: goggler-dev
