@@ -19,4 +19,16 @@ export type EbayHistoryResponse = {
   relistingCandidates: HomeFeedRelistingCandidate[];
   homeFeed: HomeFeed;
   warnings?: string[];
+  diagnostics?: {
+    purchases?: {
+      wonListCount: number;
+      getOrdersCount?: number;
+      mergedWonCount: number;
+      overlapCount: number;
+      wonListTruncated: boolean;
+      getOrdersTruncated?: boolean;
+      getOrdersWindowDays?: number;
+      getOrdersWindowEndDaysAgo?: number;
+    };
+  };
 };

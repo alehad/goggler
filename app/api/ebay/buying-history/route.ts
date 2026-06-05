@@ -54,12 +54,15 @@ async function handleBuyingHistoryRequest(request: NextRequest, matchingPreferen
 
   if (sourceStatus.source === "live") {
     try {
+      const history = await fetchLiveEbayHistoryResponse(loadEbayConfig(), ebayAccess.accessToken, {
+        matchingPreferences
+      });
+      if (history.diagnostics?.purchases) {
+        console.info("Live eBay purchase source diagnostics", history.diagnostics.purchases);
+      }
+
       return withInternalSessionCookie(
-        NextResponse.json(
-          await fetchLiveEbayHistoryResponse(loadEbayConfig(), ebayAccess.accessToken, {
-            matchingPreferences
-          })
-        ),
+        NextResponse.json(history),
         currentUser.setCookie
       );
     } catch (error) {

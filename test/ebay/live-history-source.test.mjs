@@ -18,8 +18,21 @@ test("fetches live watchlist, lost, and won lists into the Home feed contract", 
     now: new Date("2026-05-13T12:00:00.000Z"),
     fetch: async (_url, init) => {
       const body = String(init.body);
+      const callName = init.headers["X-EBAY-API-CALL-NAME"];
+      if (callName === "GetOrders") {
+        calls.push({
+          callName,
+          token: init.headers["X-EBAY-API-IAF-TOKEN"],
+          body
+        });
+        return new Response(getOrdersResponseXml(), {
+          headers: { "Content-Type": "text/xml" }
+        });
+      }
+
       const list = body.match(/<(WatchList|LostList|WonList)>/)?.[1];
       calls.push({
+        callName,
         list,
         token: init.headers["X-EBAY-API-IAF-TOKEN"],
         body
@@ -31,8 +44,8 @@ test("fetches live watchlist, lost, and won lists into the Home feed contract", 
   });
 
   assert.deepEqual(
-    calls.map((call) => call.list).sort(),
-    ["LostList", "WatchList", "WonList"]
+    calls.map((call) => call.list ?? call.callName).sort(),
+    ["GetOrders", "LostList", "WatchList", "WonList"]
   );
   assert.equal(calls.every((call) => call.token === "session-access-token"), true);
   assert.equal(calls.every((call) => !call.body.includes("session-access-token")), true);
@@ -40,8 +53,21 @@ test("fetches live watchlist, lost, and won lists into the Home feed contract", 
   assert.equal(response.counts.watchlist, 2);
   assert.equal(response.counts.watchlistRelistings, 1);
   assert.equal(response.counts.lost, 2);
-  assert.equal(response.counts.won, 1);
-  assert.equal(response.homeFeed.counts.won, 1);
+  assert.equal(response.counts.won, 2);
+  assert.equal(response.homeFeed.counts.won, 2);
+  assert.deepEqual(response.diagnostics?.purchases, {
+    wonListCount: 1,
+    getOrdersCount: 1,
+    mergedWonCount: 2,
+    overlapCount: 0,
+    wonListTruncated: false,
+    getOrdersTruncated: false,
+    getOrdersWindowDays: 30,
+    getOrdersWindowEndDaysAgo: 60
+  });
+  const getOrdersCall = calls.find((call) => call.callName === "GetOrders");
+  assert.match(getOrdersCall?.body ?? "", /<CreateTimeFrom>2026-02-12T12:00:00.000Z<\/CreateTimeFrom>/);
+  assert.match(getOrdersCall?.body ?? "", /<CreateTimeTo>2026-03-14T12:00:00.000Z<\/CreateTimeTo>/);
   assert.equal(response.homeFeed.rows[0].section, "watchlist");
   assert.equal(response.homeFeed.rows[0].watchlistPosition, 1);
   assert.equal(response.homeFeed.rows[0].imageUrl, "https://i.ebayimg.example/watch-001.jpg");
@@ -61,6 +87,12 @@ test("returns truncation warnings when a live list exceeds the safety limit", as
   const response = await fetchLiveEbayHistoryResponse(config, "session-access-token", {
     maxPagesPerList: 1,
     fetch: async (_url, init) => {
+      if (init.headers["X-EBAY-API-CALL-NAME"] === "GetOrders") {
+        return new Response(getOrdersResponseXml({ totalPages: 2 }), {
+          headers: { "Content-Type": "text/xml" }
+        });
+      }
+
       const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
       return new Response(responseXml(list, { totalPages: list === "WatchList" ? 2 : 1 }), {
         headers: { "Content-Type": "text/xml" }
@@ -68,7 +100,57 @@ test("returns truncation warnings when a live list exceeds the safety limit", as
     }
   });
 
-  assert.deepEqual(response.warnings, ["WatchList truncated after 1 pages"]);
+  assert.deepEqual(response.warnings, ["WatchList truncated after 1 pages", "GetOrders truncated after 1 pages"]);
+});
+
+test("dedupes overlapping WonList and GetOrders purchases", async () => {
+  const response = await fetchLiveEbayHistoryResponse(config, "session-access-token", {
+    maxPagesPerList: 1,
+    now: new Date("2026-05-13T12:00:00.000Z"),
+    fetch: async (_url, init) => {
+      if (init.headers["X-EBAY-API-CALL-NAME"] === "GetOrders") {
+        return new Response(getOrdersResponseXml({ itemId: "won-001" }), {
+          headers: { "Content-Type": "text/xml" }
+        });
+      }
+
+      const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
+      return new Response(responseXml(list), {
+        headers: { "Content-Type": "text/xml" }
+      });
+    }
+  });
+
+  assert.equal(response.counts.won, 1);
+  assert.equal(response.diagnostics?.purchases?.wonListCount, 1);
+  assert.equal(response.diagnostics?.purchases?.getOrdersCount, 1);
+  assert.equal(response.diagnostics?.purchases?.mergedWonCount, 1);
+  assert.equal(response.diagnostics?.purchases?.overlapCount, 1);
+  assert.equal(response.wonItems[0].imageUrl, "https://i.ebayimg.example/won-001.jpg");
+});
+
+test("keeps WonList purchases when GetOrders fails softly", async () => {
+  const response = await fetchLiveEbayHistoryResponse(config, "session-access-token", {
+    maxPagesPerList: 1,
+    now: new Date("2026-05-13T12:00:00.000Z"),
+    fetch: async (_url, init) => {
+      if (init.headers["X-EBAY-API-CALL-NAME"] === "GetOrders") {
+        return new Response("<GetOrdersResponse><Ack>Failure</Ack></GetOrdersResponse>", {
+          headers: { "Content-Type": "text/xml" }
+        });
+      }
+
+      const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
+      return new Response(responseXml(list), {
+        headers: { "Content-Type": "text/xml" }
+      });
+    }
+  });
+
+  assert.equal(response.counts.won, 1);
+  assert.equal(response.diagnostics?.purchases?.getOrdersCount, undefined);
+  assert.equal(response.diagnostics?.purchases?.mergedWonCount, 1);
+  assert.deepEqual(response.warnings, ["GetOrders buyer purchases unavailable"]);
 });
 
 test("uses configured catalogue criteria before exact title matching", async () => {
@@ -80,6 +162,12 @@ test("uses configured catalogue criteria before exact title matching", async () 
       criteriaText: String.raw`TBM\s*\d{1,4}; PAP\s*\d{1,4}`
     },
     fetch: async (_url, init) => {
+      if (init.headers["X-EBAY-API-CALL-NAME"] === "GetOrders") {
+        return new Response(getOrdersResponseXml({ empty: true }), {
+          headers: { "Content-Type": "text/xml" }
+        });
+      }
+
       const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
       return new Response(responseXml(list, { catalogueTitles: true }), {
         headers: { "Content-Type": "text/xml" }
@@ -102,6 +190,12 @@ test("uses default generic record ids before exact title matching", async () => 
       criteriaText: String.raw`\b[A-Z]{1,5}\d{1,6}\b`
     },
     fetch: async (_url, init) => {
+      if (init.headers["X-EBAY-API-CALL-NAME"] === "GetOrders") {
+        return new Response(getOrdersResponseXml({ empty: true }), {
+          headers: { "Content-Type": "text/xml" }
+        });
+      }
+
       const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
       return new Response(responseXml(list, { genericCatalogueTitles: true }), {
         headers: { "Content-Type": "text/xml" }
@@ -146,6 +240,12 @@ test("discovers live relisting candidates for unresolved lost record ids", async
               buyingOptions: ["AUCTION"]
             }
           ]
+        });
+      }
+
+      if (init.headers["X-EBAY-API-CALL-NAME"] === "GetOrders") {
+        return new Response(getOrdersResponseXml({ empty: true }), {
+          headers: { "Content-Type": "text/xml" }
         });
       }
 
@@ -245,4 +345,39 @@ function responseXml(listName, options = {}) {
     <ItemArray>${items}</ItemArray>
   </${listName}>
 </GetMyeBayBuyingResponse>`;
+}
+
+function getOrdersResponseXml(options = {}) {
+  const totalPages = options.totalPages ?? 1;
+  const itemId = options.itemId ?? "order-only-001";
+  const items = options.empty
+    ? ""
+    : `<Order>
+      <OrderID>order-001</OrderID>
+      <CreatedTime>2026-02-12T10:15:00.000Z</CreatedTime>
+      <TransactionArray>
+        <Transaction>
+          <TransactionID>transaction-001</TransactionID>
+          <CreatedDate>2026-02-12T10:15:00.000Z</CreatedDate>
+          <TransactionPrice currencyID="GBP">77.00</TransactionPrice>
+          <Item>
+            <ItemID>${itemId}</ItemID>
+            <Title>Order-only won record TBM2541</Title>
+            <PictureDetails><GalleryURL>https://i.ebayimg.example/${itemId}.jpg</GalleryURL></PictureDetails>
+            <ListingDetails><ViewItemURL>https://www.ebay.co.uk/itm/${itemId}?mkcid=1</ViewItemURL></ListingDetails>
+          </Item>
+        </Transaction>
+      </TransactionArray>
+    </Order>`;
+
+  return `<?xml version="1.0" encoding="utf-8"?>
+<GetOrdersResponse xmlns="urn:ebay:apis:eBLBaseComponents">
+  <Ack>Success</Ack>
+  <PaginationResult>
+    <TotalNumberOfPages>${totalPages}</TotalNumberOfPages>
+    <TotalNumberOfEntries>${options.empty ? 0 : 1}</TotalNumberOfEntries>
+  </PaginationResult>
+  <PageNumber>1</PageNumber>
+  <OrderArray>${items}</OrderArray>
+</GetOrdersResponse>`;
 }
