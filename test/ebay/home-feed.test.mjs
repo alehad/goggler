@@ -120,6 +120,26 @@ test("keeps never-won eBay history separate from relisting candidates", () => {
   assert.equal(relistingRows.every((row) => row.modelList === "relisting_candidate"), true);
 });
 
+test("preserves never-won max bid and final sold price currencies", () => {
+  const feed = buildHomeFeed({
+    lostItems: [
+      {
+        ...mockLostBidItems[4],
+        currentPrice: { value: 51, currency: "USD" },
+        maxBid: { value: 47, currency: "USD" }
+      }
+    ],
+    wonItems: [],
+    watchlistItems: [],
+    relistingCandidates: []
+  });
+
+  const neverWonRow = filterHomeFeedRows(feed.rows, "neverWon")[0];
+  assert.deepEqual(neverWonRow.maxBid, { value: 47, currency: "USD" });
+  assert.deepEqual(neverWonRow.currentPrice, { value: 51, currency: "USD" });
+  assert.deepEqual(neverWonRow.originalLostPrice, { value: 51, currency: "USD" });
+});
+
 test("preserves thumbnails for all Home feed item classes", () => {
   const feed = buildFixtureFeed();
   const watchlistRow = feed.rows.find((row) => row.sourceItemId === "sandbox-watch-001");

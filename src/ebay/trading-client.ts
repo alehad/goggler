@@ -12,6 +12,7 @@ export type EbayBuyingHistoryItem = {
   title: string;
   list: EbayBuyingListKind;
   currentPrice?: EbayMoney;
+  maxBid?: EbayMoney;
   endTime?: string;
   sellerUserId?: string;
   conditionDisplayName?: string;
@@ -215,6 +216,7 @@ function parseItem(xml: string, list: EbayBuyingListKind): EbayBuyingHistoryItem
     title,
     list,
     currentPrice: parseCurrentPrice(xml),
+    maxBid: list === "LostList" ? parseMoney(xml, "MaxBid") : undefined,
     endTime: firstText(firstBlock(xml, "ListingDetails") ?? "", "EndTime"),
     sellerUserId: firstText(firstBlock(xml, "Seller") ?? "", "UserID"),
     conditionDisplayName: firstText(xml, "ConditionDisplayName"),
@@ -293,7 +295,12 @@ function isLocalOrPrivateHost(hostname: string): boolean {
 }
 
 function parseCurrentPrice(xml: string): EbayMoney | undefined {
-  const match = xml.match(/<CurrentPrice(?:\s[^>]*)?>([\s\S]*?)<\/CurrentPrice>/);
+  return parseMoney(xml, "CurrentPrice");
+}
+
+function parseMoney(xml: string, tag: string): EbayMoney | undefined {
+  const escapedTag = escapeRegex(tag);
+  const match = xml.match(new RegExp(`<${escapedTag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${escapedTag}>`));
   if (!match) {
     return undefined;
   }
@@ -305,6 +312,10 @@ function parseCurrentPrice(xml: string): EbayMoney | undefined {
   }
 
   return { value, currency };
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function firstBlock(xml: string, tag: string): string | undefined {

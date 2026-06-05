@@ -43,6 +43,7 @@ export type HomeFeedRow = {
   section: HomeFeedSection;
   title: string;
   currentPrice?: { value: number; currency: string };
+  maxBid?: { value: number; currency: string };
   originalLostPrice?: { value: number; currency: string };
   endsAt?: string;
   sellerUserId?: string;
@@ -226,6 +227,7 @@ function activeListingRow(input: {
     section: input.section,
     title: input.item.title,
     currentPrice: input.item.currentPrice,
+    maxBid: undefined,
     originalLostPrice: input.lostItem?.currentPrice,
     endsAt: input.item.endsAt,
     sellerUserId: input.item.sellerUserId,
@@ -251,7 +253,8 @@ function historyRow(item: EbayBuyingHistoryItem, section: HomeFeedSection, tags:
     modelList: "ebay",
     section,
     title: item.title,
-    currentPrice: section === "won" ? item.currentPrice : undefined,
+    currentPrice: item.currentPrice,
+    maxBid: item.maxBid,
     originalLostPrice: section === "won" ? undefined : item.currentPrice,
     sellerUserId: item.sellerUserId,
     conditionDisplayName: item.conditionDisplayName,

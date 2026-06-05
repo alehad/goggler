@@ -117,6 +117,7 @@ function historyItem(
     list,
     relistingGroupId,
     currentPrice: { value, currency: "GBP" },
+    maxBid: list === "LostList" ? { value: Math.max(0, value - 7.5), currency: "GBP" } : undefined,
     endTime: `${date}T20:15:00.000Z`,
     sellerUserId: "sandbox-seller",
     conditionDisplayName: "Used",
