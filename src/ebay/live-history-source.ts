@@ -11,7 +11,10 @@ import {
 import { EBAY_BROWSE_SCOPE, getEbayApplicationAccessToken, type EbayApplicationAuthorization } from "./oauth-client.ts";
 import {
   fetchGetMyeBayBuyingPages,
+  fetchGetOrdersPages,
+  EbayTradingApiError,
   type EbayBuyingHistoryItem,
+  type EbayBuyerOrdersPages,
   type EbayBuyingListKind
 } from "./trading-client.ts";
 
@@ -19,6 +22,9 @@ export type FetchLiveEbayHistoryOptions = {
   fetch?: typeof fetch;
   entriesPerPage?: number;
   maxPagesPerList?: number;
+  maxGetOrdersPages?: number;
+  getOrdersWindowDays?: number;
+  getOrdersWindowEndDaysAgo?: number;
   matchingPreferences?: MatchingPreferences;
   now?: Date;
 };
@@ -30,6 +36,8 @@ export async function fetchLiveEbayHistoryResponse(
 ): Promise<EbayHistoryResponse> {
   const entriesPerPage = options.entriesPerPage ?? 50;
   const maxPages = options.maxPagesPerList ?? 3;
+  const getOrdersWindowDays = options.getOrdersWindowDays ?? 30;
+  const getOrdersWindowEndDaysAgo = options.getOrdersWindowEndDaysAgo ?? 60;
   const matchingPreferences = options.matchingPreferences ?? DEFAULT_MATCHING_PREFERENCES;
   const now = options.now ?? new Date();
   const fetchOptions = { fetch: options.fetch };
@@ -49,15 +57,29 @@ export async function fetchLiveEbayHistoryResponse(
     )
   );
 
+  const warnings = [watchList, lostList, wonList].flatMap((page) =>
+    page.truncated ? [`${page.list} truncated after ${page.pagesFetched} pages`] : []
+  );
+  const ordersSupplement = await fetchBuyerOrdersSupplement(
+    config,
+    accessToken,
+    {
+      entriesPerPage,
+      maxPages: options.maxGetOrdersPages ?? maxPages,
+      now,
+      windowDays: getOrdersWindowDays,
+      windowEndDaysAgo: getOrdersWindowEndDaysAgo
+    },
+    fetchOptions,
+    warnings
+  );
+  const mergedWon = mergeWonPurchases(wonList.items, ordersSupplement?.items ?? []);
   const lostItems = withRelistingGroups(lostList.items, matchingPreferences);
-  const wonItems = withRelistingGroups(wonList.items, matchingPreferences);
+  const wonItems = withRelistingGroups(mergedWon.items, matchingPreferences);
   const lostGroups = new Set(lostItems.map((item) => item.relistingGroupId).filter((value): value is string => Boolean(value)));
   const activeWatchListItems = watchList.items.filter((item) => isActiveListing(item, now));
   const watchlistItems = activeWatchListItems.map((item, index) =>
     toWatchlistItem(item, index + 1, groupForHistoryTitle(item.title, matchingPreferences), lostGroups)
-  );
-  const warnings = [watchList, lostList, wonList].flatMap((page) =>
-    page.truncated ? [`${page.list} truncated after ${page.pagesFetched} pages`] : []
   );
   const relistingCandidates = await discoverRelistingCandidates(config, lostItems, wonItems, matchingPreferences, fetchOptions, warnings);
   const homeFeed = buildHomeFeed({
@@ -85,8 +107,116 @@ export async function fetchLiveEbayHistoryResponse(
     watchlistItems,
     relistingCandidates,
     homeFeed,
-    warnings: warnings.length > 0 ? warnings : undefined
+    warnings: warnings.length > 0 ? warnings : undefined,
+    diagnostics: {
+      purchases: {
+        wonListCount: wonList.items.length,
+        getOrdersCount: ordersSupplement?.items.length,
+        mergedWonCount: wonItems.length,
+        overlapCount: mergedWon.overlapCount,
+        wonListTruncated: wonList.truncated,
+        getOrdersTruncated: ordersSupplement?.truncated,
+        getOrdersWindowDays,
+        getOrdersWindowEndDaysAgo
+      }
+    }
   };
+}
+
+async function fetchBuyerOrdersSupplement(
+  config: EbayConfig,
+  accessToken: string,
+  input: {
+    entriesPerPage: number;
+    maxPages: number;
+    now: Date;
+    windowDays: number;
+    windowEndDaysAgo: number;
+  },
+  fetchOptions: { fetch?: typeof fetch },
+  warnings: string[]
+): Promise<EbayBuyerOrdersPages | undefined> {
+  const createTimeTo = new Date(input.now.getTime() - input.windowEndDaysAgo * 24 * 60 * 60 * 1000);
+  const createTimeFrom = new Date(createTimeTo.getTime() - input.windowDays * 24 * 60 * 60 * 1000);
+
+  try {
+    const orders = await fetchGetOrdersPages(
+      config,
+      accessToken,
+      {
+        createTimeFrom,
+        createTimeTo,
+        entriesPerPage: input.entriesPerPage,
+        maxPages: input.maxPages
+      },
+      fetchOptions
+    );
+
+    if (orders.truncated) {
+      warnings.push(`GetOrders truncated after ${orders.pagesFetched} pages`);
+    }
+
+    return orders;
+  } catch (error) {
+    console.warn("GetOrders buyer purchases unavailable", {
+      type: error instanceof EbayTradingApiError ? "trading_api_error" : "unexpected_error",
+      hasAck: error instanceof EbayTradingApiError && error.ack !== undefined,
+      hasStatus: error instanceof EbayTradingApiError && error.status !== undefined,
+      errorCodes: error instanceof EbayTradingApiError ? error.errorCodes : undefined
+    });
+    warnings.push("GetOrders buyer purchases unavailable");
+    return undefined;
+  }
+}
+
+function mergeWonPurchases(
+  wonListItems: EbayBuyingHistoryItem[],
+  getOrdersItems: EbayBuyingHistoryItem[]
+): { items: EbayBuyingHistoryItem[]; overlapCount: number } {
+  const byKey = new Map<string, EbayBuyingHistoryItem>();
+  let overlapCount = 0;
+
+  for (const item of wonListItems) {
+    byKey.set(wonPurchaseKey(item), item);
+  }
+
+  for (const item of getOrdersItems) {
+    const key = wonPurchaseKey(item);
+    const existing = byKey.get(key);
+
+    if (existing) {
+      overlapCount += 1;
+      byKey.set(key, {
+        ...item,
+        ...existing,
+        currentPrice: existing.currentPrice ?? item.currentPrice,
+        endTime: existing.endTime ?? item.endTime,
+        sellerUserId: existing.sellerUserId ?? item.sellerUserId,
+        conditionDisplayName: existing.conditionDisplayName ?? item.conditionDisplayName,
+        categoryId: existing.categoryId ?? item.categoryId,
+        categoryName: existing.categoryName ?? item.categoryName,
+        imageUrl: existing.imageUrl ?? item.imageUrl,
+        itemWebUrl: existing.itemWebUrl ?? item.itemWebUrl
+      });
+      continue;
+    }
+
+    byKey.set(key, item);
+  }
+
+  return { items: Array.from(byKey.values()), overlapCount };
+}
+
+function wonPurchaseKey(item: EbayBuyingHistoryItem): string {
+  if (item.itemId) {
+    return `item:${item.itemId}`;
+  }
+
+  return [
+    item.title.toLocaleLowerCase("en-GB").replace(/\s+/g, " ").trim(),
+    item.currentPrice ? `${item.currentPrice.currency}:${item.currentPrice.value}` : "",
+    item.endTime ?? ""
+  ].join("|");
 }
 
 function withRelistingGroups(items: EbayBuyingHistoryItem[], matchingPreferences: MatchingPreferences): EbayBuyingHistoryItem[] {

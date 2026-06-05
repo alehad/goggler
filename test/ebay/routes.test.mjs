@@ -516,6 +516,12 @@ test("eBay buying history route serves mocked live history after eBay connection
   authorizeEbaySession(session.session.id);
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (_url, init) => {
+    if (init.headers["X-EBAY-API-CALL-NAME"] === "GetOrders") {
+      return new Response(liveOrdersResponseXml(), {
+        headers: { "Content-Type": "text/xml" }
+      });
+    }
+
     const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
     return new Response(liveResponseXml(list), {
       headers: { "Content-Type": "text/xml" }
@@ -850,6 +856,19 @@ function jsonResponse(body) {
   return new Response(JSON.stringify(body), {
     headers: { "Content-Type": "application/json" }
   });
+}
+
+function liveOrdersResponseXml() {
+  return `<?xml version="1.0" encoding="utf-8"?>
+<GetOrdersResponse xmlns="urn:ebay:apis:eBLBaseComponents">
+  <Ack>Success</Ack>
+  <PaginationResult>
+    <TotalNumberOfPages>1</TotalNumberOfPages>
+    <TotalNumberOfEntries>0</TotalNumberOfEntries>
+  </PaginationResult>
+  <PageNumber>1</PageNumber>
+  <OrderArray></OrderArray>
+</GetOrdersResponse>`;
 }
 
 function liveResponseXml(listName) {

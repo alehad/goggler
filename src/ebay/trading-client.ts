@@ -35,6 +35,20 @@ export type GetMyeBayBuyingPagesInput = {
   maxPages?: number;
 };
 
+export type GetOrdersInput = {
+  createTimeFrom: Date;
+  createTimeTo: Date;
+  pageNumber?: number;
+  entriesPerPage?: number;
+};
+
+export type GetOrdersPagesInput = {
+  createTimeFrom: Date;
+  createTimeTo: Date;
+  entriesPerPage?: number;
+  maxPages?: number;
+};
+
 export type EbayTradingRequest = {
   url: string;
   headers: Record<string, string>;
@@ -59,14 +73,32 @@ export type EbayBuyingHistoryPages = {
   items: EbayBuyingHistoryItem[];
 };
 
+export type EbayBuyerOrdersPage = {
+  ack: string;
+  pageNumber: number;
+  totalPages: number;
+  totalEntries: number;
+  items: EbayBuyingHistoryItem[];
+};
+
+export type EbayBuyerOrdersPages = {
+  pagesFetched: number;
+  truncated: boolean;
+  totalPages: number;
+  totalEntries: number;
+  items: EbayBuyingHistoryItem[];
+};
+
 export class EbayTradingApiError extends Error {
   readonly status?: number;
   readonly ack?: string;
+  readonly errorCodes?: string[];
 
-  constructor(message: string, details: { status?: number; ack?: string } = {}) {
+  constructor(message: string, details: { status?: number; ack?: string; errorCodes?: string[] } = {}) {
     super(message);
     this.status = details.status;
     this.ack = details.ack;
+    this.errorCodes = details.errorCodes;
   }
 }
 
@@ -108,6 +140,43 @@ export function buildGetMyeBayBuyingRequest(
   };
 }
 
+export function buildGetOrdersRequest(
+  config: EbayConfig,
+  accessToken: string,
+  input: GetOrdersInput
+): EbayTradingRequest {
+  assertTrustedTradingApiUrl(config);
+
+  const pageNumber = input.pageNumber ?? 1;
+  const entriesPerPage = input.entriesPerPage ?? 100;
+
+  return {
+    url: config.tradingApiUrl,
+    headers: {
+      "Content-Type": "text/xml",
+      "X-EBAY-API-CALL-NAME": "GetOrders",
+      "X-EBAY-API-COMPATIBILITY-LEVEL": TRADING_API_COMPATIBILITY_LEVEL,
+      "X-EBAY-API-SITEID": config.tradingSiteId,
+      "X-EBAY-API-IAF-TOKEN": accessToken
+    },
+    body: [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<GetOrdersRequest xmlns="urn:ebay:apis:eBLBaseComponents">',
+      "  <WarningLevel>High</WarningLevel>",
+      "  <DetailLevel>ReturnAll</DetailLevel>",
+      "  <OrderRole>Buyer</OrderRole>",
+      "  <OrderStatus>All</OrderStatus>",
+      `  <CreateTimeFrom>${input.createTimeFrom.toISOString()}</CreateTimeFrom>`,
+      `  <CreateTimeTo>${input.createTimeTo.toISOString()}</CreateTimeTo>`,
+      "  <Pagination>",
+      `    <EntriesPerPage>${entriesPerPage}</EntriesPerPage>`,
+      `    <PageNumber>${pageNumber}</PageNumber>`,
+      "  </Pagination>",
+      "</GetOrdersRequest>"
+    ].join("\n")
+  };
+}
+
 export async function fetchGetMyeBayBuyingPage(
   config: EbayConfig,
   accessToken: string,
@@ -129,6 +198,29 @@ export async function fetchGetMyeBayBuyingPage(
   }
 
   return parseGetMyeBayBuyingResponse(await response.text(), input.list);
+}
+
+export async function fetchGetOrdersPage(
+  config: EbayConfig,
+  accessToken: string,
+  input: GetOrdersInput,
+  options: { fetch?: typeof fetch } = {}
+): Promise<EbayBuyerOrdersPage> {
+  const fetchImpl = options.fetch ?? fetch;
+  const request = buildGetOrdersRequest(config, accessToken, input);
+  const response = await fetchImpl(request.url, {
+    method: "POST",
+    headers: request.headers,
+    body: request.body
+  });
+
+  if (!response.ok) {
+    throw new EbayTradingApiError(`eBay Trading API request failed with status ${response.status}`, {
+      status: response.status
+    });
+  }
+
+  return parseGetOrdersResponse(await response.text());
 }
 
 export async function fetchGetMyeBayBuyingPages(
@@ -172,6 +264,47 @@ export async function fetchGetMyeBayBuyingPages(
   };
 }
 
+export async function fetchGetOrdersPages(
+  config: EbayConfig,
+  accessToken: string,
+  input: GetOrdersPagesInput,
+  options: { fetch?: typeof fetch } = {}
+): Promise<EbayBuyerOrdersPages> {
+  const maxPages = Math.min(Math.max(input.maxPages ?? 3, 1), 10);
+  const entriesPerPage = input.entriesPerPage ?? 50;
+  const items: EbayBuyingHistoryItem[] = [];
+  let pageNumber = 1;
+  let totalPages = 1;
+  let totalEntries = 0;
+
+  while (pageNumber <= totalPages && pageNumber <= maxPages) {
+    const page = await fetchGetOrdersPage(
+      config,
+      accessToken,
+      {
+        createTimeFrom: input.createTimeFrom,
+        createTimeTo: input.createTimeTo,
+        entriesPerPage,
+        pageNumber
+      },
+      options
+    );
+
+    totalPages = Math.max(1, page.totalPages);
+    totalEntries = page.totalEntries;
+    items.push(...page.items);
+    pageNumber += 1;
+  }
+
+  return {
+    pagesFetched: pageNumber - 1,
+    truncated: totalPages > maxPages,
+    totalPages,
+    totalEntries,
+    items
+  };
+}
+
 export function parseGetMyeBayBuyingResponse(xml: string, list: EbayBuyingListKind): EbayBuyingHistoryPage {
   const ack = firstText(xml, "Ack");
   if (!ack) {
@@ -179,7 +312,7 @@ export function parseGetMyeBayBuyingResponse(xml: string, list: EbayBuyingListKi
   }
 
   if (ack !== "Success" && ack !== "Warning") {
-    throw new EbayTradingApiError(`eBay Trading API returned ${ack}`, { ack });
+    throw new EbayTradingApiError(`eBay Trading API returned ${ack}`, { ack, errorCodes: tradingApiErrorCodes(xml) });
   }
 
   const listXml = firstBlock(xml, list);
@@ -204,6 +337,27 @@ export function parseGetMyeBayBuyingResponse(xml: string, list: EbayBuyingListKi
   };
 }
 
+export function parseGetOrdersResponse(xml: string): EbayBuyerOrdersPage {
+  const ack = firstText(xml, "Ack");
+  if (!ack) {
+    throw new EbayTradingApiError("eBay Trading API response was missing Ack");
+  }
+
+  if (ack !== "Success" && ack !== "Warning") {
+    throw new EbayTradingApiError(`eBay Trading API returned ${ack}`, { ack, errorCodes: tradingApiErrorCodes(xml) });
+  }
+
+  const orderArrayXml = firstBlock(xml, "OrderArray") ?? "";
+
+  return {
+    ack,
+    pageNumber: parsePositiveInteger(firstText(xml, "PageNumber"), 1),
+    totalPages: parsePositiveInteger(firstText(xml, "TotalNumberOfPages"), 1),
+    totalEntries: parsePositiveInteger(firstText(xml, "TotalNumberOfEntries"), 0),
+    items: blocks(orderArrayXml, "Order").flatMap((orderXml) => parseOrderItems(orderXml))
+  };
+}
+
 function parseItem(xml: string, list: EbayBuyingListKind): EbayBuyingHistoryItem {
   const itemId = firstText(xml, "ItemID");
   const title = firstText(xml, "Title");
@@ -225,6 +379,39 @@ function parseItem(xml: string, list: EbayBuyingListKind): EbayBuyingHistoryItem
     imageUrl: parseImageUrl(xml),
     itemWebUrl: parseItemWebUrl(xml)
   };
+}
+
+function parseOrderItems(orderXml: string): EbayBuyingHistoryItem[] {
+  const orderId = firstText(orderXml, "OrderID");
+  const orderCreatedTime = firstText(orderXml, "CreatedTime");
+  const paidTime = firstText(orderXml, "PaidTime");
+  const orderSellerUserId = firstText(orderXml, "SellerUserID");
+  const transactionArrayXml = firstBlock(orderXml, "TransactionArray") ?? "";
+
+  return blocks(transactionArrayXml, "Transaction").flatMap((transactionXml) => {
+    const itemXml = firstBlock(transactionXml, "Item") ?? "";
+    const transactionId = firstText(transactionXml, "TransactionID");
+    const itemId = firstText(itemXml, "ItemID") ?? firstText(transactionXml, "ItemID") ?? orderId ?? transactionId;
+    const title = firstText(itemXml, "Title") ?? firstText(transactionXml, "Title");
+
+    if (!itemId || !title) {
+      return [];
+    }
+
+    return {
+      itemId,
+      title,
+      list: "WonList",
+      currentPrice: parseMoney(transactionXml, "TransactionPrice") ?? parseMoney(itemXml, "CurrentPrice"),
+      endTime: firstText(transactionXml, "CreatedDate") ?? paidTime ?? orderCreatedTime,
+      sellerUserId: firstText(firstBlock(itemXml, "Seller") ?? "", "UserID") ?? orderSellerUserId,
+      conditionDisplayName: firstText(itemXml, "ConditionDisplayName"),
+      categoryId: firstText(firstBlock(itemXml, "PrimaryCategory") ?? "", "CategoryID"),
+      categoryName: firstText(firstBlock(itemXml, "PrimaryCategory") ?? "", "CategoryName"),
+      imageUrl: parseImageUrl(transactionXml) ?? parseImageUrl(itemXml),
+      itemWebUrl: parseItemWebUrl(transactionXml) ?? parseItemWebUrl(itemXml)
+    } satisfies EbayBuyingHistoryItem;
+  });
 }
 
 function parseImageUrl(xml: string): string | undefined {
@@ -312,6 +499,13 @@ function parseMoney(xml: string, tag: string): EbayMoney | undefined {
   }
 
   return { value, currency };
+}
+
+function tradingApiErrorCodes(xml: string): string[] | undefined {
+  const codes = blocks(xml, "Errors")
+    .map((errorXml) => firstText(errorXml, "ErrorCode"))
+    .filter((value): value is string => Boolean(value));
+  return codes.length > 0 ? codes : undefined;
 }
 
 function escapeRegex(value: string): string {

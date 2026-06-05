@@ -3,9 +3,12 @@ import { test } from "node:test";
 import { loadEbayConfig } from "../../src/ebay/config.ts";
 import {
   buildGetMyeBayBuyingRequest,
+  buildGetOrdersRequest,
   fetchGetMyeBayBuyingPage,
   fetchGetMyeBayBuyingPages,
-  parseGetMyeBayBuyingResponse
+  fetchGetOrdersPages,
+  parseGetMyeBayBuyingResponse,
+  parseGetOrdersResponse
 } from "../../src/ebay/trading-client.ts";
 
 const config = loadEbayConfig({
@@ -60,6 +63,26 @@ test("builds WatchList requests independently from history list requests", () =>
   assert.equal(request.body.includes("session-access-token"), false);
 });
 
+test("builds GetOrders buyer requests with OAuth bearer material only in headers", () => {
+  const request = buildGetOrdersRequest(config, "session-access-token", {
+    createTimeFrom: new Date("2026-03-01T00:00:00.000Z"),
+    createTimeTo: new Date("2026-06-01T00:00:00.000Z"),
+    pageNumber: 2,
+    entriesPerPage: 25
+  });
+
+  assert.equal(request.url, "https://api.sandbox.ebay.com/ws/api.dll");
+  assert.equal(request.headers["X-EBAY-API-CALL-NAME"], "GetOrders");
+  assert.equal(request.headers["X-EBAY-API-IAF-TOKEN"], "session-access-token");
+  assert.match(request.body, /<OrderRole>Buyer<\/OrderRole>/);
+  assert.match(request.body, /<CreateTimeFrom>2026-03-01T00:00:00.000Z<\/CreateTimeFrom>/);
+  assert.match(request.body, /<CreateTimeTo>2026-06-01T00:00:00.000Z<\/CreateTimeTo>/);
+  assert.match(request.body, /<EntriesPerPage>25<\/EntriesPerPage>/);
+  assert.match(request.body, /<PageNumber>2<\/PageNumber>/);
+  assert.equal(request.body.includes("RequesterCredentials"), false);
+  assert.equal(request.body.includes("session-access-token"), false);
+});
+
 test("fetches GetMyeBayBuying pages up to the safety limit", async () => {
   const requestedPages = [];
   const pages = await fetchGetMyeBayBuyingPages(
@@ -83,6 +106,34 @@ test("fetches GetMyeBayBuying pages up to the safety limit", async () => {
   assert.equal(pages.items.length, 4);
 });
 
+test("fetches GetOrders pages up to the safety limit", async () => {
+  const requestedPages = [];
+  const pages = await fetchGetOrdersPages(
+    config,
+    "session-access-token",
+    {
+      createTimeFrom: new Date("2026-03-01T00:00:00.000Z"),
+      createTimeTo: new Date("2026-06-01T00:00:00.000Z"),
+      entriesPerPage: 1,
+      maxPages: 2
+    },
+    {
+      fetch: async (_url, init) => {
+        const pageNumber = Number(init.body.match(/<PageNumber>(\d+)<\/PageNumber>/)?.[1]);
+        requestedPages.push(pageNumber);
+        return new Response(getOrdersResponseXml({ pageNumber, totalPages: 3, totalEntries: 3 }), {
+          headers: { "Content-Type": "text/xml" }
+        });
+      }
+    }
+  );
+
+  assert.deepEqual(requestedPages, [1, 2]);
+  assert.equal(pages.truncated, true);
+  assert.equal(pages.pagesFetched, 2);
+  assert.equal(pages.items.length, 2);
+});
+
 test("falls back on malformed pagination values", () => {
   const page = parseGetMyeBayBuyingResponse(
     responseXml("WatchList", { pageNumber: "not-a-number", totalPages: "-1", totalEntries: "nope" }),
@@ -92,6 +143,28 @@ test("falls back on malformed pagination values", () => {
   assert.equal(page.pageNumber, 1);
   assert.equal(page.totalPages, 1);
   assert.equal(page.totalEntries, 0);
+});
+
+test("parses buyer GetOrders purchases into won history items", () => {
+  const page = parseGetOrdersResponse(getOrdersResponseXml());
+
+  assert.equal(page.ack, "Success");
+  assert.equal(page.pageNumber, 1);
+  assert.equal(page.totalPages, 1);
+  assert.equal(page.totalEntries, 1);
+  assert.deepEqual(page.items[0], {
+    itemId: "order-item-001",
+    title: "Three Blind Mice TBM2541 Japan vinyl LP",
+    list: "WonList",
+    currentPrice: { value: 64.99, currency: "USD" },
+    endTime: "2026-02-12T10:15:00.000Z",
+    sellerUserId: "order-seller",
+    conditionDisplayName: "Used",
+    categoryId: "176985",
+    categoryName: "Records",
+    imageUrl: "https://i.ebayimg.example/order-item-001.jpg",
+    itemWebUrl: "https://www.ebay.com/itm/order-item-001"
+  });
 });
 
 test("treats a missing requested list in a successful response as empty history", () => {
@@ -240,6 +313,11 @@ test("normalizes HTTP and API failures without leaking token values", async () =
     () => parseGetMyeBayBuyingResponse("<GetMyeBayBuyingResponse><Ack>Failure</Ack></GetMyeBayBuyingResponse>", "LostList"),
     /Failure/
   );
+
+  assert.throws(
+    () => parseGetOrdersResponse("<GetOrdersResponse><Ack>Failure</Ack></GetOrdersResponse>"),
+    /Failure/
+  );
 });
 
 function responseXml(listName, options = {}) {
@@ -293,4 +371,51 @@ function responseXml(listName, options = {}) {
     </ItemArray>
   </${listName}>
 </GetMyeBayBuyingResponse>`;
+}
+
+function getOrdersResponseXml(options = {}) {
+  const pageNumber = options.pageNumber ?? 1;
+  const totalPages = options.totalPages ?? 1;
+  const totalEntries = options.totalEntries ?? 1;
+
+  return `<?xml version="1.0" encoding="utf-8"?>
+<GetOrdersResponse xmlns="urn:ebay:apis:eBLBaseComponents">
+  <Ack>Success</Ack>
+  <PaginationResult>
+    <TotalNumberOfPages>${totalPages}</TotalNumberOfPages>
+    <TotalNumberOfEntries>${totalEntries}</TotalNumberOfEntries>
+  </PaginationResult>
+  <PageNumber>${pageNumber}</PageNumber>
+  <OrderArray>
+    <Order>
+      <OrderID>order-001</OrderID>
+      <CreatedTime>2026-02-12T10:15:00.000Z</CreatedTime>
+      <PaidTime>2026-02-12T10:16:00.000Z</PaidTime>
+      <SellerUserID>order-seller</SellerUserID>
+      <TransactionArray>
+        <Transaction>
+          <TransactionID>transaction-001</TransactionID>
+          <CreatedDate>2026-02-12T10:15:00.000Z</CreatedDate>
+          <TransactionPrice currencyID="USD">64.99</TransactionPrice>
+          <Item>
+            <ItemID>order-item-001</ItemID>
+            <Title>Three Blind Mice TBM2541 Japan vinyl LP</Title>
+            <Seller><UserID>order-seller</UserID></Seller>
+            <ListingDetails>
+              <ViewItemURL>https://www.ebay.com/itm/order-item-001?mkcid=1</ViewItemURL>
+            </ListingDetails>
+            <PictureDetails>
+              <GalleryURL>https://i.ebayimg.example/order-item-001.jpg</GalleryURL>
+            </PictureDetails>
+            <PrimaryCategory>
+              <CategoryID>176985</CategoryID>
+              <CategoryName>Records</CategoryName>
+            </PrimaryCategory>
+            <ConditionDisplayName>Used</ConditionDisplayName>
+          </Item>
+        </Transaction>
+      </TransactionArray>
+    </Order>
+  </OrderArray>
+</GetOrdersResponse>`;
 }
