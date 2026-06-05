@@ -434,6 +434,16 @@ h1 {
   font-size: 13px;
 }
 
+.seller-link {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.seller-link:hover {
+  text-decoration: underline;
+}
+
 .meta-row span + span::before {
   content: "|";
   margin-right: 8px;

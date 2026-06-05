@@ -25,6 +25,7 @@ import {
   type MatchingPreferences
 } from "../src/ebay/matching-preferences.ts";
 import { buildPurchaseAnalytics, type PurchaseChartPoint } from "../src/ebay/purchase-analytics.ts";
+import { ebaySellerProfileUrl } from "../src/ebay/seller-profile.ts";
 import { safeEbayImageUrl, safeEbayItemUrl } from "../src/http/safe-external-url.ts";
 
 type Tab = "dashboard" | "tracking" | "won" | "account";
@@ -675,7 +676,7 @@ function HomeFeedCard({ row, onAddToWatchlist }: { row: HomeFeedRow; onAddToWatc
 
         <div className="meta-row">
           <span>{row.conditionDisplayName ?? "Condition unknown"}</span>
-          <span>{row.sellerUserId ?? "Unknown seller"}</span>
+          <SellerLink sellerUserId={row.sellerUserId} />
           {row.maxBid && <span>max bid: {formatMoneyValue(row.maxBid)}</span>}
           {row.section === "unresolved" || row.section === "resolved" ? (
             row.currentPrice && <span>sold for: {formatMoneyValue(row.currentPrice)}</span>
@@ -1067,7 +1068,7 @@ function PurchaseCard({
         </div>
         <div className="meta-row">
           <span>{item.conditionDisplayName ?? "Condition unknown"}</span>
-          <span>{item.sellerUserId ?? "Unknown seller"}</span>
+          <SellerLink sellerUserId={item.sellerUserId} />
           {item.endTime && <span>{formatShortDate(item.endTime)}</span>}
         </div>
         <div className="signal-row">
@@ -1329,7 +1330,7 @@ function HistoryRow({ item, sideLabel }: { item: HistoryItem; sideLabel: string 
       <div>
         <h2>{item.title}</h2>
         <p>
-          {item.sellerUserId ?? "Unknown seller"}
+          <SellerLink inline sellerUserId={item.sellerUserId} />
           {item.conditionDisplayName ? ` | ${item.conditionDisplayName}` : ""}
           {item.endTime ? ` | ended ${new Date(item.endTime).toLocaleDateString()}` : ""}
         </p>
@@ -1341,6 +1342,20 @@ function HistoryRow({ item, sideLabel }: { item: HistoryItem; sideLabel: string 
       </div>
     </div>
   );
+}
+
+function SellerLink({ inline = false, sellerUserId }: { inline?: boolean; sellerUserId?: string }) {
+  const sellerUrl = ebaySellerProfileUrl(sellerUserId);
+  const sellerLabel = sellerUserId?.trim() || "Unknown seller";
+  const content = sellerUrl ? (
+    <a className="seller-link" href={sellerUrl} rel="noreferrer" target="_blank">
+      {sellerLabel}
+    </a>
+  ) : (
+    sellerLabel
+  );
+
+  return inline ? <>{content}</> : <span>{content}</span>;
 }
 
 function HistoryEmptyState({ state }: { state: HistoryState }) {
