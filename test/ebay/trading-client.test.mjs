@@ -132,7 +132,8 @@ test("parses normalized buying history pages", () => {
     itemId: "sandbox-lost-001",
     title: "Rega Planar 3 turntable & Elys cartridge",
     list: "LostList",
-    currentPrice: { value: 214.25, currency: "GBP" },
+    currentPrice: { value: 214.25, currency: "USD" },
+    maxBid: { value: 205, currency: "USD" },
     endTime: "2026-01-12T20:15:00.000Z",
     sellerUserId: "sandbox-seller",
     conditionDisplayName: "Used",
@@ -141,6 +142,15 @@ test("parses normalized buying history pages", () => {
     imageUrl: "https://i.ebayimg.example/sandbox-lost-001.jpg",
     itemWebUrl: "https://www.ebay.co.uk/itm/sandbox-lost-001"
   });
+});
+
+test("parses lost-list max bid separately from final auction price", () => {
+  const page = parseGetMyeBayBuyingResponse(responseXml("LostList"), "LostList");
+
+  assert.deepEqual(page.items[0].maxBid, { value: 205, currency: "USD" });
+  assert.deepEqual(page.items[0].currentPrice, { value: 214.25, currency: "USD" });
+  assert.equal(page.items[1].maxBid, undefined);
+  assert.deepEqual(page.items[1].currentPrice, { value: 326.01, currency: "GBP" });
 });
 
 test("rejects unsafe listing image URLs", () => {
@@ -261,8 +271,11 @@ function responseXml(listName, options = {}) {
         <PictureDetails>
           <GalleryURL>${imageUrl}</GalleryURL>
         </PictureDetails>
+        <BiddingDetails>
+          <MaxBid currencyID="USD">205.00</MaxBid>
+        </BiddingDetails>
         <SellingStatus>
-          <CurrentPrice currencyID="GBP">214.25</CurrentPrice>
+          <CurrentPrice currencyID="USD">214.25</CurrentPrice>
         </SellingStatus>
         <PrimaryCategory>
           <CategoryID>176985</CategoryID>

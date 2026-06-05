@@ -81,6 +81,10 @@ type HistoryItem = {
     value: number;
     currency: string;
   };
+  maxBid?: {
+    value: number;
+    currency: string;
+  };
   endTime?: string;
   sellerUserId?: string;
   conditionDisplayName?: string;
@@ -134,6 +138,7 @@ type HomeFeedRow = {
   section: "watchlist" | "needs_action" | "won" | "unresolved" | "resolved" | "search_result";
   title: string;
   currentPrice?: { value: number; currency: string };
+  maxBid?: { value: number; currency: string };
   originalLostPrice?: { value: number; currency: string };
   endsAt?: string;
   sellerUserId?: string;
@@ -671,7 +676,12 @@ function HomeFeedCard({ row, onAddToWatchlist }: { row: HomeFeedRow; onAddToWatc
         <div className="meta-row">
           <span>{row.conditionDisplayName ?? "Condition unknown"}</span>
           <span>{row.sellerUserId ?? "Unknown seller"}</span>
-          {row.originalLostPrice && <span>{formatCurrency(row.originalLostPrice.value)} lost bid</span>}
+          {row.maxBid && <span>max bid: {formatMoneyValue(row.maxBid)}</span>}
+          {row.section === "unresolved" || row.section === "resolved" ? (
+            row.currentPrice && <span>sold for: {formatMoneyValue(row.currentPrice)}</span>
+          ) : (
+            row.originalLostPrice && <span>previous sold for: {formatMoneyValue(row.originalLostPrice)}</span>
+          )}
         </div>
 
         <div className="signal-row">
@@ -684,8 +694,8 @@ function HomeFeedCard({ row, onAddToWatchlist }: { row: HomeFeedRow; onAddToWatc
       </div>
 
       <div className="listing-side">
-        <strong>{row.currentPrice ? formatCurrency(row.currentPrice.value) : "-"}</strong>
-        <span>{row.currentPrice ? "current price" : "lost bid"}</span>
+        <strong>{formatHomeFeedSidePrice(row)}</strong>
+        <span>{homeFeedSideLabel(row)}</span>
         {row.endsAt && (
           <span className="ends">
             <Clock3 size={16} />
@@ -1325,7 +1335,8 @@ function HistoryRow({ item, sideLabel }: { item: HistoryItem; sideLabel: string 
         </p>
       </div>
       <div className="history-side">
-        <span className="price-pill">{formatCurrency(item.currentPrice?.value ?? 0)}</span>
+        <span className="price-pill">{item.maxBid ? `max bid: ${formatMoneyValue(item.maxBid)}` : "max bid unavailable"}</span>
+        <span className="price-pill">{item.currentPrice ? `sold for: ${formatMoneyValue(item.currentPrice)}` : "sold price unavailable"}</span>
         <span className={sideLabel === "Eventually won" ? "status hot" : "status"}>{sideLabel}</span>
       </div>
     </div>
@@ -1528,17 +1539,30 @@ function formatMoneyValue(value: { value: number; currency: string } | undefined
 }
 
 function formatMoneyAmount(value: number, currency: string): string {
-  return new Intl.NumberFormat("en-GB", {
+  return new Intl.NumberFormat(currency === "USD" ? "en-US" : "en-GB", {
     currency,
     style: "currency"
   }).format(value);
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-GB", {
-    currency: "GBP",
-    style: "currency"
-  }).format(value);
+function formatHomeFeedSidePrice(row: HomeFeedRow): string {
+  if (row.section === "unresolved" || row.section === "resolved") {
+    return formatMoneyValue(row.currentPrice);
+  }
+
+  return formatMoneyValue(row.currentPrice);
+}
+
+function homeFeedSideLabel(row: HomeFeedRow): string {
+  if (row.section === "unresolved" || row.section === "resolved") {
+    return row.currentPrice ? "sold for" : "sold price";
+  }
+
+  if (row.section === "won") {
+    return row.currentPrice ? "paid price" : "paid price";
+  }
+
+  return row.currentPrice ? "current price" : "price unavailable";
 }
 
 function Metric({ label, value, detail }: { label: string; value: string; detail: string }) {
