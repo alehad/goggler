@@ -23,6 +23,50 @@ Initial scope:
 - Show candidates in an in-app dashboard.
 - Preserve won-item data for later purchase analytics.
 
+## Current Status As Of 2026-06-05
+
+- `main` is clean and synced with `origin/main`.
+- Latest merged PR: #30, `Show lost bid and sold price currencies`.
+- Real production eBay read-only testing is working through the secure ngrok tunnel.
+- The local secure tunnel command is:
+
+```bash
+ngrok http 3000 --traffic-policy-file ngrok/oauth.yml
+```
+
+- The reserved ngrok URL is still:
+
+```text
+https://unrigged-fifth-nastily.ngrok-free.dev
+```
+
+- The ngrok OAuth reset URL is:
+
+```text
+https://unrigged-fifth-nastily.ngrok-free.dev/ngrok/logout?auth_id=goggler-dev
+```
+
+- Production/live local app startup command:
+
+```bash
+EBAY_ENVIRONMENT=production GOGGLER_EBAY_HISTORY_SOURCE=live npm run dev
+```
+
+- eBay production read-only mode retrieves live watchlist, lost, and won buying-history rows from the authenticated account.
+- eBay token values remain session-scoped only and are not persisted at rest.
+- The Home feed data model now keeps two distinct lists:
+  - eBay-sourced rows: current watchlist, won items, and lost/not-won history.
+  - Relisting candidate rows: live search results that may be worth adding to the watchlist.
+- Home live search searches active eBay listings, not only loaded local rows.
+- Relisting discovery searches active eBay listings from unresolved lost-item catalogue IDs and filters by trusted record categories where available.
+- Relisting view has an auction/buy-now/both filter visible only when the Relistings filter is active.
+- Purchases tab has the local won-item paid-price chart restored. It uses won-item data only and no longer switches into Marketplace Insights mode on item selection.
+- Marketplace Insights / 90-day sold-history code remains present behind its API route, but eBay access to `buy.marketplace.insights` is not yet available, so it is not the active Purchases experience.
+- Lost/never-won rows now distinguish:
+  - `max bid: <amount>` from `LostList.Item.BiddingDetails.MaxBid`, when eBay returns it.
+  - `sold for: <amount>` from `LostList.Item.SellingStatus.CurrentPrice`.
+  - Returned currency is preserved. USD displays as `$`; other dollar currencies should keep disambiguating prefixes such as `CA$` or `A$`.
+
 ## Architecture Decisions So Far
 
 - Use OpenSpec for spec-driven development.
@@ -45,6 +89,8 @@ Initial scope:
 - eBay OAuth state signing requires `GOGGLER_AUTH_SECRET` with at least 32 characters.
 - State-changing POST routes use same-origin CSRF checks.
 - Local development through HTTPS tunnels is supported for OAuth testing. Forwarded `x-forwarded-host` / `x-forwarded-proto` headers are used to validate tunneled origins and redirect callbacks back to the public tunnel origin.
+- The ngrok tunnel must be protected with the checked-in OAuth Traffic Policy for production eBay testing. Use `ngrok/oauth.yml` by default. `ngrok/oauth-callback-fallback.yml` exists only if full-gate callback preservation fails.
+- Every implementation step must be preceded by an OpenSpec planning step. Planning and implementation may happen on the same feature branch, but the OpenSpec proposal/design/tasks/spec deltas come first.
 
 ## Merged OpenSpec Changes
 
@@ -54,6 +100,9 @@ Initial scope:
 - `ebay-buying-history-foundation`: plans and implements the first fixture-tested Trading API `GetMyeBayBuying` request/client boundary plus normalized lost/won buying-history fixture data.
 - `fixture-history-ui`: plans and implements development-only fixture history mode after real local sign-in and session-scoped eBay connection.
 - `home-relisting-watchlist-ux`: plans and implements the first watchlist-first Home feed using fixture watchlist data, relisting candidates, filters, and local-only add-to-watchlist affordance.
+- `secure-ngrok-oauth-gate`: adds checked-in ngrok OAuth Traffic Policy files and documents secure local production eBay testing.
+- `restore-purchases-paid-price-chart`: restores the Purchases tab paid-price chart for won items without invoking Marketplace Insights.
+- `lost-bid-price-currency-detail`: separates max bid from final/sold price for lost-list rows and preserves/display currencies correctly.
 
 ## Implemented So Far
 
@@ -107,6 +156,18 @@ Initial scope:
   - `./node_modules/.bin/tsc --noEmit` passed.
   - Copilot advisory security review found no security issues.
   - Manual ngrok OAuth and fixture-history UI inspection passed.
+- PR #29 is merged to `main`; it secured the ngrok tunnel:
+  - `ngrok/oauth.yml` requires Google OAuth at the ngrok edge before traffic reaches the local app.
+  - `ngrok/oauth-callback-fallback.yml` protects app UI/API routes while allowing only `/api/auth/ebay/callback` through if full-gate callback preservation fails.
+  - The fallback is acceptable only for local development because the callback route still requires signed state, expiry, session binding when available, replay protection, and server-side token exchange.
+  - Manual production eBay OAuth through the full ngrok OAuth gate passed after clearing stale ngrok state once.
+- PR #30 is merged to `main`; it corrected lost-list price display:
+  - Live Trading API parser now reads `BiddingDetails.MaxBid` for `LostList` rows.
+  - `SellingStatus.CurrentPrice` is treated as sold/current listing price, not the user's bid.
+  - Home and Watching render `max bid: <amount>` and `sold for: <amount>`.
+  - Currency codes returned by eBay are preserved in the UI.
+  - USD displays as `$` under the app formatter.
+  - Copilot flagged a latent dynamic-regex risk in `parseMoney`; it was fixed by escaping tag names before regex construction.
 
 ## Local Testing Notes
 
@@ -121,7 +182,7 @@ To test the app shell and local sign-in:
 To test eBay Sandbox OAuth locally:
 
 1. Run `npm run dev`.
-2. In another terminal, run `ngrok http 3000`.
+2. In another terminal, run `ngrok http 3000 --traffic-policy-file ngrok/oauth.yml`.
 3. Confirm the active ngrok HTTPS URL matches the accepted/declined URL configured in the eBay Sandbox RuName. If ngrok gives a new temporary URL, update eBay Developer portal before testing.
 4. Open the ngrok HTTPS URL, not `localhost`, in the browser.
 5. Sign into goggler locally as `Saja`.
@@ -146,6 +207,39 @@ To test the fixture history and Home feed locally:
 
 If the app shows a missing `.next/server` chunk error or loses styling after running `npm run build` while the dev server is active, stop the dev server, delete `.next`, and restart `npm run dev`. The generated `.next` output is shared by dev and production build modes.
 
+To test against real eBay production locally:
+
+1. Ensure `.env.local` contains production eBay credentials:
+   - `EBAY_ENVIRONMENT=production`
+   - `EBAY_PRODUCTION_CLIENT_ID`
+   - `EBAY_PRODUCTION_CLIENT_SECRET`
+   - `EBAY_PRODUCTION_REDIRECT_URI`
+   - `EBAY_PRODUCTION_OAUTH_SCOPES`
+   - `EBAY_MARKETPLACE_ID=EBAY_GB`
+   - `EBAY_TRADING_SITE_ID=3`
+   - `GOGGLER_EBAY_HISTORY_SOURCE=live`
+2. Start the app:
+
+```bash
+EBAY_ENVIRONMENT=production GOGGLER_EBAY_HISTORY_SOURCE=live npm run dev
+```
+
+3. Start the secure tunnel:
+
+```bash
+ngrok http 3000 --traffic-policy-file ngrok/oauth.yml
+```
+
+4. Open `https://unrigged-fifth-nastily.ngrok-free.dev`.
+5. If ngrok reports an invalid OAuth `state`, reset ngrok auth with:
+
+```text
+https://unrigged-fifth-nastily.ngrok-free.dev/ngrok/logout?auth_id=goggler-dev
+```
+
+6. Complete ngrok Google OAuth if prompted.
+7. Connect to production eBay from goggler and confirm Home, Watching, and Purchases load live read-only data.
+
 `npm run lint` is currently stale because it still uses deprecated `next lint`, which prompts for ESLint migration under Next 15. `npm run build` currently performs the framework type/lint validation successfully.
 
 ## UI Direction
@@ -163,6 +257,9 @@ It includes:
 - Candidate relisting rows with confidence, pricing context, matching signals, ending time, and review actions.
 - Fixture-backed Home feed led by modeled eBay watchlist rows, followed by relisting candidates and unresolved/resolved lost-bid history.
 - Development-only fixture history source guarded behind local sign-in and active session-scoped eBay connection.
+- Production/live Home feed with current watchlist, won history, lost history, relisting candidates, live eBay search, and relisting auction/buy-now filtering.
+- Watching tab with max-bid and sold-for display for lost items when eBay returns both values.
+- Purchases tab with won-item paid-price summary cards and price-over-time scatter plot.
 
 The static prototype can be opened directly from `prototype/index.html` or served locally from the `prototype/` folder.
 
@@ -179,11 +276,12 @@ When moving to another Mac:
 
 ## Next Likely Steps
 
-- Refine Home feed UX after reviewing the watchlist-first layout in the running app.
-- Decide whether fixture-only `Confirm match` and `Dismiss` actions should be implemented next as local UI state.
-- Investigate eBay APIs/scopes for reading the authenticated user's watchlist and adding items to that watchlist. Do not wire real watchlist mutation until endpoint, scope, Sandbox behavior, and error handling are confirmed.
-- Implement real `GetMyeBayBuying` paging through won/lost history with a safety limit.
+- Continue refining UX now that production watchlist/lost/won data is flowing.
+- Consider whether the Watching tab should remain a separate lost-history view or become more tightly integrated with Home filters.
+- Decide whether `Confirm match` and `Dismiss` actions should be implemented next as local UI state or deferred until persistence exists.
+- Investigate eBay APIs/scopes for adding items to the authenticated user's watchlist. The current preferred low-risk flow is still to open the item on eBay and let the user add it there, unless a separate write-action OpenSpec change is reviewed.
 - Start designing the persistence layer for imported auction records, import runs, and user-owned connection metadata, while continuing to avoid token persistence at rest.
+- Decide what to do with Marketplace Insights / sold-history analytics. Access to `buy.marketplace.insights` is not currently approved, so the app should not depend on it for the Purchases tab.
 - Consider a separate tooling branch to replace deprecated `next lint` with the ESLint CLI.
 
 ## eBay Developer Setup
