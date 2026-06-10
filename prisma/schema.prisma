@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Venue {
+  ebay
+}
+
+enum ImportRunStatus {
+  running
+  succeeded
+  failed
+}
+
+model WonItem {
+  id                   String   @id @default(uuid())
+  userId               String
+  venue                Venue    @default(ebay)
+  venueItemId          String
+  title                String
+  itemPriceAmount      Decimal? @db.Decimal(20, 2)
+  currency             String?
+  purchasedAt          DateTime?
+  sellerUserId         String?
+  conditionDisplayName String?
+  categoryId           String?
+  categoryName         String?
+  imageUrl             String?
+  itemWebUrl           String?
+  firstImportedAt      DateTime @default(now())
+  lastImportedAt       DateTime @default(now())
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([userId, venue, venueItemId])
+  @@index([userId, purchasedAt])
+}
+
+model WonItemImportRun {
+  id             String          @id @default(uuid())
+  userId         String
+  venue          Venue           @default(ebay)
+  startedAt      DateTime        @default(now())
+  completedAt    DateTime?
+  status         ImportRunStatus @default(running)
+  liveWonCount   Int             @default(0)
+  insertedCount  Int             @default(0)
+  updatedCount   Int             @default(0)
+  errorCode      String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([userId, startedAt])
+}

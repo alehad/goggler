@@ -8,6 +8,7 @@ import { fetchLiveEbayHistoryResponse } from "../../../../src/ebay/live-history-
 import { parseMatchingPreferences } from "../../../../src/ebay/matching-preferences.ts";
 import { requireSessionEbayAccessToken } from "../../../../src/ebay/session-access.ts";
 import { EbayTradingApiError } from "../../../../src/ebay/trading-client.ts";
+import { persistWonItemsAndMerge } from "../../../../src/persistence/won-items.ts";
 
 export async function GET(request: NextRequest) {
   return handleBuyingHistoryRequest(request, parseMatchingPreferences({}));
@@ -54,9 +55,14 @@ async function handleBuyingHistoryRequest(request: NextRequest, matchingPreferen
 
   if (sourceStatus.source === "live") {
     try {
-      const history = await fetchLiveEbayHistoryResponse(loadEbayConfig(), ebayAccess.accessToken, {
+      const liveHistory = await fetchLiveEbayHistoryResponse(loadEbayConfig(), ebayAccess.accessToken, {
         matchingPreferences
       });
+      const history = await persistWonItemsAndMerge(
+        liveHistory,
+        currentUser.context.user.id,
+        matchingPreferences
+      );
       if (history.diagnostics?.purchases) {
         console.info("Live eBay purchase source diagnostics", history.diagnostics.purchases);
       }
