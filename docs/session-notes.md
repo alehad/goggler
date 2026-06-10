@@ -23,11 +23,19 @@ Initial scope:
 - Show candidates in an in-app dashboard.
 - Preserve won-item data for later purchase analytics.
 
-## Current Status As Of 2026-06-05
+## Current Status As Of 2026-06-10
 
 - `main` is clean and synced with `origin/main`.
-- Latest merged PR: #30, `Show lost bid and sold price currencies`.
+- Latest merged PR: #33, `Persist imported won items`.
 - Real production eBay read-only testing is working through the secure ngrok tunnel.
+- PostgreSQL 17.10 is installed locally through Homebrew and runs as the `postgresql@17` service.
+- Local databases:
+  - `goggler_prod`: durable won-item history for the local production/live app.
+  - `goggler_test`: isolated persistence integration-test database.
+- Successful live eBay refreshes now upsert won items into `goggler_prod` and return the persisted superset to the Purchases experience.
+- The first production import on 2026-06-10 stored 13 won items for `local-saja`, spanning purchases from 2026-03-29 through 2026-05-03.
+- Lost items, watchlist items, and relisting candidates remain transient.
+- eBay OAuth tokens, authorization codes, credential material, and raw upstream payloads must never be persisted in any database or durable store.
 - The local secure tunnel command is:
 
 ```bash
@@ -91,6 +99,8 @@ EBAY_ENVIRONMENT=production GOGGLER_EBAY_HISTORY_SOURCE=live npm run dev
 - Local development through HTTPS tunnels is supported for OAuth testing. Forwarded `x-forwarded-host` / `x-forwarded-proto` headers are used to validate tunneled origins and redirect callbacks back to the public tunnel origin.
 - The ngrok tunnel must be protected with the checked-in OAuth Traffic Policy for production eBay testing. Use `ngrok/oauth.yml` by default. `ngrok/oauth-callback-fallback.yml` exists only if full-gate callback preservation fails.
 - Every implementation step must be preceded by an OpenSpec planning step. Planning and implementation may happen on the same feature branch, but the OpenSpec proposal/design/tasks/spec deltas come first.
+- Local PostgreSQL is the first persistence target. Moving the won-item store to a hosted PostgreSQL provider such as Neon may be considered later.
+- Durable storage currently applies only to normalized won-item records and sanitized import-run metadata.
 
 ## Merged OpenSpec Changes
 
@@ -103,6 +113,9 @@ EBAY_ENVIRONMENT=production GOGGLER_EBAY_HISTORY_SOURCE=live npm run dev
 - `secure-ngrok-oauth-gate`: adds checked-in ngrok OAuth Traffic Policy files and documents secure local production eBay testing.
 - `restore-purchases-paid-price-chart`: restores the Purchases tab paid-price chart for won items without invoking Marketplace Insights.
 - `lost-bid-price-currency-detail`: separates max bid from final/sold price for lost-list rows and preserves/display currencies correctly.
+- `getorders-purchases-supplement`: supplements `GetMyeBayBuying` won items with buyer `GetOrders` results from an older non-overlapping time window.
+- `seller-profile-links`: links seller names on won and lost item rows to their eBay seller profiles.
+- `persist-won-items`: adds local PostgreSQL/Prisma persistence for normalized won items and sanitized import-run metadata, with deterministic checks preventing OAuth credential persistence.
 
 ## Implemented So Far
 
@@ -168,6 +181,18 @@ EBAY_ENVIRONMENT=production GOGGLER_EBAY_HISTORY_SOURCE=live npm run dev
   - Currency codes returned by eBay are preserved in the UI.
   - USD displays as `$` under the app formatter.
   - Copilot flagged a latent dynamic-regex risk in `parseMoney`; it was fixed by escaping tag names before regex construction.
+- PR #31 is merged to `main`; it supplements won-item history with Trading API `GetOrders` results from a non-overlapping older window. Production testing did not return additional rows, confirming the practical eBay lookback limitation remains.
+- PR #32 is merged to `main`; seller names on won and lost rows now link to their eBay profile pages.
+- PR #33 is merged to `main`; it added durable won-item persistence:
+  - Prisma and PostgreSQL configuration, schema, and initial migration are checked in.
+  - Won items are idempotently upserted by owning user, venue, and eBay item ID.
+  - Previously stored won items remain available when they fall outside later eBay live-history windows.
+  - Later responses do not erase useful stored optional values when eBay omits them.
+  - Import-run metadata stores only sanitized status and counts.
+  - `AGENTS.md` permanently prohibits persistence of eBay OAuth credential material.
+  - Persistence integration tests prove retention, idempotency, user isolation, optional-field preservation, and absence of credential/raw-payload fields.
+  - Verification passed: 148 unit tests, 4 persistence integration tests, OpenSpec validation, production build, `git diff --check`, and Copilot advisory security review.
+  - `npm audit` reports three moderate findings confined to Prisma's development CLI dependency chain; no production runtime exposure was identified.
 
 ## Local Testing Notes
 
@@ -209,7 +234,14 @@ If the app shows a missing `.next/server` chunk error or loses styling after run
 
 To test against real eBay production locally:
 
-1. Ensure `.env.local` contains production eBay credentials:
+1. Ensure the PostgreSQL service is running:
+
+```bash
+brew services start postgresql@17
+```
+
+2. Ensure `.env.local` contains production eBay credentials and the local production database:
+   - `DATABASE_URL=postgresql://<local-role>@localhost:5432/goggler_prod`
    - `EBAY_ENVIRONMENT=production`
    - `EBAY_PRODUCTION_CLIENT_ID`
    - `EBAY_PRODUCTION_CLIENT_SECRET`
@@ -218,27 +250,35 @@ To test against real eBay production locally:
    - `EBAY_MARKETPLACE_ID=EBAY_GB`
    - `EBAY_TRADING_SITE_ID=3`
    - `GOGGLER_EBAY_HISTORY_SOURCE=live`
-2. Start the app:
+3. Start the app:
 
 ```bash
 EBAY_ENVIRONMENT=production GOGGLER_EBAY_HISTORY_SOURCE=live npm run dev
 ```
 
-3. Start the secure tunnel:
+4. Start the secure tunnel:
 
 ```bash
 ngrok http 3000 --traffic-policy-file ngrok/oauth.yml
 ```
 
-4. Open `https://unrigged-fifth-nastily.ngrok-free.dev`.
-5. If ngrok reports an invalid OAuth `state`, reset ngrok auth with:
+5. Open `https://unrigged-fifth-nastily.ngrok-free.dev`.
+6. If ngrok reports an invalid OAuth `state`, reset ngrok auth with:
 
 ```text
 https://unrigged-fifth-nastily.ngrok-free.dev/ngrok/logout?auth_id=goggler-dev
 ```
 
-6. Complete ngrok Google OAuth if prompted.
-7. Connect to production eBay from goggler and confirm Home, Watching, and Purchases load live read-only data.
+7. Complete ngrok Google OAuth if prompted.
+8. Connect to production eBay from goggler and confirm Home, Watching, and Purchases load live read-only data.
+9. A successful history refresh should import normalized won items into `goggler_prod`.
+
+To run persistence integration tests:
+
+```bash
+brew services start postgresql@17
+npm run test:persistence
+```
 
 `npm run lint` is currently stale because it still uses deprecated `next lint`, which prompts for ESLint migration under Next 15. `npm run build` currently performs the framework type/lint validation successfully.
 
@@ -276,12 +316,13 @@ When moving to another Mac:
 
 ## Next Likely Steps
 
-- Continue refining UX now that production watchlist/lost/won data is flowing.
-- Consider whether the Watching tab should remain a separate lost-history view or become more tightly integrated with Home filters.
-- Decide whether `Confirm match` and `Dismiss` actions should be implemented next as local UI state or deferred until persistence exists.
+- Confirm the Purchases tab consistently renders the persisted won-item superset after items age beyond eBay's live-history window.
+- Decide whether to add a controlled backfill/import mechanism for older won items that eBay APIs no longer return.
+- Consider whether additional approved won-item fields, such as shipping or tax-inclusive totals where available, should be normalized and persisted.
+- Plan persistence-backed user actions such as `Confirm match` and `Dismiss` separately; do not expand persistence beyond reviewed OpenSpec changes.
 - Investigate eBay APIs/scopes for adding items to the authenticated user's watchlist. The current preferred low-risk flow is still to open the item on eBay and let the user add it there, unless a separate write-action OpenSpec change is reviewed.
-- Start designing the persistence layer for imported auction records, import runs, and user-owned connection metadata, while continuing to avoid token persistence at rest.
 - Decide what to do with Marketplace Insights / sold-history analytics. Access to `buy.marketplace.insights` is not currently approved, so the app should not depend on it for the Purchases tab.
+- Consider moving the PostgreSQL won-item store to Neon or another hosted PostgreSQL provider once local behavior is mature and cross-machine access is needed.
 - Consider a separate tooling branch to replace deprecated `next lint` with the ESLint CLI.
 
 ## eBay Developer Setup
@@ -299,7 +340,8 @@ Sandbox setup completed on 2026-05-09:
 Current local environment variables:
 
 ```bash
-DATABASE_URL=
+DATABASE_URL=postgresql://<local-role>@localhost:5432/goggler_prod
+TEST_DATABASE_URL=postgresql://<local-role>@localhost:5432/goggler_test
 GOGGLER_AUTH_SECRET=at-least-32-characters # already generated locally
 EBAY_ENVIRONMENT=sandbox
 EBAY_CLIENT_ID=<Sandbox App ID>
