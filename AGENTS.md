@@ -10,6 +10,15 @@ Every implementation step must be preceded by an OpenSpec planning step. The pla
 
 goggler is a personal-first eBay UK auction tracker. It imports authenticated buying history, tracks items the user did not win, searches for likely exact relistings, and presents matches in an app dashboard.
 
+## Security And Persistence Invariants
+
+- eBay OAuth access tokens, refresh tokens, authorization codes, and other OAuth credential material must remain scoped to the active server-side session only.
+- Never persist eBay OAuth credential material in any database or durable store, regardless of whether the store is local, hosted, encrypted, shared, temporary, development, test, staging, or production.
+- Never add database columns, models, migrations, serialized payloads, logs, caches, backups, or import metadata capable of storing eBay OAuth credential values.
+- Persistent eBay-related storage may contain only explicitly approved non-secret data, such as normalized won-item records and sanitized import-run metadata.
+- Any change that introduces or modifies persistence must include deterministic checks proving that eBay OAuth credential material is not represented in the persistent schema and is not written during runtime behavior.
+- If a proposed feature appears to require persisted eBay OAuth credential material, stop and redesign it around fresh user authentication or active-session credentials instead.
+
 ## Git Workflow
 
 - Do development work on short-lived branches using the `codex/` prefix by default.
