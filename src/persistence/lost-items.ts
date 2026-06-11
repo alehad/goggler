@@ -9,7 +9,7 @@ import type { EbayBuyingHistoryItem } from "../ebay/trading-client.ts";
 import type { PrismaClient } from "../generated/prisma/client.ts";
 import { getPrismaClient } from "./prisma.ts";
 
-export async function persistWonItemsAndMerge(
+export async function persistLostItemsAndMerge(
   history: EbayHistoryResponse,
   userId: string,
   matchingPreferences: MatchingPreferences,
@@ -20,29 +20,30 @@ export async function persistWonItemsAndMerge(
   }
 
   const now = new Date();
-  const liveWonItems = history.wonItems;
-  const importRun = await prisma.wonItemImportRun.create({
+  const liveLostItems = history.lostItems;
+  const importRun = await prisma.lostItemImportRun.create({
     data: {
       userId,
-      liveWonCount: liveWonItems.length
+      liveLostCount: liveLostItems.length
     }
   });
 
   try {
-    const existing = await prisma.wonItem.findMany({
+    const existing = await prisma.lostItem.findMany({
       select: { venueItemId: true },
       where: {
         userId,
-        venueItemId: { in: liveWonItems.map((item) => item.itemId) }
+        venue: "ebay",
+        venueItemId: { in: liveLostItems.map((item) => item.itemId) }
       }
     });
     const existingIds = new Set(existing.map((item) => item.venueItemId));
 
     await prisma.$transaction([
-      ...liveWonItems.map((item) =>
-        prisma.wonItem.upsert({
-          create: toWonItemCreate(item, userId, now),
-          update: toWonItemUpdate(item, now),
+      ...liveLostItems.map((item) =>
+        prisma.lostItem.upsert({
+          create: toLostItemCreate(item, userId, now),
+          update: toLostItemUpdate(item, now),
           where: {
             userId_venue_venueItemId: {
               userId,
@@ -52,21 +53,21 @@ export async function persistWonItemsAndMerge(
           }
         })
       ),
-      prisma.wonItemImportRun.update({
+      prisma.lostItemImportRun.update({
         data: {
           completedAt: now,
-          insertedCount: liveWonItems.filter((item) => !existingIds.has(item.itemId)).length,
+          insertedCount: liveLostItems.filter((item) => !existingIds.has(item.itemId)).length,
           status: "succeeded",
-          updatedCount: liveWonItems.filter((item) => existingIds.has(item.itemId)).length
+          updatedCount: liveLostItems.filter((item) => existingIds.has(item.itemId)).length
         },
         where: { id: importRun.id }
       })
     ]);
   } catch (error) {
-    await prisma.wonItemImportRun.update({
+    await prisma.lostItemImportRun.update({
       data: {
         completedAt: new Date(),
-        errorCode: "won_item_import_failed",
+        errorCode: "lost_item_import_failed",
         status: "failed"
       },
       where: { id: importRun.id }
@@ -74,20 +75,23 @@ export async function persistWonItemsAndMerge(
     throw error;
   }
 
-  const persistedWonItems = await prisma.wonItem.findMany({
-    orderBy: [{ purchasedAt: "desc" }, { createdAt: "desc" }],
+  const persistedLostItems = await prisma.lostItem.findMany({
+    orderBy: [{ endedAt: "desc" }, { createdAt: "desc" }],
     where: { userId, venue: "ebay" }
   });
 
   return rebuildHistoryResponse(history, {
-    wonItems: persistedWonItems.map((item) => ({
+    lostItems: persistedLostItems.map((item) => ({
       itemId: item.venueItemId,
       title: item.title,
-      list: "WonList",
-      currentPrice: item.itemPriceAmount && item.currency
-        ? { value: item.itemPriceAmount.toNumber(), currency: item.currency }
+      list: "LostList",
+      currentPrice: item.soldPriceAmount && item.soldPriceCurrency
+        ? { value: item.soldPriceAmount.toNumber(), currency: item.soldPriceCurrency }
         : undefined,
-      endTime: item.purchasedAt?.toISOString(),
+      maxBid: item.maxBidAmount && item.maxBidCurrency
+        ? { value: item.maxBidAmount.toNumber(), currency: item.maxBidCurrency }
+        : undefined,
+      endTime: item.endedAt?.toISOString(),
       sellerUserId: item.sellerUserId ?? undefined,
       conditionDisplayName: item.conditionDisplayName ?? undefined,
       categoryId: item.categoryId ?? undefined,
@@ -99,15 +103,17 @@ export async function persistWonItemsAndMerge(
   });
 }
 
-function toWonItemCreate(item: EbayBuyingHistoryItem, userId: string, now: Date) {
+function toLostItemCreate(item: EbayBuyingHistoryItem, userId: string, now: Date) {
   return {
     userId,
     venue: "ebay" as const,
     venueItemId: item.itemId,
     title: item.title,
-    itemPriceAmount: item.currentPrice?.value,
-    currency: item.currentPrice?.currency,
-    purchasedAt: parseDate(item.endTime),
+    maxBidAmount: item.maxBid?.value,
+    maxBidCurrency: item.maxBid?.currency,
+    soldPriceAmount: item.currentPrice?.value,
+    soldPriceCurrency: item.currentPrice?.currency,
+    endedAt: parseDate(item.endTime),
     sellerUserId: item.sellerUserId,
     conditionDisplayName: item.conditionDisplayName,
     categoryId: item.categoryId,
@@ -119,11 +125,13 @@ function toWonItemCreate(item: EbayBuyingHistoryItem, userId: string, now: Date)
   };
 }
 
-function toWonItemUpdate(item: EbayBuyingHistoryItem, now: Date) {
+function toLostItemUpdate(item: EbayBuyingHistoryItem, now: Date) {
+  const endedAt = parseDate(item.endTime);
   return {
     title: item.title,
-    ...(item.currentPrice ? { itemPriceAmount: item.currentPrice.value, currency: item.currentPrice.currency } : {}),
-    ...(item.endTime ? { purchasedAt: parseDate(item.endTime) } : {}),
+    ...(item.maxBid ? { maxBidAmount: item.maxBid.value, maxBidCurrency: item.maxBid.currency } : {}),
+    ...(item.currentPrice ? { soldPriceAmount: item.currentPrice.value, soldPriceCurrency: item.currentPrice.currency } : {}),
+    ...(endedAt ? { endedAt } : {}),
     ...(item.sellerUserId ? { sellerUserId: item.sellerUserId } : {}),
     ...(item.conditionDisplayName ? { conditionDisplayName: item.conditionDisplayName } : {}),
     ...(item.categoryId ? { categoryId: item.categoryId } : {}),

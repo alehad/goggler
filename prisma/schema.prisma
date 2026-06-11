@@ -57,3 +57,46 @@ model WonItemImportRun {
 
   @@index([userId, startedAt])
 }
+
+model LostItem {
+  id                   String   @id @default(uuid())
+  userId               String
+  venue                Venue    @default(ebay)
+  venueItemId          String
+  title                String
+  maxBidAmount         Decimal? @db.Decimal(20, 2)
+  maxBidCurrency       String?
+  soldPriceAmount      Decimal? @db.Decimal(20, 2)
+  soldPriceCurrency    String?
+  endedAt              DateTime?
+  sellerUserId         String?
+  conditionDisplayName String?
+  categoryId           String?
+  categoryName         String?
+  imageUrl             String?
+  itemWebUrl           String?
+  firstImportedAt      DateTime @default(now())
+  lastImportedAt       DateTime @default(now())
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([userId, venue, venueItemId])
+  @@index([userId, endedAt])
+}
+
+model LostItemImportRun {
+  id            String          @id @default(uuid())
+  userId        String
+  venue         Venue           @default(ebay)
+  startedAt     DateTime        @default(now())
+  completedAt   DateTime?
+  status        ImportRunStatus @default(running)
+  liveLostCount Int             @default(0)
+  insertedCount Int             @default(0)
+  updatedCount  Int             @default(0)
+  errorCode     String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([userId, startedAt])
+}

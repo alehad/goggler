@@ -4,10 +4,11 @@ import { getOrCreateCurrentUser } from "../../../../src/auth/current-user.ts";
 import { loadEbayConfig } from "../../../../src/ebay/config.ts";
 import { getFixtureHistoryResponse } from "../../../../src/ebay/fixture-history-source.ts";
 import { getEbayHistorySourceStatus } from "../../../../src/ebay/history-source.ts";
-import { fetchLiveEbayHistoryResponse } from "../../../../src/ebay/live-history-source.ts";
+import { fetchLiveEbayHistoryResponse, refreshLiveHistoryDerivedData } from "../../../../src/ebay/live-history-source.ts";
 import { parseMatchingPreferences } from "../../../../src/ebay/matching-preferences.ts";
 import { requireSessionEbayAccessToken } from "../../../../src/ebay/session-access.ts";
 import { EbayTradingApiError } from "../../../../src/ebay/trading-client.ts";
+import { persistLostItemsAndMerge } from "../../../../src/persistence/lost-items.ts";
 import { persistWonItemsAndMerge } from "../../../../src/persistence/won-items.ts";
 
 export async function GET(request: NextRequest) {
@@ -55,14 +56,22 @@ async function handleBuyingHistoryRequest(request: NextRequest, matchingPreferen
 
   if (sourceStatus.source === "live") {
     try {
-      const liveHistory = await fetchLiveEbayHistoryResponse(loadEbayConfig(), ebayAccess.accessToken, {
+      const config = loadEbayConfig();
+      const liveHistory = await fetchLiveEbayHistoryResponse(config, ebayAccess.accessToken, {
+        discoverRelistings: false,
         matchingPreferences
       });
-      const history = await persistWonItemsAndMerge(
+      const withPersistedWonItems = await persistWonItemsAndMerge(
         liveHistory,
         currentUser.context.user.id,
         matchingPreferences
       );
+      const withPersistedHistory = await persistLostItemsAndMerge(
+        withPersistedWonItems,
+        currentUser.context.user.id,
+        matchingPreferences
+      );
+      const history = await refreshLiveHistoryDerivedData(config, withPersistedHistory, matchingPreferences);
       if (history.diagnostics?.purchases) {
         console.info("Live eBay purchase source diagnostics", history.diagnostics.purchases);
       }
