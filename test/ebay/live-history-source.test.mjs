@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { loadEbayConfig } from "../../src/ebay/config.ts";
-import { fetchLiveEbayHistoryResponse } from "../../src/ebay/live-history-source.ts";
+import { fetchLiveEbayHistoryResponse, refreshLiveHistoryDerivedData } from "../../src/ebay/live-history-source.ts";
 
 const config = loadEbayConfig({
   EBAY_ENVIRONMENT: "sandbox",
@@ -266,6 +266,98 @@ test("discovers live relisting candidates for unresolved lost record ids", async
   assert.equal(relistingRow?.categoryId, "176985");
   assert.equal(relistingRow?.tags.includes("Auction"), true);
   assert.equal(response.counts.relistings, 1);
+});
+
+test("uses persisted-only lost items for refreshed relisting discovery and watchlist tagging", async () => {
+  const calls = [];
+  const durableConfig = loadEbayConfig({
+    EBAY_ENVIRONMENT: "sandbox",
+    EBAY_SANDBOX_CLIENT_ID: "durable-client-id",
+    EBAY_SANDBOX_CLIENT_SECRET: "client-secret",
+    EBAY_SANDBOX_REDIRECT_URI: "runame-value",
+    EBAY_SANDBOX_OAUTH_SCOPES: "scope-one"
+  });
+  const history = {
+    source: "live",
+    counts: {
+      lost: 1,
+      won: 0,
+      eventuallyWon: 0,
+      neverWon: 1,
+      watchlist: 1,
+      watchlistRelistings: 0,
+      needsAction: 0,
+      relistings: 0
+    },
+    lostItems: [{
+      itemId: "persisted-lost-001",
+      title: "Persisted Japanese jazz record BNJ-71001",
+      list: "LostList",
+      relistingGroupId: "criteria:BNJ71001"
+    }],
+    wonItems: [],
+    watchlistItems: [{
+      itemId: "watch-bnj",
+      title: "Blue Note BNJ71001 watch copy",
+      watchlistPosition: 1,
+      currentPrice: { value: 40, currency: "GBP" }
+    }],
+    relistingCandidates: [],
+    homeFeed: {
+      rows: [],
+      ebayRows: [],
+      relistingRows: [],
+      counts: {
+        watchlist: 1,
+        watchlistRelistings: 0,
+        needsAction: 0,
+        relistings: 0,
+        won: 0,
+        neverWon: 1,
+        resolved: 0
+      }
+    }
+  };
+
+  const refreshed = await refreshLiveHistoryDerivedData(
+    durableConfig,
+    history,
+    {
+      exactTitleMatch: false,
+      criteriaText: String.raw`\b[A-Z]{1,5}-?\d{1,6}\b`
+    },
+    {
+      fetch: async (url, init) => {
+        const urlText = String(url);
+        if (urlText.includes("/identity/v1/oauth2/token")) {
+          return Response.json({
+            access_token: "app-access-token",
+            expires_in: 7200,
+            token_type: "Bearer"
+          });
+        }
+
+        calls.push(new URL(urlText).searchParams.get("q"));
+        assert.equal(init.headers.Authorization, "Bearer app-access-token");
+        return Response.json({
+          total: 1,
+          itemSummaries: [{
+            itemId: "live-bnj-persisted",
+            title: "Blue Note BNJ71001 live auction",
+            price: { value: "48.00", currency: "GBP" },
+            itemWebUrl: "https://www.ebay.co.uk/itm/live-bnj-persisted",
+            categories: [{ categoryId: "176985", categoryName: "Records" }],
+            buyingOptions: ["AUCTION"]
+          }]
+        });
+      }
+    }
+  );
+
+  assert.deepEqual(calls, ["BNJ71001"]);
+  assert.equal(refreshed.relistingCandidates[0].itemId, "live-bnj-persisted");
+  assert.equal(refreshed.watchlistItems[0].relistingGroupId, "criteria:BNJ71001");
+  assert.equal(refreshed.counts.watchlistRelistings, 1);
 });
 
 function responseXml(listName, options = {}) {

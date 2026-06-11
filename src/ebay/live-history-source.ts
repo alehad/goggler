@@ -1,5 +1,6 @@
 import type { EbayConfig } from "./config.ts";
 import { buildHomeFeed, type HomeFeedWatchlistItem } from "./home-feed.ts";
+import { rebuildHistoryResponse } from "./history-assembly.ts";
 import type { EbayHistoryResponse } from "./history-response.ts";
 import { fetchLiveRelistingCandidates, liveRelistingSearchRequests } from "./live-relisting-discovery.ts";
 import {
@@ -25,6 +26,7 @@ export type FetchLiveEbayHistoryOptions = {
   maxGetOrdersPages?: number;
   getOrdersWindowDays?: number;
   getOrdersWindowEndDaysAgo?: number;
+  discoverRelistings?: boolean;
   matchingPreferences?: MatchingPreferences;
   now?: Date;
 };
@@ -81,7 +83,9 @@ export async function fetchLiveEbayHistoryResponse(
   const watchlistItems = activeWatchListItems.map((item, index) =>
     toWatchlistItem(item, index + 1, groupForHistoryTitle(item.title, matchingPreferences), lostGroups)
   );
-  const relistingCandidates = await discoverRelistingCandidates(config, lostItems, wonItems, matchingPreferences, fetchOptions, warnings);
+  const relistingCandidates = options.discoverRelistings === false
+    ? []
+    : await discoverRelistingCandidates(config, lostItems, wonItems, matchingPreferences, fetchOptions, warnings);
   const homeFeed = buildHomeFeed({
     lostItems,
     wonItems,
@@ -120,6 +124,45 @@ export async function fetchLiveEbayHistoryResponse(
         getOrdersWindowEndDaysAgo
       }
     }
+  };
+}
+
+export async function refreshLiveHistoryDerivedData(
+  config: EbayConfig,
+  history: EbayHistoryResponse,
+  matchingPreferences: MatchingPreferences,
+  fetchOptions: { fetch?: typeof fetch } = {}
+): Promise<EbayHistoryResponse> {
+  if (history.source !== "live") {
+    return history;
+  }
+
+  const warnings = [...(history.warnings ?? [])];
+  const lostGroups = new Set(
+    history.lostItems.map((item) => item.relistingGroupId).filter((value): value is string => Boolean(value))
+  );
+  const watchlistItems = history.watchlistItems.map((item) => {
+    const relistingGroupId = groupForHistoryTitle(item.title, matchingPreferences);
+    const matchedLostItem = relistingGroupId !== undefined && lostGroups.has(relistingGroupId);
+    return {
+      ...item,
+      relistingGroupId: matchedLostItem ? relistingGroupId : undefined,
+      matchConfidence: matchedLostItem ? 100 : undefined,
+      matchSignals: matchedLostItem ? ["matching preference"] : []
+    };
+  });
+  const relistingCandidates = await discoverRelistingCandidates(
+    config,
+    history.lostItems,
+    history.wonItems,
+    matchingPreferences,
+    fetchOptions,
+    warnings
+  );
+
+  return {
+    ...rebuildHistoryResponse(history, { watchlistItems, relistingCandidates }),
+    warnings: warnings.length > 0 ? Array.from(new Set(warnings)) : undefined
   };
 }
 
