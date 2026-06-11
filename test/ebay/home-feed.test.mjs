@@ -140,6 +140,14 @@ test("preserves never-won max bid and final sold price currencies", () => {
   assert.deepEqual(neverWonRow.originalLostPrice, { value: 51, currency: "USD" });
 });
 
+test("carries won timestamps only onto won Home rows", () => {
+  const feed = buildFixtureFeed();
+  const wonRow = feed.rows.find((row) => row.section === "won");
+
+  assert.equal(wonRow?.wonAt, mockWonItems[0].endTime);
+  assert.equal(feed.rows.filter((row) => row.section !== "won").every((row) => row.wonAt === undefined), true);
+});
+
 test("preserves thumbnails for all Home feed item classes", () => {
   const feed = buildFixtureFeed();
   const watchlistRow = feed.rows.find((row) => row.sourceItemId === "sandbox-watch-001");

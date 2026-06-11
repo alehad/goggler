@@ -27,6 +27,7 @@ import {
 import { buildPurchaseAnalytics, type PurchaseChartPoint } from "../src/ebay/purchase-analytics.ts";
 import { ebaySellerProfileUrl } from "../src/ebay/seller-profile.ts";
 import { safeEbayImageUrl, safeEbayItemUrl } from "../src/http/safe-external-url.ts";
+import { formatAbsoluteDate } from "../src/ui/date-format.ts";
 
 type Tab = "dashboard" | "tracking" | "won" | "account";
 type LostFilter = "all" | "neverWon" | "eventuallyWon";
@@ -142,6 +143,7 @@ type HomeFeedRow = {
   maxBid?: { value: number; currency: string };
   originalLostPrice?: { value: number; currency: string };
   endsAt?: string;
+  wonAt?: string;
   sellerUserId?: string;
   conditionDisplayName?: string;
   imageUrl?: string;
@@ -659,6 +661,7 @@ function SearchEmptyState({ onReturnToWatchlist, query }: { onReturnToWatchlist:
 function HomeFeedCard({ row, onAddToWatchlist }: { row: HomeFeedRow; onAddToWatchlist: () => void }) {
   const imageUrl = safeEbayImageUrl(row.imageUrl);
   const itemWebUrl = safeEbayItemUrl(row.itemWebUrl);
+  const wonDate = formatAbsoluteDate(row.wonAt);
 
   return (
     <article className="candidate-card home-feed-card">
@@ -677,6 +680,7 @@ function HomeFeedCard({ row, onAddToWatchlist }: { row: HomeFeedRow; onAddToWatc
         <div className="meta-row">
           <span>{row.conditionDisplayName ?? "Condition unknown"}</span>
           <SellerLink sellerUserId={row.sellerUserId} />
+          {wonDate && <span>won: {wonDate}</span>}
           {row.maxBid && <span>max bid: {formatMoneyValue(row.maxBid)}</span>}
           {row.section === "unresolved" || row.section === "resolved" ? (
             row.currentPrice && <span>sold for: {formatMoneyValue(row.currentPrice)}</span>
@@ -1049,6 +1053,7 @@ function PurchaseCard({
 }) {
   const imageUrl = safeEbayImageUrl(item.imageUrl);
   const itemWebUrl = safeEbayItemUrl(item.itemWebUrl);
+  const wonDate = formatAbsoluteDate(item.endTime);
 
   return (
     <article
@@ -1069,7 +1074,7 @@ function PurchaseCard({
         <div className="meta-row">
           <span>{item.conditionDisplayName ?? "Condition unknown"}</span>
           <SellerLink sellerUserId={item.sellerUserId} />
-          {item.endTime && <span>{formatShortDate(item.endTime)}</span>}
+          {wonDate && <span>won: {wonDate}</span>}
         </div>
         <div className="signal-row">
           <span className="signal">Won</span>

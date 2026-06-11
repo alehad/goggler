@@ -46,6 +46,7 @@ export type HomeFeedRow = {
   maxBid?: { value: number; currency: string };
   originalLostPrice?: { value: number; currency: string };
   endsAt?: string;
+  wonAt?: string;
   sellerUserId?: string;
   conditionDisplayName?: string;
   categoryId?: string;
@@ -256,6 +257,7 @@ function historyRow(item: EbayBuyingHistoryItem, section: HomeFeedSection, tags:
     currentPrice: item.currentPrice,
     maxBid: item.maxBid,
     originalLostPrice: section === "won" ? undefined : item.currentPrice,
+    wonAt: section === "won" ? item.endTime : undefined,
     sellerUserId: item.sellerUserId,
     conditionDisplayName: item.conditionDisplayName,
     categoryId: item.categoryId,
