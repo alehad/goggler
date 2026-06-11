@@ -23,18 +23,20 @@ Initial scope:
 - Show candidates in an in-app dashboard.
 - Preserve won-item data for later purchase analytics.
 
-## Current Status As Of 2026-06-10
+## Current Status As Of 2026-06-11
 
 - `main` is clean and synced with `origin/main`.
-- Latest merged PR: #33, `Persist imported won items`.
+- Latest merged PR: #35, `Show dates on won items`.
 - Real production eBay read-only testing is working through the secure ngrok tunnel.
 - PostgreSQL 17.10 is installed locally through Homebrew and runs as the `postgresql@17` service.
 - Local databases:
   - `goggler_prod`: durable won-item history for the local production/live app.
   - `goggler_test`: isolated persistence integration-test database.
-- Successful live eBay refreshes now upsert won items into `goggler_prod` and return the persisted superset to the Purchases experience.
+- Successful live eBay refreshes now upsert won and lost items into `goggler_prod` and return the persisted supersets to the app.
 - The first production import on 2026-06-10 stored 13 won items for `local-saja`, spanning purchases from 2026-03-29 through 2026-05-03.
-- Lost items, watchlist items, and relisting candidates remain transient.
+- The first production lost-item import on 2026-06-11 stored 4 lost items for `local-saja`, spanning listings from 2026-05-24 through 2026-05-31.
+- Current local durable production data: 13 won items and 4 lost items.
+- Watchlist items and relisting candidates remain transient.
 - eBay OAuth tokens, authorization codes, credential material, and raw upstream payloads must never be persisted in any database or durable store.
 - The local secure tunnel command is:
 
@@ -74,6 +76,7 @@ EBAY_ENVIRONMENT=production GOGGLER_EBAY_HISTORY_SOURCE=live npm run dev
   - `max bid: <amount>` from `LostList.Item.BiddingDetails.MaxBid`, when eBay returns it.
   - `sold for: <amount>` from `LostList.Item.SellingStatus.CurrentPrice`.
   - Returned currency is preserved. USD displays as `$`; other dollar currencies should keep disambiguating prefixes such as `CA$` or `A$`.
+- Won rows on Home and Purchases show a compact absolute `won: <date>` value next to condition and seller.
 
 ## Architecture Decisions So Far
 
@@ -99,8 +102,10 @@ EBAY_ENVIRONMENT=production GOGGLER_EBAY_HISTORY_SOURCE=live npm run dev
 - Local development through HTTPS tunnels is supported for OAuth testing. Forwarded `x-forwarded-host` / `x-forwarded-proto` headers are used to validate tunneled origins and redirect callbacks back to the public tunnel origin.
 - The ngrok tunnel must be protected with the checked-in OAuth Traffic Policy for production eBay testing. Use `ngrok/oauth.yml` by default. `ngrok/oauth-callback-fallback.yml` exists only if full-gate callback preservation fails.
 - Every implementation step must be preceded by an OpenSpec planning step. Planning and implementation may happen on the same feature branch, but the OpenSpec proposal/design/tasks/spec deltas come first.
-- Local PostgreSQL is the first persistence target. Moving the won-item store to a hosted PostgreSQL provider such as Neon may be considered later.
-- Durable storage currently applies only to normalized won-item records and sanitized import-run metadata.
+- Local PostgreSQL is the first persistence target. Moving the item-history store to a hosted PostgreSQL provider such as Neon may be considered later.
+- Durable storage currently applies only to normalized won/lost item records and sanitized import-run metadata.
+- Won and lost items use separate tables because lost items have outcome-specific maximum-bid and sold-price fields.
+- Persisted lost items are the durable source for lost-history classification and relisting discovery. Relisting candidates themselves are never persisted.
 
 ## Merged OpenSpec Changes
 
@@ -116,6 +121,8 @@ EBAY_ENVIRONMENT=production GOGGLER_EBAY_HISTORY_SOURCE=live npm run dev
 - `getorders-purchases-supplement`: supplements `GetMyeBayBuying` won items with buyer `GetOrders` results from an older non-overlapping time window.
 - `seller-profile-links`: links seller names on won and lost item rows to their eBay seller profiles.
 - `persist-won-items`: adds local PostgreSQL/Prisma persistence for normalized won items and sanitized import-run metadata, with deterministic checks preventing OAuth credential persistence.
+- `persist-lost-items`: adds separate PostgreSQL persistence for normalized lost items, keeps max bid separate from sold price, and uses durable lost history for relisting discovery.
+- `show-won-date`: shows compact `won: <date>` metadata beside condition and seller on Home and Purchases won-item rows.
 
 ## Implemented So Far
 
@@ -193,6 +200,18 @@ EBAY_ENVIRONMENT=production GOGGLER_EBAY_HISTORY_SOURCE=live npm run dev
   - Persistence integration tests prove retention, idempotency, user isolation, optional-field preservation, and absence of credential/raw-payload fields.
   - Verification passed: 148 unit tests, 4 persistence integration tests, OpenSpec validation, production build, `git diff --check`, and Copilot advisory security review.
   - `npm audit` reports three moderate findings confined to Prisma's development CLI dependency chain; no production runtime exposure was identified.
+- PR #34 is merged to `main`; it added durable lost-item persistence:
+  - Lost items are stored separately from won items using user-owned idempotent upserts.
+  - The user's maximum bid and the final sold price are stored as separate amount/currency pairs.
+  - Older persisted lost items remain eligible for never-won/eventually-won classification and live relisting discovery after they age out of eBay's live response.
+  - Watchlist items and relisting candidates remain transient and are not inserted into lost-item storage.
+  - Production verification imported 4 real lost items for `local-saja`.
+  - Verification passed: 149 unit tests, 7 persistence integration tests, OpenSpec validation, TypeScript checks, production build, database inspection, and Copilot advisory security review.
+- PR #35 is merged to `main`; it added won-date metadata:
+  - Home won rows and Purchases rows show `won: <date>` alongside condition and seller.
+  - Dates use a safe compact absolute formatter and are omitted when missing or invalid.
+  - Non-won rows and active-listing relative dates remain unchanged.
+  - Verification passed: 152 unit tests, TypeScript checks, OpenSpec validation, production build, and production eBay refresh.
 
 ## Local Testing Notes
 
@@ -271,7 +290,8 @@ https://unrigged-fifth-nastily.ngrok-free.dev/ngrok/logout?auth_id=goggler-dev
 
 7. Complete ngrok Google OAuth if prompted.
 8. Connect to production eBay from goggler and confirm Home, Watching, and Purchases load live read-only data.
-9. A successful history refresh should import normalized won items into `goggler_prod`.
+9. A successful history refresh should import normalized won and lost items into `goggler_prod`.
+10. Confirm won rows on Home and Purchases show `won: <date>` next to condition and seller.
 
 To run persistence integration tests:
 
@@ -299,7 +319,7 @@ It includes:
 - Development-only fixture history source guarded behind local sign-in and active session-scoped eBay connection.
 - Production/live Home feed with current watchlist, won history, lost history, relisting candidates, live eBay search, and relisting auction/buy-now filtering.
 - Watching tab with max-bid and sold-for display for lost items when eBay returns both values.
-- Purchases tab with won-item paid-price summary cards and price-over-time scatter plot.
+- Purchases tab with won-item paid-price summary cards, price-over-time scatter plot, and compact won-date metadata.
 
 The static prototype can be opened directly from `prototype/index.html` or served locally from the `prototype/` folder.
 
@@ -317,12 +337,14 @@ When moving to another Mac:
 ## Next Likely Steps
 
 - Confirm the Purchases tab consistently renders the persisted won-item superset after items age beyond eBay's live-history window.
+- Confirm Watching and relisting discovery consistently use the persisted lost-item superset after items age beyond eBay's live-history window.
 - Decide whether to add a controlled backfill/import mechanism for older won items that eBay APIs no longer return.
+- Decide whether a controlled backfill is possible for older lost items that eBay APIs no longer return.
 - Consider whether additional approved won-item fields, such as shipping or tax-inclusive totals where available, should be normalized and persisted.
 - Plan persistence-backed user actions such as `Confirm match` and `Dismiss` separately; do not expand persistence beyond reviewed OpenSpec changes.
 - Investigate eBay APIs/scopes for adding items to the authenticated user's watchlist. The current preferred low-risk flow is still to open the item on eBay and let the user add it there, unless a separate write-action OpenSpec change is reviewed.
 - Decide what to do with Marketplace Insights / sold-history analytics. Access to `buy.marketplace.insights` is not currently approved, so the app should not depend on it for the Purchases tab.
-- Consider moving the PostgreSQL won-item store to Neon or another hosted PostgreSQL provider once local behavior is mature and cross-machine access is needed.
+- Consider moving the PostgreSQL item-history store to Neon or another hosted PostgreSQL provider once local behavior is mature and cross-machine access is needed.
 - Consider a separate tooling branch to replace deprecated `next lint` with the ESLint CLI.
 
 ## eBay Developer Setup
