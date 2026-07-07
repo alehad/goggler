@@ -23,7 +23,7 @@ goggler is a personal-first eBay UK auction tracker. It imports authenticated bu
 
 - Do development work on short-lived branches using the `codex/` prefix by default.
 - Open pull requests from feature branches into `main`.
-- Merge to `main` only after the user has confirmed the PR should be merged.
+- Merge to `main` only after the user has confirmed the PR should be merged, except under the Claude Code Autonomous PR Workflow below, where merge is pre-approved.
 - Prefer GitHub CLI (`gh`) for PR creation and merge/cleanup when it is authenticated and available.
 - When the user explicitly asks to create a PR, prefer `gh pr create` over raw GitHub API calls.
 - When the user explicitly asks to merge an approved PR, prefer `gh pr merge --squash --delete-branch`, then synchronize local `main` and delete the local branch.
@@ -46,3 +46,23 @@ copilot -p "Review the current uncommitted git diff for security issues. Do not 
 
 - If no Copilot/VS Code review command is available in the Codex environment, say so and continue with normal verification plus any security review feedback the user provides manually.
 - Treat advisory AI review as supplemental. Do not replace deterministic checks such as unit tests, production build, and direct code inspection.
+
+## Claude Code Autonomous PR Workflow
+
+When Claude Code is doing the implementation work in this repository, the feature lifecycle follows this exact sequence:
+
+1. **Plan.** Discuss the change and produce the OpenSpec proposal/design/tasks under `openspec/changes/<name>/`. Mandatory before any implementation.
+2. **Design sign-off.** Wait for the user to review the OpenSpec design and explicitly grant permission to implement. Do not start implementation before this.
+3. **Implement.** Build the feature on the `codex/`-prefixed feature branch. Immediately after implementing, run the relevant deterministic checks (`npm run build`, `npm run lint`, `npm run test:unit`, `npm run openspec:validate` as applicable) and fix any failures before handing off — this is pre-approved and does not require a confirmation prompt.
+4. **Manual functional testing pause.** Stop and hand the feature to the user to exercise against dev or production eBay. Do not proceed past this point on your own.
+5. **User sign-off.** Wait for the user to explicitly confirm the feature works as intended.
+6. **Security review — dual gate.** Once sign-off is received, run both:
+   - Claude Code's built-in `security-review` skill against the diff, and
+   - GitHub Copilot CLI, non-interactively:
+     ```bash
+     copilot -p "Review the current uncommitted git diff for security issues. Do not modify files. Return verdict, findings, and recommended fixes only." --silent --deny-tool='write' --deny-tool='shell(*)'
+     ```
+   The review passes only if neither raises a blocking finding. If either does, stop and get explicit user direction rather than committing. (ChatGPT is not part of this automated gate — no scriptable connector exists; if the user wants a ChatGPT opinion, that happens manually outside this pipeline.)
+7. **Ship it.** Once the dual security review passes, commit, push, open the PR (`gh pr create`), and merge (`gh pr merge --squash --delete-branch`), then sync local `main` and delete the local feature branch — all without a further confirmation prompt.
+
+This standing authorization covers only this exact lifecycle on feature branches following the OpenSpec-first workflow above. It does not extend to direct commits on `main` (other than the session-notes exception above), force-pushes, history rewrites, or skipping steps 2, 4, or 5 — those still require the user's explicit go-ahead each time.
