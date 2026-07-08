@@ -61,6 +61,31 @@ export async function fetchEbayBrowseSearchResponse(
   };
 }
 
+export async function fetchEbayItemNativePrice(
+  config: EbayConfig,
+  appAccessToken: string,
+  legacyItemId: string,
+  options: { fetch?: typeof fetch } = {}
+): Promise<EbayMoney | undefined> {
+  assertTrustedBrowseItemUrl(config);
+  const url = new URL(`${new URL(config.browseApiUrl).origin}/buy/browse/v1/item/get_item_by_legacy_id`);
+  url.searchParams.set("legacy_item_id", legacyItemId);
+
+  const response = await (options.fetch ?? fetch)(url, {
+    headers: {
+      Authorization: `Bearer ${appAccessToken}`,
+      "X-EBAY-C-MARKETPLACE-ID": config.marketplaceId
+    }
+  });
+
+  if (!response.ok) {
+    return undefined;
+  }
+
+  const body = await response.json();
+  return moneyValue((body as { price?: unknown }).price);
+}
+
 export function boundedBrowseQuery(query: string): string {
   return query
     .replace(/[\u0000-\u001f\u007f]/g, " ")
@@ -138,14 +163,28 @@ function moneyValue(raw: unknown): EbayMoney | undefined {
     return undefined;
   }
 
-  const money = raw as { value?: unknown; currency?: unknown; currencyId?: unknown };
-  const value = typeof money.value === "string" ? Number(money.value) : money.value;
-  const currency = stringValue(money.currency) ?? stringValue(money.currencyId);
-  if (!Number.isFinite(value) || typeof value !== "number" || value < 0 || !currency) {
-    return undefined;
+  const money = raw as {
+    value?: unknown;
+    currency?: unknown;
+    currencyId?: unknown;
+    convertedFromValue?: unknown;
+    convertedFromCurrency?: unknown;
+  };
+
+  const nativeValue = numericValue(money.convertedFromValue);
+  const nativeCurrency = stringValue(money.convertedFromCurrency);
+  if (nativeValue !== undefined && nativeCurrency) {
+    return { value: nativeValue, currency: nativeCurrency };
   }
 
-  return { value, currency };
+  const value = numericValue(money.value);
+  const currency = stringValue(money.currency) ?? stringValue(money.currencyId);
+  return value !== undefined && currency ? { value, currency } : undefined;
+}
+
+function numericValue(raw: unknown): number | undefined {
+  const value = typeof raw === "string" ? Number(raw) : raw;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 function firstImageUrlValue(raw: unknown): string | undefined {
@@ -207,6 +246,15 @@ function assertTrustedBrowseApiUrl(config: EbayConfig): void {
   const validHost = host === "api.ebay.com" || host === "api.sandbox.ebay.com";
   const validPath = url.pathname === "/buy/browse/v1/item_summary/search";
   if (url.protocol !== "https:" || !validHost || !validPath) {
+    throw new EbayBrowseApiError("Browse API URL is not trusted");
+  }
+}
+
+function assertTrustedBrowseItemUrl(config: EbayConfig): void {
+  const url = new URL(config.browseApiUrl);
+  const host = url.hostname.toLocaleLowerCase("en-GB");
+  const validHost = host === "api.ebay.com" || host === "api.sandbox.ebay.com";
+  if (url.protocol !== "https:" || !validHost) {
     throw new EbayBrowseApiError("Browse API URL is not trusted");
   }
 }

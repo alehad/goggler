@@ -24,7 +24,7 @@ import {
   LEGACY_DEFAULT_MATCHING_CRITERIA_TEXTS,
   type MatchingPreferences
 } from "../src/ebay/matching-preferences.ts";
-import { buildPurchaseAnalytics, type PurchaseChartPoint } from "../src/ebay/purchase-analytics.ts";
+import { buildPurchaseChartPoints, type PurchaseChartPoint } from "../src/ebay/purchase-analytics.ts";
 import { ebaySellerProfileUrl } from "../src/ebay/seller-profile.ts";
 import { safeEbayImageUrl, safeEbayItemUrl } from "../src/http/safe-external-url.ts";
 import { formatAbsoluteDate } from "../src/ui/date-format.ts";
@@ -831,13 +831,13 @@ function Won({
   refreshBuyingHistory: () => Promise<void>;
 }) {
   const [selectedItemId, setSelectedItemId] = useState<string | undefined>();
-  const analytics = useMemo(
-    () => (historyState.status === "ready" ? buildPurchaseAnalytics(historyState.history.wonItems) : buildPurchaseAnalytics([])),
+  const chartPoints = useMemo(
+    () => (historyState.status === "ready" ? buildPurchaseChartPoints(historyState.history.wonItems) : []),
     [historyState]
   );
   const selectedItem =
     historyState.status === "ready" ? historyState.history.wonItems.find((item) => item.itemId === selectedItemId) : undefined;
-  const selectedPoint = analytics.chartPoints.find((point) => point.itemId === selectedItemId);
+  const selectedPoint = chartPoints.find((point) => point.itemId === selectedItemId);
 
   function selectPurchase(itemId: string) {
     setSelectedItemId(itemId);
@@ -869,13 +869,7 @@ function Won({
 
       {historyState.status === "ready" ? (
         <>
-          <div className="summary-grid">
-            <Metric label="Average paid" value={formatMoneyValue(analytics.stats.average)} detail={`${analytics.stats.count} priced wins`} />
-            <Metric label="Lowest paid" value={formatMoneyValue(analytics.stats.lowest)} detail="Won auctions" />
-            <Metric label="Highest paid" value={formatMoneyValue(analytics.stats.highest)} detail="Won auctions" />
-          </div>
-
-          <PurchaseChart points={analytics.chartPoints} selectedItemId={selectedItemId} onSelect={selectPurchase} />
+          <PurchaseChart points={chartPoints} selectedItemId={selectedItemId} onSelect={selectPurchase} />
 
           {historyState.history.wonItems.length > 0 ? (
             <div className="candidate-list purchase-list">
