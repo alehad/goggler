@@ -24,6 +24,25 @@ test("builds Home feed with eBay watchlist items first in watchlist order", () =
   );
 });
 
+test("builds a watchlist row with no fabricated price when the item has none", () => {
+  const feed = buildHomeFeed({
+    lostItems: [],
+    wonItems: [],
+    watchlistItems: [
+      {
+        itemId: "watch-no-price",
+        title: "Item with no parseable price",
+        watchlistPosition: 1,
+        currentPrice: undefined
+      }
+    ],
+    relistingCandidates: []
+  });
+
+  const row = feed.rows.find((candidate) => candidate.sourceItemId === "watch-no-price");
+  assert.equal(row?.currentPrice, undefined);
+});
+
 test("tags watchlist items independently from previous bidding history", () => {
   const feed = buildFixtureFeed();
   const watchlistRows = filterHomeFeedRows(feed.rows, "onWatchlist");

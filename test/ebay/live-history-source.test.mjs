@@ -16,7 +16,11 @@ test("fetches live watchlist, lost, and won lists into the Home feed contract", 
   const response = await fetchLiveEbayHistoryResponse(config, "session-access-token", {
     maxPagesPerList: 1,
     now: new Date("2026-05-13T12:00:00.000Z"),
-    fetch: async (_url, init) => {
+    fetch: async (url, init) => {
+      if (isWatchlistPriceLookupRequest(String(url))) {
+        return watchlistPriceLookupUnavailableResponse();
+      }
+
       const body = String(init.body);
       const callName = init.headers["X-EBAY-API-CALL-NAME"];
       if (callName === "GetOrders") {
@@ -81,6 +85,138 @@ test("fetches live watchlist, lost, and won lists into the Home feed contract", 
   assert.equal(response.homeFeed.rows.find((row) => row.section === "won")?.imageUrl, "https://i.ebayimg.example/won-001.jpg");
   assert.equal(response.watchlistItems.every((item) => item.itemId !== "watch-ended"), true);
   assert.equal(JSON.stringify(response).includes("session-access-token"), false);
+});
+
+test("prefers the Browse API native price over a Trading API price that eBay silently converted", async () => {
+  const freshConfig = loadEbayConfig({
+    EBAY_ENVIRONMENT: "sandbox",
+    EBAY_SANDBOX_CLIENT_ID: "native-price-client-id",
+    EBAY_SANDBOX_CLIENT_SECRET: "client-secret",
+    EBAY_SANDBOX_REDIRECT_URI: "runame-value",
+    EBAY_SANDBOX_OAUTH_SCOPES: "scope-one"
+  });
+
+  const response = await fetchLiveEbayHistoryResponse(freshConfig, "session-access-token", {
+    maxPagesPerList: 1,
+    now: new Date("2026-05-13T12:00:00.000Z"),
+    fetch: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.includes("/identity/v1/oauth2/token")) {
+        return Response.json({ access_token: "app-access-token", expires_in: 7200, token_type: "Bearer" });
+      }
+
+      if (urlText.includes("/buy/browse/v1/item/get_item_by_legacy_id")) {
+        const legacyItemId = new URL(urlText).searchParams.get("legacy_item_id");
+        if (legacyItemId === "watch-001") {
+          return Response.json({
+            price: { value: "130.62", currency: "GBP", convertedFromValue: "174.50", convertedFromCurrency: "USD" }
+          });
+        }
+        return new Response("not found", { status: 404 });
+      }
+
+      if (init.headers["X-EBAY-API-CALL-NAME"] === "GetOrders") {
+        return new Response(getOrdersResponseXml({ empty: true }), { headers: { "Content-Type": "text/xml" } });
+      }
+
+      const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
+      return new Response(responseXml(list), { headers: { "Content-Type": "text/xml" } });
+    }
+  });
+
+  const watchOne = response.watchlistItems.find((item) => item.itemId === "watch-001");
+  assert.deepEqual(watchOne?.currentPrice, { value: 174.5, currency: "USD" });
+});
+
+test("falls back to the Trading API price when the Browse API lookup fails for a watchlist item", async () => {
+  const freshConfig = loadEbayConfig({
+    EBAY_ENVIRONMENT: "sandbox",
+    EBAY_SANDBOX_CLIENT_ID: "fallback-price-client-id",
+    EBAY_SANDBOX_CLIENT_SECRET: "client-secret",
+    EBAY_SANDBOX_REDIRECT_URI: "runame-value",
+    EBAY_SANDBOX_OAUTH_SCOPES: "scope-one"
+  });
+
+  const response = await fetchLiveEbayHistoryResponse(freshConfig, "session-access-token", {
+    maxPagesPerList: 1,
+    now: new Date("2026-05-13T12:00:00.000Z"),
+    fetch: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.includes("/identity/v1/oauth2/token")) {
+        return Response.json({ access_token: "app-access-token", expires_in: 7200, token_type: "Bearer" });
+      }
+
+      if (urlText.includes("/buy/browse/v1/item/get_item_by_legacy_id")) {
+        return new Response("not found", { status: 404 });
+      }
+
+      if (init.headers["X-EBAY-API-CALL-NAME"] === "GetOrders") {
+        return new Response(getOrdersResponseXml({ empty: true }), { headers: { "Content-Type": "text/xml" } });
+      }
+
+      const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
+      return new Response(responseXml(list), { headers: { "Content-Type": "text/xml" } });
+    }
+  });
+
+  const watchOne = response.watchlistItems.find((item) => item.itemId === "watch-001");
+  assert.deepEqual(watchOne?.currentPrice, { value: 410, currency: "GBP" });
+});
+
+test("leaves a watchlist item's price unavailable rather than fabricating a currency when no source has a price", async () => {
+  const freshConfig = loadEbayConfig({
+    EBAY_ENVIRONMENT: "sandbox",
+    EBAY_SANDBOX_CLIENT_ID: "unavailable-price-client-id",
+    EBAY_SANDBOX_CLIENT_SECRET: "client-secret",
+    EBAY_SANDBOX_REDIRECT_URI: "runame-value",
+    EBAY_SANDBOX_OAUTH_SCOPES: "scope-one"
+  });
+  const noPriceWatchListXml = `<?xml version="1.0" encoding="utf-8"?>
+<GetMyeBayBuyingResponse xmlns="urn:ebay:apis:eBLBaseComponents">
+  <Ack>Success</Ack>
+  <WatchList>
+    <PaginationResult>
+      <TotalNumberOfPages>1</TotalNumberOfPages>
+      <TotalNumberOfEntries>1</TotalNumberOfEntries>
+    </PaginationResult>
+    <PageNumber>1</PageNumber>
+    <ItemArray>
+      <Item>
+        <ItemID>watch-no-price</ItemID>
+        <Title>Watchlist item with no parseable price</Title>
+        <ListingDetails><EndTime>2026-05-14T20:30:00.000Z</EndTime></ListingDetails>
+      </Item>
+    </ItemArray>
+  </WatchList>
+</GetMyeBayBuyingResponse>`;
+
+  const response = await fetchLiveEbayHistoryResponse(freshConfig, "session-access-token", {
+    maxPagesPerList: 1,
+    now: new Date("2026-05-13T12:00:00.000Z"),
+    fetch: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.includes("/identity/v1/oauth2/token")) {
+        return Response.json({ access_token: "app-access-token", expires_in: 7200, token_type: "Bearer" });
+      }
+
+      if (urlText.includes("/buy/browse/v1/item/get_item_by_legacy_id")) {
+        return new Response("not found", { status: 404 });
+      }
+
+      if (init.headers["X-EBAY-API-CALL-NAME"] === "GetOrders") {
+        return new Response(getOrdersResponseXml({ empty: true }), { headers: { "Content-Type": "text/xml" } });
+      }
+
+      const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
+      if (list === "WatchList") {
+        return new Response(noPriceWatchListXml, { headers: { "Content-Type": "text/xml" } });
+      }
+      return new Response(responseXml(list), { headers: { "Content-Type": "text/xml" } });
+    }
+  });
+
+  const watchOne = response.watchlistItems.find((item) => item.itemId === "watch-no-price");
+  assert.equal(watchOne?.currentPrice, undefined);
 });
 
 test("returns truncation warnings when a live list exceeds the safety limit", async () => {
@@ -359,6 +495,17 @@ test("uses persisted-only lost items for refreshed relisting discovery and watch
   assert.equal(refreshed.watchlistItems[0].relistingGroupId, "criteria:BNJ71001");
   assert.equal(refreshed.counts.watchlistRelistings, 1);
 });
+
+function isWatchlistPriceLookupRequest(urlText) {
+  return urlText.includes("/identity/v1/oauth2/token") || urlText.includes("/buy/browse/v1/item/get_item_by_legacy_id");
+}
+
+function watchlistPriceLookupUnavailableResponse() {
+  // Deliberately fails both the app-token exchange and the item lookup so this
+  // test's shared `config` client id never populates the module-level token
+  // cache other tests in this file rely on being empty.
+  return new Response("not found", { status: 404 });
+}
 
 function responseXml(listName, options = {}) {
   const watchTitle = options.genericCatalogueTitles

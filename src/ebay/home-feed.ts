@@ -4,7 +4,7 @@ export type HomeFeedWatchlistItem = {
   itemId: string;
   title: string;
   watchlistPosition: number;
-  currentPrice: { value: number; currency: string };
+  currentPrice?: { value: number; currency: string };
   endsAt?: string;
   sellerUserId?: string;
   conditionDisplayName?: string;

@@ -1,3 +1,4 @@
+import { fetchEbayItemNativePrice } from "./browse-client.ts";
 import type { EbayConfig } from "./config.ts";
 import { buildHomeFeed, type HomeFeedWatchlistItem } from "./home-feed.ts";
 import { rebuildHistoryResponse } from "./history-assembly.ts";
@@ -16,8 +17,11 @@ import {
   EbayTradingApiError,
   type EbayBuyingHistoryItem,
   type EbayBuyerOrdersPages,
-  type EbayBuyingListKind
+  type EbayBuyingListKind,
+  type EbayMoney
 } from "./trading-client.ts";
+
+const WATCHLIST_PRICE_LOOKUP_CONCURRENCY = 8;
 
 export type FetchLiveEbayHistoryOptions = {
   fetch?: typeof fetch;
@@ -80,8 +84,15 @@ export async function fetchLiveEbayHistoryResponse(
   const wonItems = withRelistingGroups(mergedWon.items, matchingPreferences);
   const lostGroups = new Set(lostItems.map((item) => item.relistingGroupId).filter((value): value is string => Boolean(value)));
   const activeWatchListItems = watchList.items.filter((item) => isActiveListing(item, now));
+  const nativeWatchlistPrices = await fetchNativeWatchlistPrices(config, activeWatchListItems, fetchOptions);
   const watchlistItems = activeWatchListItems.map((item, index) =>
-    toWatchlistItem(item, index + 1, groupForHistoryTitle(item.title, matchingPreferences), lostGroups)
+    toWatchlistItem(
+      item,
+      index + 1,
+      groupForHistoryTitle(item.title, matchingPreferences),
+      lostGroups,
+      nativeWatchlistPrices.get(item.itemId)
+    )
   );
   const relistingCandidates = options.discoverRelistings === false
     ? []
@@ -312,11 +323,53 @@ function groupForHistoryTitle(title: string, matchingPreferences: MatchingPrefer
   return catalogueId ? `criteria:${catalogueId}` : relistingGroupForTitle(title, matchingPreferences);
 }
 
+async function fetchNativeWatchlistPrices(
+  config: EbayConfig,
+  items: EbayBuyingHistoryItem[],
+  fetchOptions: { fetch?: typeof fetch }
+): Promise<Map<string, EbayMoney | undefined>> {
+  const result = new Map<string, EbayMoney | undefined>();
+  if (items.length === 0) {
+    return result;
+  }
+
+  let appToken: EbayApplicationAuthorization;
+  try {
+    appToken = await getCachedBrowseApplicationAccessToken(config, fetchOptions);
+  } catch {
+    return result;
+  }
+
+  await mapWithConcurrency(items, WATCHLIST_PRICE_LOOKUP_CONCURRENCY, async (item) => {
+    try {
+      result.set(item.itemId, await fetchEbayItemNativePrice(config, appToken.accessToken, item.itemId, fetchOptions));
+    } catch {
+      result.set(item.itemId, undefined);
+    }
+  });
+
+  return result;
+}
+
+async function mapWithConcurrency<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let index = 0;
+
+  async function worker(): Promise<void> {
+    while (index < items.length) {
+      const current = index++;
+      await fn(items[current]);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+}
+
 function toWatchlistItem(
   item: EbayBuyingHistoryItem,
   watchlistPosition: number,
   relistingGroupId: string | undefined,
-  lostGroups: Set<string>
+  lostGroups: Set<string>,
+  nativePrice: EbayMoney | undefined
 ): HomeFeedWatchlistItem {
   const matchedLostItem = relistingGroupId !== undefined && lostGroups.has(relistingGroupId);
 
@@ -324,7 +377,7 @@ function toWatchlistItem(
     itemId: item.itemId,
     title: item.title,
     watchlistPosition,
-    currentPrice: item.currentPrice ?? { value: 0, currency: "GBP" },
+    currentPrice: nativePrice ?? item.currentPrice,
     endsAt: item.endTime,
     sellerUserId: item.sellerUserId,
     conditionDisplayName: item.conditionDisplayName,
