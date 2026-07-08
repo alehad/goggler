@@ -136,6 +136,7 @@ function liveHistory(wonItems) {
     lostItems: [],
     wonItems,
     watchlistItems: [],
+    endedWatchlistItems: [],
     relistingCandidates: [],
     homeFeed: {
       rows: [],

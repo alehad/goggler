@@ -8,12 +8,14 @@ export function rebuildHistoryResponse(
     lostItems?: EbayBuyingHistoryItem[];
     wonItems?: EbayBuyingHistoryItem[];
     watchlistItems?: EbayHistoryResponse["watchlistItems"];
+    endedWatchlistItems?: EbayBuyingHistoryItem[];
     relistingCandidates?: EbayHistoryResponse["relistingCandidates"];
   }
 ): EbayHistoryResponse {
   const lostItems = input.lostItems ?? history.lostItems;
   const wonItems = input.wonItems ?? history.wonItems;
   const watchlistItems = input.watchlistItems ?? history.watchlistItems;
+  const endedWatchlistItems = input.endedWatchlistItems ?? history.endedWatchlistItems;
   const relistingCandidates = input.relistingCandidates ?? history.relistingCandidates;
   const homeFeed = buildHomeFeed({
     lostItems,
@@ -38,6 +40,7 @@ export function rebuildHistoryResponse(
     lostItems,
     wonItems,
     watchlistItems,
+    endedWatchlistItems,
     relistingCandidates,
     homeFeed
   };

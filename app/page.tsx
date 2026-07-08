@@ -16,6 +16,7 @@ import {
   ShoppingBag,
   SlidersHorizontal,
   Sparkles,
+  TrendingUp,
   X
 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
@@ -29,8 +30,9 @@ import { ebaySellerProfileUrl } from "../src/ebay/seller-profile.ts";
 import { safeEbayImageUrl, safeEbayItemUrl } from "../src/http/safe-external-url.ts";
 import { formatAbsoluteDate } from "../src/ui/date-format.ts";
 
-type Tab = "dashboard" | "tracking" | "won" | "account";
+type Tab = "dashboard" | "tracking" | "won" | "analytics" | "account";
 type LostFilter = "all" | "neverWon" | "eventuallyWon";
+type CaptureFilter = "all" | "captured" | "notCaptured";
 type HomeFeedFilter = "search" | "all" | "onWatchlist" | "relistings" | "won" | "neverWon";
 type RelistingFormatFilter = "both" | "auction" | "buyNow";
 const MATCHING_PREFERENCES_STORAGE_KEY = "goggler.matchingPreferences";
@@ -78,7 +80,7 @@ type EbayConfigStatus = {
 type HistoryItem = {
   itemId: string;
   title: string;
-  list: "LostList" | "WonList";
+  list: "LostList" | "WonList" | "WatchList";
   currentPrice?: {
     value: number;
     currency: string;
@@ -95,6 +97,8 @@ type HistoryItem = {
   relistingGroupId?: string;
 };
 
+type EndedWatchlistItem = HistoryItem & { captured: boolean };
+
 type BuyingHistory = {
   source: "fixture" | "live";
   counts: {
@@ -109,6 +113,7 @@ type BuyingHistory = {
   };
   lostItems: HistoryItem[];
   wonItems: HistoryItem[];
+  endedWatchlistItems: EndedWatchlistItem[];
   homeFeed: {
     rows: HomeFeedRow[];
     counts: {
@@ -162,6 +167,7 @@ const tabs = [
   { id: "dashboard", label: "Home", mobileLabel: "Home", icon: House },
   { id: "tracking", label: "Watching", mobileLabel: "Watching", icon: Heart },
   { id: "won", label: "Purchases", mobileLabel: "Purchases", icon: ShoppingBag },
+  { id: "analytics", label: "Analytics", mobileLabel: "Analytics", icon: TrendingUp },
   { id: "account", label: "My goggler", mobileLabel: "My", icon: CircleUserRound }
 ] satisfies { id: Tab; label: string; mobileLabel: string; icon: typeof House }[];
 
@@ -412,6 +418,9 @@ export default function Home() {
             historyState={historyState}
             refreshBuyingHistory={refreshBuyingHistory}
           />
+        )}
+        {activeTab === "analytics" && (
+          <Analytics historyState={historyState} refreshBuyingHistory={refreshBuyingHistory} />
         )}
         {activeTab === "account" && (
           <Account
@@ -1091,6 +1100,207 @@ function PurchaseCard({
           >
             <ExternalLink size={18} />
           </a>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function Analytics({
+  historyState,
+  refreshBuyingHistory
+}: {
+  historyState: HistoryState;
+  refreshBuyingHistory: () => Promise<void>;
+}) {
+  const [filter, setFilter] = useState<CaptureFilter>("all");
+  const [pendingItemIds, setPendingItemIds] = useState<string[]>([]);
+  const [bulkCapturing, setBulkCapturing] = useState(false);
+  const [message, setMessage] = useState("");
+  const [locallyCapturedIds, setLocallyCapturedIds] = useState<string[]>([]);
+
+  const items = useMemo(() => {
+    const endedItems = historyState.status === "ready" ? historyState.history.endedWatchlistItems : [];
+    return endedItems.map((item) =>
+      locallyCapturedIds.includes(item.itemId) ? { ...item, captured: true } : item
+    );
+  }, [historyState, locallyCapturedIds]);
+  const capturedCount = items.filter((item) => item.captured).length;
+  const notCapturedItems = items.filter((item) => !item.captured);
+  const filteredItems = useMemo(() => {
+    if (filter === "captured") {
+      return items.filter((item) => item.captured);
+    }
+    if (filter === "notCaptured") {
+      return notCapturedItems;
+    }
+    return items;
+  }, [filter, items, notCapturedItems]);
+
+  async function captureVenueItemIds(venueItemIds: string[]) {
+    setMessage("");
+    const response = await fetch("/api/market-insights/capture", {
+      body: JSON.stringify({ venueItemIds }),
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      method: "POST"
+    });
+
+    if (!response.ok) {
+      setMessage("Could not capture price history for this item");
+      return;
+    }
+
+    const result = (await response.json().catch(() => ({}))) as Partial<{ captured: string[] }>;
+    const captured = Array.isArray(result.captured) ? result.captured : venueItemIds;
+    setLocallyCapturedIds((ids) => [...new Set([...ids, ...captured])]);
+  }
+
+  async function captureOne(itemId: string) {
+    setPendingItemIds((ids) => [...ids, itemId]);
+    try {
+      await captureVenueItemIds([itemId]);
+    } finally {
+      setPendingItemIds((ids) => ids.filter((id) => id !== itemId));
+    }
+  }
+
+  async function captureAllVisible() {
+    const visibleNotCaptured = filteredItems.filter((item) => !item.captured).map((item) => item.itemId);
+    if (visibleNotCaptured.length === 0) {
+      return;
+    }
+
+    setBulkCapturing(true);
+    try {
+      await captureVenueItemIds(visibleNotCaptured);
+    } finally {
+      setBulkCapturing(false);
+    }
+  }
+
+  return (
+    <section className="content">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Analytics</p>
+          <h1>Price history capture</h1>
+        </div>
+        <button className="primary-button" onClick={() => void refreshBuyingHistory()} type="button">
+          <TrendingUp size={17} />
+          <span>Refresh ended items</span>
+        </button>
+      </div>
+
+      {historyState.status === "ready" ? (
+        <>
+          <div className="summary-grid">
+            <Metric label="Ended items" value={String(items.length)} detail="From your eBay watchlist" />
+            <Metric label="Captured" value={String(capturedCount)} detail="In price history" />
+            <Metric label="Not captured" value={String(notCapturedItems.length)} detail="Available to add" />
+          </div>
+
+          <div className="section-heading">
+            <div className="segmented-control" aria-label="Capture status filter">
+              <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")} type="button">
+                All
+              </button>
+              <button className={filter === "captured" ? "active" : ""} onClick={() => setFilter("captured")} type="button">
+                Captured
+              </button>
+              <button
+                className={filter === "notCaptured" ? "active" : ""}
+                onClick={() => setFilter("notCaptured")}
+                type="button"
+              >
+                Not captured
+              </button>
+            </div>
+
+            {filteredItems.some((item) => !item.captured) && (
+              <button
+                className="secondary-button compact capture-action"
+                disabled={bulkCapturing}
+                onClick={() => void captureAllVisible()}
+                type="button"
+              >
+                <Check size={16} />
+                <span>{bulkCapturing ? "Capturing..." : "Capture all visible"}</span>
+              </button>
+            )}
+          </div>
+
+          {message && <p className="form-message">{message}</p>}
+
+          {filteredItems.length > 0 ? (
+            <div className="candidate-list">
+              {filteredItems.map((item) => (
+                <AnalyticsRow
+                  capturing={pendingItemIds.includes(item.itemId)}
+                  item={item}
+                  key={item.itemId}
+                  onCapture={() => void captureOne(item.itemId)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="empty-panel">
+              <TrendingUp size={20} />
+              <h2>No ended watchlist items</h2>
+              <p>Items you watch on eBay will appear here once their listing ends, so you can capture their final price.</p>
+            </div>
+          )}
+        </>
+      ) : (
+        <HistoryEmptyState state={historyState} />
+      )}
+    </section>
+  );
+}
+
+function AnalyticsRow({
+  capturing,
+  item,
+  onCapture
+}: {
+  capturing: boolean;
+  item: EndedWatchlistItem;
+  onCapture: () => void;
+}) {
+  const imageUrl = safeEbayImageUrl(item.imageUrl);
+  const endedDate = formatAbsoluteDate(item.endTime);
+
+  return (
+    <article className="candidate-card home-feed-card">
+      <div className="watch-thumbnail" title={imageUrl ? "eBay listing image" : "Ended watchlist item"}>
+        {imageUrl ? <img alt="" loading="lazy" referrerPolicy="no-referrer" src={imageUrl} /> : <TrendingUp size={20} />}
+      </div>
+      <div className="candidate-main">
+        <div className="candidate-title-row">
+          <div>
+            <p className="artist">Ended watchlist item</p>
+            <h2>{item.title}</h2>
+          </div>
+        </div>
+        <div className="meta-row">
+          <span>{item.conditionDisplayName ?? "Condition unknown"}</span>
+          <SellerLink sellerUserId={item.sellerUserId} />
+          {endedDate && <span>ended: {endedDate}</span>}
+        </div>
+        <div className="signal-row">
+          <span className={item.captured ? "signal" : "signal attention"}>{item.captured ? "Captured" : "Not captured"}</span>
+        </div>
+      </div>
+      <div className="listing-side listing-side-centered">
+        <strong>{item.currentPrice ? formatMoneyValue(item.currentPrice) : "-"}</strong>
+        <span>final price</span>
+      </div>
+      <div className="card-actions">
+        {!item.captured && (
+          <button className="secondary-button compact capture-action" disabled={capturing} onClick={onCapture} type="button">
+            <Check size={16} />
+            <span>{capturing ? "Adding..." : "Add to history"}</span>
+          </button>
         )}
       </div>
     </article>

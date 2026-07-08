@@ -84,6 +84,12 @@ export async function fetchLiveEbayHistoryResponse(
   const wonItems = withRelistingGroups(mergedWon.items, matchingPreferences);
   const lostGroups = new Set(lostItems.map((item) => item.relistingGroupId).filter((value): value is string => Boolean(value)));
   const activeWatchListItems = watchList.items.filter((item) => isActiveListing(item, now));
+  const endedWatchlistItemsBeforeNativePrices = withRelistingGroups(
+    watchList.items.filter((item) => !isActiveListing(item, now)),
+    matchingPreferences
+  );
+  const endedNativePrices = await fetchNativeWatchlistPrices(config, endedWatchlistItemsBeforeNativePrices, fetchOptions);
+  const endedWatchlistItems = mergeNativePrices(endedWatchlistItemsBeforeNativePrices, endedNativePrices);
   const nativeWatchlistPrices = await fetchNativeWatchlistPrices(config, activeWatchListItems, fetchOptions);
   const watchlistItems = activeWatchListItems.map((item, index) =>
     toWatchlistItem(
@@ -120,6 +126,7 @@ export async function fetchLiveEbayHistoryResponse(
     lostItems,
     wonItems,
     watchlistItems,
+    endedWatchlistItems,
     relistingCandidates,
     homeFeed,
     warnings: warnings.length > 0 ? warnings : undefined,
@@ -136,6 +143,31 @@ export async function fetchLiveEbayHistoryResponse(
       }
     }
   };
+}
+
+export async function fetchEndedWatchlistItems(
+  config: EbayConfig,
+  accessToken: string,
+  options: FetchLiveEbayHistoryOptions = {}
+): Promise<EbayBuyingHistoryItem[]> {
+  const entriesPerPage = options.entriesPerPage ?? 50;
+  const maxPages = options.maxPagesPerList ?? 3;
+  const matchingPreferences = options.matchingPreferences ?? DEFAULT_MATCHING_PREFERENCES;
+  const now = options.now ?? new Date();
+
+  const watchList = await fetchGetMyeBayBuyingPages(
+    config,
+    accessToken,
+    { list: "WatchList", entriesPerPage, maxPages },
+    { fetch: options.fetch }
+  );
+
+  const endedItems = withRelistingGroups(
+    watchList.items.filter((item) => !isActiveListing(item, now)),
+    matchingPreferences
+  );
+  const nativePrices = await fetchNativeWatchlistPrices(config, endedItems, { fetch: options.fetch });
+  return mergeNativePrices(endedItems, nativePrices);
 }
 
 export async function refreshLiveHistoryDerivedData(
@@ -321,6 +353,16 @@ async function getCachedBrowseApplicationAccessToken(
 function groupForHistoryTitle(title: string, matchingPreferences: MatchingPreferences): string | undefined {
   const catalogueId = catalogueIdForTitle(title, matchingPreferences.criteriaText);
   return catalogueId ? `criteria:${catalogueId}` : relistingGroupForTitle(title, matchingPreferences);
+}
+
+function mergeNativePrices(
+  items: EbayBuyingHistoryItem[],
+  nativePrices: Map<string, EbayMoney | undefined>
+): EbayBuyingHistoryItem[] {
+  return items.map((item) => ({
+    ...item,
+    currentPrice: nativePrices.get(item.itemId) ?? item.currentPrice
+  }));
 }
 
 async function fetchNativeWatchlistPrices(

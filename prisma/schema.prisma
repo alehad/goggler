@@ -100,3 +100,28 @@ model LostItemImportRun {
 
   @@index([userId, startedAt])
 }
+
+model MarketPriceRecord {
+  id                   String   @id @default(uuid())
+  userId               String
+  venue                Venue    @default(ebay)
+  venueItemId          String
+  title                String
+  soldPriceAmount      Decimal? @db.Decimal(20, 2)
+  soldPriceCurrency    String?
+  endedAt              DateTime?
+  sellerUserId         String?
+  conditionDisplayName String?
+  categoryId           String?
+  categoryName         String?
+  imageUrl             String?
+  itemWebUrl           String?
+  relistingGroupId     String?
+  capturedAt           DateTime @default(now())
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([userId, venue, venueItemId])
+  @@index([userId, relistingGroupId])
+  @@index([userId, endedAt])
+}

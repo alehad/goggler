@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:unit": "node --test --experimental-strip-types test/**/*.test.mjs",
-    "test:persistence": "node --test --experimental-strip-types test/persistence/**/*.integration.mjs",
+    "test:persistence": "node --test --test-concurrency=1 --experimental-strip-types test/**/*.integration.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "openspec:validate": "openspec validate --all --strict --no-interactive"

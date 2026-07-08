@@ -16,6 +16,7 @@ export type EbayHistoryResponse = {
   lostItems: EbayBuyingHistoryItem[];
   wonItems: EbayBuyingHistoryItem[];
   watchlistItems: HomeFeedWatchlistItem[];
+  endedWatchlistItems: EbayBuyingHistoryItem[];
   relistingCandidates: HomeFeedRelistingCandidate[];
   homeFeed: HomeFeed;
   warnings?: string[];

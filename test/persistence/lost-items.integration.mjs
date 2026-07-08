@@ -150,6 +150,7 @@ function liveHistory(lostItems, overrides = {}) {
     lostItems,
     wonItems: [],
     watchlistItems: overrides.watchlistItems ?? [],
+    endedWatchlistItems: [],
     relistingCandidates: overrides.relistingCandidates ?? [],
     homeFeed: {
       rows: [],
