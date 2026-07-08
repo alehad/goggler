@@ -680,15 +680,13 @@ function HomeFeedCard({ row, onAddToWatchlist }: { row: HomeFeedRow; onAddToWatc
       <div className="candidate-main">
         <div className="candidate-title-row">
           <div>
-            <p className="artist">{formatHomeSection(row.section)}</p>
             <h2>{row.title}</h2>
           </div>
           {row.matchConfidence !== undefined && <span className="confidence">{row.matchConfidence}%</span>}
         </div>
 
         <div className="meta-row">
-          <span>{row.conditionDisplayName ?? "Condition unknown"}</span>
-          <SellerLink sellerUserId={row.sellerUserId} />
+          <span>seller: <SellerLink inline sellerUserId={row.sellerUserId} /></span>
           {wonDate && <span>won: {wonDate}</span>}
           {row.maxBid && <span>max bid: {formatMoneyValue(row.maxBid)}</span>}
           {row.section === "unresolved" || row.section === "resolved" ? (
@@ -1070,13 +1068,11 @@ function PurchaseCard({
       <div className="candidate-main">
         <div className="candidate-title-row">
           <div>
-            <p className="artist">Won purchase</p>
             <h2>{item.title}</h2>
           </div>
         </div>
         <div className="meta-row">
-          <span>{item.conditionDisplayName ?? "Condition unknown"}</span>
-          <SellerLink sellerUserId={item.sellerUserId} />
+          <span>seller: <SellerLink inline sellerUserId={item.sellerUserId} /></span>
           {wonDate && <span>won: {wonDate}</span>}
         </div>
         <div className="signal-row">
@@ -1278,13 +1274,11 @@ function AnalyticsRow({
       <div className="candidate-main">
         <div className="candidate-title-row">
           <div>
-            <p className="artist">Ended watchlist item</p>
             <h2>{item.title}</h2>
           </div>
         </div>
         <div className="meta-row">
-          <span>{item.conditionDisplayName ?? "Condition unknown"}</span>
-          <SellerLink sellerUserId={item.sellerUserId} />
+          <span>seller: <SellerLink inline sellerUserId={item.sellerUserId} /></span>
           {endedDate && <span>ended: {endedDate}</span>}
         </div>
         <div className="signal-row">
@@ -1715,23 +1709,6 @@ function priceTicks(minPrice: number, maxPrice: number, step: number): number[] 
     ticks.push(tick);
   }
   return ticks;
-}
-
-function formatHomeSection(section: HomeFeedRow["section"]): string {
-  switch (section) {
-    case "search_result":
-      return "Live eBay listing";
-    case "watchlist":
-      return "eBay watchlist";
-    case "needs_action":
-      return "Relisting candidate";
-    case "won":
-      return "Won";
-    case "unresolved":
-      return "Unresolved lost bid";
-    case "resolved":
-      return "Eventually won";
-  }
 }
 
 function formatLostStatus(item: HistoryItem, wonItems: HistoryItem[]): string {
