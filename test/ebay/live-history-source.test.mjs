@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { loadEbayConfig } from "../../src/ebay/config.ts";
-import { fetchLiveEbayHistoryResponse, refreshLiveHistoryDerivedData } from "../../src/ebay/live-history-source.ts";
+import {
+  fetchEndedWatchlistItems,
+  fetchLiveEbayHistoryResponse,
+  refreshLiveHistoryDerivedData
+} from "../../src/ebay/live-history-source.ts";
 
 const config = loadEbayConfig({
   EBAY_ENVIRONMENT: "sandbox",
@@ -85,6 +89,16 @@ test("fetches live watchlist, lost, and won lists into the Home feed contract", 
   assert.equal(response.homeFeed.rows.find((row) => row.section === "won")?.imageUrl, "https://i.ebayimg.example/won-001.jpg");
   assert.equal(response.watchlistItems.every((item) => item.itemId !== "watch-ended"), true);
   assert.equal(JSON.stringify(response).includes("session-access-token"), false);
+
+  const endedItem = response.endedWatchlistItems.find((item) => item.itemId === "watch-ended");
+  assert.ok(endedItem, "ended watchlist item should be surfaced separately");
+  assert.deepEqual(endedItem.currentPrice, { value: 88, currency: "GBP" });
+  assert.equal(response.endedWatchlistItems.every((item) => item.itemId !== "watch-001"), true);
+  assert.equal(
+    response.homeFeed.rows.some((row) => row.sourceItemId === "watch-ended"),
+    false,
+    "ended watchlist items must never reach the Home feed"
+  );
 });
 
 test("prefers the Browse API native price over a Trading API price that eBay silently converted", async () => {
@@ -217,6 +231,112 @@ test("leaves a watchlist item's price unavailable rather than fabricating a curr
 
   const watchOne = response.watchlistItems.find((item) => item.itemId === "watch-no-price");
   assert.equal(watchOne?.currentPrice, undefined);
+});
+
+test("prefers the Browse API native price for ended watchlist items too", async () => {
+  const freshConfig = loadEbayConfig({
+    EBAY_ENVIRONMENT: "sandbox",
+    EBAY_SANDBOX_CLIENT_ID: "ended-native-price-client-id",
+    EBAY_SANDBOX_CLIENT_SECRET: "client-secret",
+    EBAY_SANDBOX_REDIRECT_URI: "runame-value",
+    EBAY_SANDBOX_OAUTH_SCOPES: "scope-one"
+  });
+
+  const response = await fetchLiveEbayHistoryResponse(freshConfig, "session-access-token", {
+    maxPagesPerList: 1,
+    now: new Date("2026-05-13T12:00:00.000Z"),
+    fetch: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.includes("/identity/v1/oauth2/token")) {
+        return Response.json({ access_token: "app-access-token", expires_in: 7200, token_type: "Bearer" });
+      }
+
+      if (urlText.includes("/buy/browse/v1/item/get_item_by_legacy_id")) {
+        const legacyItemId = new URL(urlText).searchParams.get("legacy_item_id");
+        if (legacyItemId === "watch-ended") {
+          return Response.json({
+            price: { value: "88.00", currency: "GBP", convertedFromValue: "117.86", convertedFromCurrency: "USD" }
+          });
+        }
+        return new Response("not found", { status: 404 });
+      }
+
+      if (init.headers["X-EBAY-API-CALL-NAME"] === "GetOrders") {
+        return new Response(getOrdersResponseXml({ empty: true }), { headers: { "Content-Type": "text/xml" } });
+      }
+
+      const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
+      return new Response(responseXml(list), { headers: { "Content-Type": "text/xml" } });
+    }
+  });
+
+  const endedItem = response.endedWatchlistItems.find((item) => item.itemId === "watch-ended");
+  assert.deepEqual(endedItem?.currentPrice, { value: 117.86, currency: "USD" });
+});
+
+test("fetchEndedWatchlistItems issues only one WatchList call, returns ended items with relisting groups, and prefers native price", async () => {
+  const freshConfig = loadEbayConfig({
+    EBAY_ENVIRONMENT: "sandbox",
+    EBAY_SANDBOX_CLIENT_ID: "fetch-ended-items-client-id",
+    EBAY_SANDBOX_CLIENT_SECRET: "client-secret",
+    EBAY_SANDBOX_REDIRECT_URI: "runame-value",
+    EBAY_SANDBOX_OAUTH_SCOPES: "scope-one"
+  });
+  const tradingCalls = [];
+  const mixedWatchListXml = `<?xml version="1.0" encoding="utf-8"?>
+<GetMyeBayBuyingResponse xmlns="urn:ebay:apis:eBLBaseComponents">
+  <Ack>Success</Ack>
+  <WatchList>
+    <PaginationResult>
+      <TotalNumberOfPages>1</TotalNumberOfPages>
+      <TotalNumberOfEntries>2</TotalNumberOfEntries>
+    </PaginationResult>
+    <PageNumber>1</PageNumber>
+    <ItemArray>
+      <Item>
+        <ItemID>watch-active</ItemID>
+        <Title>Blue Note style LP BNJ71001 still live</Title>
+        <ListingDetails><EndTime>2026-05-14T20:30:00.000Z</EndTime></ListingDetails>
+        <SellingStatus><CurrentPrice currencyID="GBP">50.00</CurrentPrice></SellingStatus>
+      </Item>
+      <Item>
+        <ItemID>watch-ended-bnj</ItemID>
+        <Title>Blue Note style LP BNJ71001 already ended</Title>
+        <ListingDetails><EndTime>2026-05-12T20:30:00.000Z</EndTime></ListingDetails>
+        <SellingStatus><CurrentPrice currencyID="GBP">62.50</CurrentPrice></SellingStatus>
+      </Item>
+    </ItemArray>
+  </WatchList>
+</GetMyeBayBuyingResponse>`;
+
+  const items = await fetchEndedWatchlistItems(freshConfig, "session-access-token", {
+    maxPagesPerList: 1,
+    now: new Date("2026-05-13T12:00:00.000Z"),
+    matchingPreferences: {
+      exactTitleMatch: false,
+      criteriaText: String.raw`\b[A-Z]{1,5}\d{1,6}\b`
+    },
+    fetch: async (url, init) => {
+      const urlText = String(url);
+      if (urlText.includes("/identity/v1/oauth2/token")) {
+        return Response.json({ access_token: "app-access-token", expires_in: 7200, token_type: "Bearer" });
+      }
+
+      if (urlText.includes("/buy/browse/v1/item/get_item_by_legacy_id")) {
+        return Response.json({
+          price: { value: "62.50", currency: "GBP", convertedFromValue: "83.75", convertedFromCurrency: "USD" }
+        });
+      }
+
+      tradingCalls.push(init.headers["X-EBAY-API-CALL-NAME"]);
+      return new Response(mixedWatchListXml, { headers: { "Content-Type": "text/xml" } });
+    }
+  });
+
+  assert.deepEqual(tradingCalls, ["GetMyeBayBuying"]);
+  assert.deepEqual(items.map((item) => item.itemId), ["watch-ended-bnj"]);
+  assert.equal(items[0].relistingGroupId, "criteria:BNJ71001");
+  assert.deepEqual(items[0].currentPrice, { value: 83.75, currency: "USD" });
 });
 
 test("returns truncation warnings when a live list exceeds the safety limit", async () => {
@@ -438,6 +558,7 @@ test("uses persisted-only lost items for refreshed relisting discovery and watch
       watchlistPosition: 1,
       currentPrice: { value: 40, currency: "GBP" }
     }],
+    endedWatchlistItems: [],
     relistingCandidates: [],
     homeFeed: {
       rows: [],

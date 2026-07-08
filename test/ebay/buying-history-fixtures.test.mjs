@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   filterLostItemsEventuallyWon,
   filterLostItemsNeverWon,
+  mockEndedWatchlistItems,
   mockLostBidItems,
   mockRelistingCandidates,
   mockWatchlistItems,
@@ -24,6 +25,12 @@ test("models the target eBay watchlist scenario", () => {
     [1, 2, 3, 4, 5, 6]
   );
   assert.equal(mockRelistingCandidates.length, 2);
+});
+
+test("models the target ended watchlist scenario", () => {
+  assert.equal(mockEndedWatchlistItems.length, 3);
+  assert.equal(mockEndedWatchlistItems.every((item) => item.list === "WatchList"), true);
+  assert.equal(mockEndedWatchlistItems.every((item) => item.currentPrice !== undefined), true);
 });
 
 test("marks relisted wins by a shared relisting group instead of reusing eBay item IDs", () => {

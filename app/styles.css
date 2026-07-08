@@ -187,6 +187,11 @@ button {
   padding: 0 10px;
 }
 
+.capture-action {
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .primary-button {
   background: var(--accent);
   border: 1px solid var(--accent);
@@ -207,7 +212,7 @@ button:disabled {
   bottom: 0;
   box-shadow: 0 -10px 30px rgba(20, 32, 44, 0.07);
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   left: 0;
   min-height: 70px;
   padding: 7px max(18px, calc((100vw - 780px) / 2)) calc(7px + env(safe-area-inset-bottom));
@@ -563,6 +568,10 @@ h1 {
   flex-direction: column;
   gap: 5px;
   min-width: 0;
+}
+
+.listing-side-centered {
+  justify-content: center;
 }
 
 .listing-side strong {

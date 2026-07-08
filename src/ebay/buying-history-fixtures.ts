@@ -54,6 +54,12 @@ export const mockWatchlistItems: FixtureWatchlistItem[] = [
   watchlistItem("sandbox-watch-006", "Sony WM-D6C Professional Walkman", 6)
 ];
 
+export const mockEndedWatchlistItems: FixtureItem[] = [
+  endedWatchlistItem("sandbox-ended-001", "Sansui AU-217 integrated amplifier - ended", "ended-sansui-au-217", 143.5, "2026-04-28"),
+  endedWatchlistItem("sandbox-ended-002", "Rega Fono Mini A2D phono stage - ended", "ended-rega-fono-mini", 58.2, "2026-05-02"),
+  endedWatchlistItem("sandbox-ended-003", "Tannoy Mercury M20 Gold speakers - ended", "ended-tannoy-mercury-m20", 112.75, "2026-05-06")
+];
+
 export const mockRelistingCandidates: FixtureRelistingCandidate[] = [
   relistingCandidate(
     "candidate-001",
@@ -103,8 +109,18 @@ function wonItem(
   return historyItem("WonList", itemId, title, relistingGroupId, value, date);
 }
 
+function endedWatchlistItem(
+  itemId: string,
+  title: string,
+  relistingGroupId: string,
+  value: number,
+  date: string
+): FixtureItem {
+  return historyItem("WatchList", itemId, title, relistingGroupId, value, date);
+}
+
 function historyItem(
-  list: "LostList" | "WonList",
+  list: "LostList" | "WonList" | "WatchList",
   itemId: string,
   title: string,
   relistingGroupId: string,

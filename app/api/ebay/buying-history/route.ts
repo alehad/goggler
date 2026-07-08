@@ -8,6 +8,8 @@ import { fetchLiveEbayHistoryResponse, refreshLiveHistoryDerivedData } from "../
 import { parseMatchingPreferences } from "../../../../src/ebay/matching-preferences.ts";
 import { requireSessionEbayAccessToken } from "../../../../src/ebay/session-access.ts";
 import { EbayTradingApiError } from "../../../../src/ebay/trading-client.ts";
+import type { EbayHistoryResponse } from "../../../../src/ebay/history-response.ts";
+import { listCaptureCandidates } from "../../../../src/market-insights/price-history.ts";
 import { persistLostItemsAndMerge } from "../../../../src/persistence/lost-items.ts";
 import { persistWonItemsAndMerge } from "../../../../src/persistence/won-items.ts";
 
@@ -77,7 +79,7 @@ async function handleBuyingHistoryRequest(request: NextRequest, matchingPreferen
       }
 
       return withInternalSessionCookie(
-        NextResponse.json(history),
+        NextResponse.json(await withCaptureStatus(history, currentUser.context.user.id)),
         currentUser.setCookie
       );
     } catch (error) {
@@ -103,7 +105,17 @@ async function handleBuyingHistoryRequest(request: NextRequest, matchingPreferen
     }
   }
 
-  return withInternalSessionCookie(NextResponse.json(getFixtureHistoryResponse()), currentUser.setCookie);
+  return withInternalSessionCookie(
+    NextResponse.json(await withCaptureStatus(getFixtureHistoryResponse(), currentUser.context.user.id)),
+    currentUser.setCookie
+  );
+}
+
+async function withCaptureStatus(history: EbayHistoryResponse, userId: string) {
+  return {
+    ...history,
+    endedWatchlistItems: await listCaptureCandidates(history, userId)
+  };
 }
 
 function withInternalSessionCookie(response: NextResponse, setCookie: string | undefined): NextResponse {

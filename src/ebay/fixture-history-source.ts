@@ -1,6 +1,7 @@
 import {
   filterLostItemsEventuallyWon,
   filterLostItemsNeverWon,
+  mockEndedWatchlistItems,
   mockLostBidItems,
   mockRelistingCandidates,
   mockWatchlistItems,
@@ -34,6 +35,7 @@ export function getFixtureHistoryResponse(): EbayHistoryResponse {
     lostItems: mockLostBidItems,
     wonItems: mockWonItems,
     watchlistItems: mockWatchlistItems,
+    endedWatchlistItems: mockEndedWatchlistItems,
     relistingCandidates: mockRelistingCandidates,
     homeFeed
   };
