@@ -6,6 +6,7 @@ export type PurchaseChartPoint = {
   price: EbayMoney;
   timestamp: number;
   date: string;
+  won?: boolean;
 };
 
 type PricedPurchase = {

@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import { config } from "dotenv";
 import { DEFAULT_MATCHING_PREFERENCES } from "../../src/ebay/matching-preferences.ts";
-import { captureMarketPriceRecords, listCapturedVenueItemIds } from "../../src/persistence/market-price-records.ts";
+import {
+  captureMarketPriceRecords,
+  listCapturedVenueItemIds,
+  listMarketPriceRecordsByGroup
+} from "../../src/persistence/market-price-records.ts";
 import { createPrismaClient } from "../../src/persistence/prisma.ts";
 
 config({ path: ".env.local" });
@@ -81,6 +85,44 @@ test("listCapturedVenueItemIds returns exactly the captured set for the requesti
 
   const otherUserCaptured = await listCapturedVenueItemIds("other-user", ["ended-001"], prisma);
   assert.deepEqual([...otherUserCaptured], ["ended-001"]);
+});
+
+test("listMarketPriceRecordsByGroup scopes by user, relisting group, and currency", async () => {
+  await captureMarketPriceRecords(
+    [
+      endedItem("ended-001", "Blue Note style LP BNJ71001", 62.5),
+      endedItem("ended-002", "Blue Note style LP BNJ71001", 70)
+    ],
+    "local-saja",
+    DEFAULT_MATCHING_PREFERENCES,
+    prisma
+  );
+  await captureMarketPriceRecords(
+    [{ ...endedItem("ended-003", "Blue Note style LP BNJ71001", 90), currentPrice: { value: 90, currency: "USD" } }],
+    "local-saja",
+    DEFAULT_MATCHING_PREFERENCES,
+    prisma
+  );
+  await captureMarketPriceRecords(
+    [endedItem("ended-004", "Unrelated record BNJ99999", 15)],
+    "local-saja",
+    DEFAULT_MATCHING_PREFERENCES,
+    prisma
+  );
+  await captureMarketPriceRecords(
+    [endedItem("ended-005", "Blue Note style LP BNJ71001", 200)],
+    "other-user",
+    DEFAULT_MATCHING_PREFERENCES,
+    prisma
+  );
+
+  const sales = await listMarketPriceRecordsByGroup("local-saja", "criteria:BNJ71001", "GBP", prisma);
+
+  assert.deepEqual(
+    sales.map((sale) => sale.venueItemId).sort(),
+    ["ended-001", "ended-002"]
+  );
+  assert.equal(sales.every((sale) => sale.price.currency === "GBP"), true);
 });
 
 function endedItem(itemId, title, value) {

@@ -2,14 +2,27 @@ import type { EbayConfig } from "../ebay/config.ts";
 import type { EbayHistoryResponse } from "../ebay/history-response.ts";
 import { fetchEndedWatchlistItems } from "../ebay/live-history-source.ts";
 import type { MatchingPreferences } from "../ebay/matching-preferences.ts";
-import type { EbayBuyingHistoryItem } from "../ebay/trading-client.ts";
-import { captureMarketPriceRecords, listCapturedVenueItemIds } from "../persistence/market-price-records.ts";
+import type { EbayBuyingHistoryItem, EbayMoney } from "../ebay/trading-client.ts";
+import {
+  captureMarketPriceRecords,
+  listCapturedVenueItemIds,
+  listMarketPriceRecordsByGroup
+} from "../persistence/market-price-records.ts";
+import { listWonItemsForGroup } from "../persistence/won-items.ts";
 
 export type PriceHistoryCandidate = EbayBuyingHistoryItem & { captured: boolean };
 
 export type CaptureResult = {
   captured: string[];
   skipped: string[];
+};
+
+export type MatchedSalePoint = {
+  venueItemId: string;
+  title: string;
+  price: EbayMoney;
+  endedAt: string | undefined;
+  won: boolean;
 };
 
 /**
@@ -33,6 +46,35 @@ export async function listCaptureCandidates(
   );
 
   return endedItems.map((item) => ({ ...item, captured: capturedIds.has(item.itemId) }));
+}
+
+/**
+ * A "matched sale" can come from either the captured price-history table or
+ * the user's own Won purchases (even ones never watched, so never captured).
+ * This is the only place that merges those two sources.
+ */
+export async function listMatchedSales(
+  userId: string,
+  relistingGroupId: string,
+  currency: string,
+  matchingPreferences: MatchingPreferences
+): Promise<MatchedSalePoint[]> {
+  const [captured, wonItems] = await Promise.all([
+    listMarketPriceRecordsByGroup(userId, relistingGroupId, currency),
+    listWonItemsForGroup(userId, relistingGroupId, currency, matchingPreferences)
+  ]);
+
+  const wonVenueItemIds = new Set(wonItems.map((won) => won.venueItemId));
+  const capturedVenueItemIds = new Set(captured.map((record) => record.venueItemId));
+
+  const points: MatchedSalePoint[] = [
+    ...captured.map((record) => ({ ...record, won: wonVenueItemIds.has(record.venueItemId) })),
+    ...wonItems
+      .filter((won) => !capturedVenueItemIds.has(won.venueItemId))
+      .map((won) => ({ ...won, won: true }))
+  ];
+
+  return points.sort((a, b) => Date.parse(a.endedAt ?? "") - Date.parse(b.endedAt ?? ""));
 }
 
 export async function captureItems(

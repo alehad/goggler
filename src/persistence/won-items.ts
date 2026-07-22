@@ -7,6 +7,7 @@ import {
 } from "../ebay/matching-preferences.ts";
 import type { EbayBuyingHistoryItem } from "../ebay/trading-client.ts";
 import type { PrismaClient } from "../generated/prisma/client.ts";
+import type { MarketPriceRecordSale } from "./market-price-records.ts";
 import { getPrismaClient } from "./prisma.ts";
 
 export async function persistWonItemsAndMerge(
@@ -96,6 +97,38 @@ export async function persistWonItemsAndMerge(
       itemWebUrl: item.itemWebUrl ?? undefined,
       relistingGroupId: groupForHistoryTitle(item.title, matchingPreferences)
     }))
+  });
+}
+
+export async function listWonItemsForGroup(
+  userId: string,
+  relistingGroupId: string,
+  currency: string,
+  matchingPreferences: MatchingPreferences,
+  prisma: PrismaClient | undefined = getPrismaClient()
+): Promise<MarketPriceRecordSale[]> {
+  if (!prisma) {
+    return [];
+  }
+
+  const wonItems = await prisma.wonItem.findMany({
+    where: { userId, venue: "ebay", currency }
+  });
+
+  return wonItems.flatMap((item) => {
+    if (item.itemPriceAmount === null || !item.currency) {
+      return [];
+    }
+    if (groupForHistoryTitle(item.title, matchingPreferences) !== relistingGroupId) {
+      return [];
+    }
+
+    return [{
+      venueItemId: item.venueItemId,
+      title: item.title,
+      price: { value: item.itemPriceAmount.toNumber(), currency: item.currency },
+      endedAt: item.purchasedAt?.toISOString()
+    }];
   });
 }
 

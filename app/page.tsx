@@ -99,6 +99,20 @@ type HistoryItem = {
 
 type EndedWatchlistItem = HistoryItem & { captured: boolean };
 
+type MatchedSalePoint = {
+  venueItemId: string;
+  title: string;
+  price: { value: number; currency: string };
+  endedAt?: string;
+  won: boolean;
+};
+
+type MatchedSalesState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; sales: MatchedSalePoint[] }
+  | { status: "unavailable" };
+
 type BuyingHistory = {
   source: "fixture" | "live";
   counts: {
@@ -420,7 +434,11 @@ export default function Home() {
           />
         )}
         {activeTab === "analytics" && (
-          <Analytics historyState={historyState} refreshBuyingHistory={refreshBuyingHistory} />
+          <Analytics
+            historyState={historyState}
+            matchingPreferences={matchingPreferences}
+            refreshBuyingHistory={refreshBuyingHistory}
+          />
         )}
         {activeTab === "account" && (
           <Account
@@ -1012,10 +1030,13 @@ function PurchaseChart({
             ))}
           {points.map((point) => {
             const selected = point.itemId === selectedItemId;
+            const pointClasses = ["purchase-point", selected && "selected", point.won && "won"]
+              .filter(Boolean)
+              .join(" ");
             return (
               <g
-                aria-label={`${point.title}, ${formatMoneyValue(point.price)}, ${formatShortDate(point.date)}`}
-                className={selected ? "purchase-point selected" : "purchase-point"}
+                aria-label={`${point.title}, ${formatMoneyValue(point.price)}, ${formatShortDate(point.date)}${point.won ? ", won" : ""}`}
+                className={pointClasses}
                 key={point.itemId}
                 onClick={() => onSelect?.(point.itemId)}
                 onKeyDown={(event) => {
@@ -1104,16 +1125,21 @@ function PurchaseCard({
 
 function Analytics({
   historyState,
+  matchingPreferences,
   refreshBuyingHistory
 }: {
   historyState: HistoryState;
+  matchingPreferences: MatchingPreferences;
   refreshBuyingHistory: () => Promise<void>;
 }) {
   const [filter, setFilter] = useState<CaptureFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [pendingItemIds, setPendingItemIds] = useState<string[]>([]);
   const [bulkCapturing, setBulkCapturing] = useState(false);
   const [message, setMessage] = useState("");
   const [locallyCapturedIds, setLocallyCapturedIds] = useState<string[]>([]);
+  const [selectedItemId, setSelectedItemId] = useState<string | undefined>();
+  const [matchedSalesState, setMatchedSalesState] = useState<MatchedSalesState>({ status: "idle" });
 
   const items = useMemo(() => {
     const endedItems = historyState.status === "ready" ? historyState.history.endedWatchlistItems : [];
@@ -1124,14 +1150,88 @@ function Analytics({
   const capturedCount = items.filter((item) => item.captured).length;
   const notCapturedItems = items.filter((item) => !item.captured);
   const filteredItems = useMemo(() => {
-    if (filter === "captured") {
-      return items.filter((item) => item.captured);
+    const statusFiltered = filter === "captured" ? items.filter((item) => item.captured) : filter === "notCaptured" ? notCapturedItems : items;
+    const term = searchQuery.trim().toLocaleLowerCase("en-GB");
+    if (!term) {
+      return statusFiltered;
     }
-    if (filter === "notCaptured") {
-      return notCapturedItems;
+    return statusFiltered.filter(
+      (item) => item.title.toLocaleLowerCase("en-GB").includes(term) || item.sellerUserId?.toLocaleLowerCase("en-GB").includes(term)
+    );
+  }, [filter, items, notCapturedItems, searchQuery]);
+
+  const selectedItem = items.find((item) => item.itemId === selectedItemId);
+
+  useEffect(() => {
+    if (!selectedItem) {
+      setMatchedSalesState({ status: "idle" });
+      return;
     }
-    return items;
-  }, [filter, items, notCapturedItems]);
+
+    const relistingGroupId = selectedItem.relistingGroupId;
+    const currency = selectedItem.currentPrice?.currency;
+    if (!relistingGroupId || !currency) {
+      setMatchedSalesState({ status: "unavailable" });
+      return;
+    }
+
+    let cancelled = false;
+    setMatchedSalesState({ status: "loading" });
+
+    const params = new URLSearchParams({
+      relistingGroupId,
+      currency,
+      exactTitleMatch: String(matchingPreferences.exactTitleMatch),
+      criteriaText: matchingPreferences.criteriaText
+    });
+
+    fetch(`/api/market-insights/matched-sales?${params.toString()}`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error("matched_sales_unavailable"))))
+      .then((body: { sales?: MatchedSalePoint[] }) => {
+        if (!cancelled) {
+          setMatchedSalesState({ status: "ready", sales: Array.isArray(body.sales) ? body.sales : [] });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMatchedSalesState({ status: "unavailable" });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [matchingPreferences.criteriaText, matchingPreferences.exactTitleMatch, selectedItem]);
+
+  const matchedSales = matchedSalesState.status === "ready" ? matchedSalesState.sales : [];
+  const chartPoints: PurchaseChartPoint[] = useMemo(
+    () =>
+      matchedSales
+        .flatMap((sale): PurchaseChartPoint[] => {
+          const timestamp = sale.endedAt ? Date.parse(sale.endedAt) : Number.NaN;
+          if (!Number.isFinite(timestamp)) {
+            return [];
+          }
+          return [{ itemId: sale.venueItemId, title: sale.title, price: sale.price, timestamp, date: sale.endedAt ?? "", won: sale.won }];
+        })
+        .sort((left, right) => left.timestamp - right.timestamp),
+    [matchedSales]
+  );
+  const wonSales = matchedSales.filter((sale) => sale.won);
+  const myPricePaid = wonSales[wonSales.length - 1];
+  const lowestSale = matchedSales.reduce<MatchedSalePoint | undefined>(
+    (lowest, sale) => (!lowest || sale.price.value < lowest.price.value ? sale : lowest),
+    undefined
+  );
+  const highestSale = matchedSales.reduce<MatchedSalePoint | undefined>(
+    (highest, sale) => (!highest || sale.price.value > highest.price.value ? sale : highest),
+    undefined
+  );
+  const averagePrice =
+    matchedSales.length > 0
+      ? matchedSales.reduce((sum, sale) => sum + sale.price.value, 0) / matchedSales.length
+      : undefined;
+  const salesCurrency = matchedSales[0]?.price.currency ?? selectedItem?.currentPrice?.currency;
 
   async function captureVenueItemIds(venueItemIds: string[]) {
     setMessage("");
@@ -1196,6 +1296,57 @@ function Analytics({
             <Metric label="Not captured" value={String(notCapturedItems.length)} detail="Available to add" />
           </div>
 
+          <PurchaseChart
+            emptyLabel={
+              !selectedItem
+                ? "Select an item below to see its price history"
+                : matchedSalesState.status === "loading"
+                  ? "Loading matched sales..."
+                  : !selectedItem.relistingGroupId || !selectedItem.currentPrice
+                    ? "This item doesn't have enough data to match other sales"
+                    : "No matched sales found yet"
+            }
+            points={chartPoints}
+            subtitle={selectedItem ? `Matched sales for "${selectedItem.title}"` : undefined}
+            title="Matched sales over time"
+          />
+
+          {selectedItem && matchedSalesState.status === "ready" && matchedSales.length > 0 && (
+            <div className="summary-grid">
+              <Metric label="Sales" value={String(matchedSales.length)} detail="Matched listings" />
+              <Metric
+                label="My price paid"
+                value={myPricePaid ? formatMoneyAmount(myPricePaid.price.value, myPricePaid.price.currency) : "-"}
+                detail={myPricePaid?.endedAt ? formatShortDate(myPricePaid.endedAt) : "Not won yet"}
+              />
+              <Metric
+                label="Average"
+                value={averagePrice !== undefined && salesCurrency ? formatMoneyAmount(averagePrice, salesCurrency) : "-"}
+                detail={`${matchedSales.length} matched sales`}
+              />
+              <Metric
+                label="Lowest"
+                value={lowestSale ? formatMoneyAmount(lowestSale.price.value, lowestSale.price.currency) : "-"}
+                detail={lowestSale?.endedAt ? formatShortDate(lowestSale.endedAt) : ""}
+              />
+              <Metric
+                label="Highest"
+                value={highestSale ? formatMoneyAmount(highestSale.price.value, highestSale.price.currency) : "-"}
+                detail={highestSale?.endedAt ? formatShortDate(highestSale.endedAt) : ""}
+              />
+            </div>
+          )}
+
+          <form className="search-box analytics-search" onSubmit={(event) => event.preventDefault()}>
+            <Search size={18} />
+            <input
+              aria-label="Search ended watchlist items"
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search by title or seller"
+              value={searchQuery}
+            />
+          </form>
+
           <div className="section-heading">
             <div className="segmented-control" aria-label="Capture status filter">
               <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")} type="button">
@@ -1236,6 +1387,8 @@ function Analytics({
                   item={item}
                   key={item.itemId}
                   onCapture={() => void captureOne(item.itemId)}
+                  onSelect={() => setSelectedItemId(item.itemId)}
+                  selected={item.itemId === selectedItemId}
                 />
               ))}
             </div>
@@ -1243,7 +1396,7 @@ function Analytics({
             <div className="empty-panel">
               <TrendingUp size={20} />
               <h2>No ended watchlist items</h2>
-              <p>Items you watch on eBay will appear here once their listing ends, so you can capture their final price.</p>
+              <p>{searchQuery.trim() ? "No items match your search." : "Items you watch on eBay will appear here once their listing ends, so you can capture their final price."}</p>
             </div>
           )}
         </>
@@ -1257,17 +1410,24 @@ function Analytics({
 function AnalyticsRow({
   capturing,
   item,
-  onCapture
+  onCapture,
+  onSelect,
+  selected
 }: {
   capturing: boolean;
   item: EndedWatchlistItem;
   onCapture: () => void;
+  onSelect: () => void;
+  selected: boolean;
 }) {
   const imageUrl = safeEbayImageUrl(item.imageUrl);
   const endedDate = formatAbsoluteDate(item.endTime);
 
   return (
-    <article className="candidate-card home-feed-card">
+    <article
+      className={selected ? "candidate-card home-feed-card analytics-row selected" : "candidate-card home-feed-card analytics-row"}
+      onClick={onSelect}
+    >
       <div className="watch-thumbnail" title={imageUrl ? "eBay listing image" : "Ended watchlist item"}>
         {imageUrl ? <img alt="" loading="lazy" referrerPolicy="no-referrer" src={imageUrl} /> : <TrendingUp size={20} />}
       </div>
@@ -1291,7 +1451,15 @@ function AnalyticsRow({
       </div>
       <div className="card-actions">
         {!item.captured && (
-          <button className="secondary-button compact capture-action" disabled={capturing} onClick={onCapture} type="button">
+          <button
+            className="secondary-button compact capture-action"
+            disabled={capturing}
+            onClick={(event) => {
+              event.stopPropagation();
+              onCapture();
+            }}
+            type="button"
+          >
             <Check size={16} />
             <span>{capturing ? "Adding..." : "Add to history"}</span>
           </button>
