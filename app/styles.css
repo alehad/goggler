@@ -415,6 +415,25 @@ h1 {
     transform 140ms ease;
 }
 
+.analytics-row {
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.analytics-row.selected {
+  border-color: #7aa2ff;
+  box-shadow: 0 14px 34px rgba(37, 99, 235, 0.16);
+  transform: translateY(-1px);
+}
+
+.analytics-search {
+  margin-bottom: 14px;
+  width: 100%;
+}
+
 .purchase-card.selected {
   border-color: #7aa2ff;
   box-shadow: 0 14px 34px rgba(37, 99, 235, 0.16);
@@ -545,10 +564,13 @@ h1 {
   stroke-width: 3;
 }
 
+.purchase-point.won circle {
+  fill: var(--bad);
+}
+
 .purchase-point:focus-visible circle,
 .purchase-point.selected circle {
-  fill: #e43137;
-  stroke: #f9c7ca;
+  stroke: var(--accent-strong);
   stroke-width: 4;
 }
 

@@ -1,7 +1,14 @@
 import { catalogueIdForTitle, relistingGroupForTitle, type MatchingPreferences } from "../ebay/matching-preferences.ts";
-import type { EbayBuyingHistoryItem } from "../ebay/trading-client.ts";
+import type { EbayBuyingHistoryItem, EbayMoney } from "../ebay/trading-client.ts";
 import type { PrismaClient } from "../generated/prisma/client.ts";
 import { getPrismaClient } from "./prisma.ts";
+
+export type MarketPriceRecordSale = {
+  venueItemId: string;
+  title: string;
+  price: EbayMoney;
+  endedAt: string | undefined;
+};
 
 export async function captureMarketPriceRecords(
   items: EbayBuyingHistoryItem[],
@@ -52,6 +59,40 @@ export async function listCapturedVenueItemIds(
   });
 
   return new Set(existing.map((record) => record.venueItemId));
+}
+
+export async function listMarketPriceRecordsByGroup(
+  userId: string,
+  relistingGroupId: string,
+  currency: string,
+  prisma: PrismaClient | undefined = getPrismaClient()
+): Promise<MarketPriceRecordSale[]> {
+  if (!prisma) {
+    return [];
+  }
+
+  const records = await prisma.marketPriceRecord.findMany({
+    where: {
+      userId,
+      venue: "ebay",
+      relistingGroupId,
+      soldPriceCurrency: currency
+    },
+    orderBy: { endedAt: "asc" }
+  });
+
+  return records.flatMap((record) => {
+    if (record.soldPriceAmount === null || !record.soldPriceCurrency) {
+      return [];
+    }
+
+    return [{
+      venueItemId: record.venueItemId,
+      title: record.title,
+      price: { value: record.soldPriceAmount.toNumber(), currency: record.soldPriceCurrency },
+      endedAt: record.endedAt?.toISOString()
+    }];
+  });
 }
 
 function toMarketPriceRecordCreate(
