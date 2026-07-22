@@ -257,6 +257,12 @@ button:disabled {
   margin-bottom: 22px;
 }
 
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .eyebrow {
   color: var(--muted);
   font-size: 13px;
@@ -408,11 +414,61 @@ h1 {
 
 .purchase-card {
   cursor: pointer;
+  grid-template-columns: 104px minmax(0, 1fr) auto auto;
   scroll-margin-bottom: 96px;
   transition:
     border-color 140ms ease,
     box-shadow 140ms ease,
     transform 140ms ease;
+}
+
+.market-stats {
+  align-items: center;
+  align-self: center;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.market-stats .stat-row {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 84px;
+}
+
+.market-stats .stat-value {
+  font-size: 20px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.market-stats .stat-note {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.market-stats .stat-label {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.market-stats .stat-row.positive .stat-value,
+.market-stats .stat-row.positive .stat-note {
+  color: var(--good);
+}
+
+.market-stats .stat-row.negative .stat-value,
+.market-stats .stat-row.negative .stat-note {
+  color: var(--bad);
 }
 
 .analytics-row {
@@ -429,9 +485,28 @@ h1 {
   transform: translateY(-1px);
 }
 
-.analytics-search {
+.tab-search {
   margin-bottom: 14px;
   width: 100%;
+}
+
+.group-filter-banner {
+  align-items: center;
+  background: #edf3ff;
+  border: 1px solid #cfddff;
+  border-radius: 8px;
+  color: var(--accent-strong);
+  display: flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+}
+
+.group-filter-banner button {
+  flex-shrink: 0;
 }
 
 .purchase-card.selected {
@@ -657,6 +732,10 @@ h1 {
 
 .segmented-control.home-filters {
   grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.segmented-control.win-status-filter {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .relisting-format-toolbar {
@@ -902,6 +981,12 @@ h1 {
   .listing-side .confidence,
   .listing-side .ends {
     grid-column: 1 / -1;
+  }
+
+  .market-stats {
+    border-top: 1px solid var(--line);
+    justify-content: flex-start;
+    padding-top: 10px;
   }
 
   .card-actions {

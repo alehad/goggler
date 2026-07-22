@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server.js";
 import { getOrCreateCurrentUser } from "../../../../src/auth/current-user.ts";
 import { parseMatchingPreferences } from "../../../../src/ebay/matching-preferences.ts";
-import { listMatchedSales } from "../../../../src/market-insights/price-history.ts";
+import { listMatchedSales, summarizeMatchedSales } from "../../../../src/market-insights/price-history.ts";
 
 export async function GET(request: NextRequest) {
   const currentUser = getOrCreateCurrentUser(request);
@@ -23,7 +23,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const sales = await listMatchedSales(currentUser.context.user.id, relistingGroupId, currency, matchingPreferences);
-    return withInternalSessionCookie(NextResponse.json({ sales }), currentUser.setCookie);
+    const summary = summarizeMatchedSales(sales);
+    return withInternalSessionCookie(NextResponse.json({ sales, summary }), currentUser.setCookie);
   } catch {
     console.warn("Market insights matched-sales lookup failed", { type: "unexpected_error" });
     return withInternalSessionCookie(

@@ -99,6 +99,10 @@ type HistoryItem = {
 
 type EndedWatchlistItem = HistoryItem & { captured: boolean };
 
+type WinStatusFilter = "all" | "won" | "eventuallyWon" | "neverWon";
+
+type AnalyticsItem = HistoryItem & { captured: boolean; won: boolean; eventuallyWon: boolean };
+
 type MatchedSalePoint = {
   venueItemId: string;
   title: string;
@@ -107,10 +111,23 @@ type MatchedSalePoint = {
   won: boolean;
 };
 
+type MatchedSalesSummary = {
+  count: number;
+  average: number;
+  lowest: { value: number; endedAt?: string };
+  highest: { value: number; endedAt?: string };
+};
+
 type MatchedSalesState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "ready"; sales: MatchedSalePoint[] }
+  | { status: "ready"; sales: MatchedSalePoint[]; summary?: MatchedSalesSummary }
+  | { status: "unavailable" };
+
+type MatchedSalesSummariesState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "ready"; summaries: Record<string, MatchedSalesSummary | undefined> }
   | { status: "unavailable" };
 
 type BuyingHistory = {
@@ -196,6 +213,14 @@ export default function Home() {
   const [searchDraft, setSearchDraft] = useState("");
   const [homeSearchQuery, setHomeSearchQuery] = useState("");
   const [homeSearchState, setHomeSearchState] = useState<HomeSearchState>({ status: "idle" });
+  const [analyticsSelectedItemId, setAnalyticsSelectedItemId] = useState<string | undefined>();
+  const [analyticsGroupFilter, setAnalyticsGroupFilter] = useState<string | undefined>();
+
+  function viewPriceHistory(itemId: string, relistingGroupId: string | undefined) {
+    setAnalyticsSelectedItemId(itemId);
+    setAnalyticsGroupFilter(relistingGroupId);
+    setActiveTab("analytics");
+  }
 
   async function refreshEbayConfigStatus() {
     const response = await fetch("/api/auth/ebay/config-status");
@@ -430,7 +455,9 @@ export default function Home() {
         {activeTab === "won" && (
           <Won
             historyState={historyState}
+            matchingPreferences={matchingPreferences}
             refreshBuyingHistory={refreshBuyingHistory}
+            onViewPriceHistory={viewPriceHistory}
           />
         )}
         {activeTab === "analytics" && (
@@ -438,6 +465,10 @@ export default function Home() {
             historyState={historyState}
             matchingPreferences={matchingPreferences}
             refreshBuyingHistory={refreshBuyingHistory}
+            selectedItemId={analyticsSelectedItemId}
+            onSelectItem={setAnalyticsSelectedItemId}
+            groupFilter={analyticsGroupFilter}
+            onClearGroupFilter={() => setAnalyticsGroupFilter(undefined)}
           />
         )}
         {activeTab === "account" && (
@@ -850,18 +881,33 @@ function Tracking({
 
 function Won({
   historyState,
-  refreshBuyingHistory
+  matchingPreferences,
+  refreshBuyingHistory,
+  onViewPriceHistory
 }: {
   historyState: HistoryState;
+  matchingPreferences: MatchingPreferences;
   refreshBuyingHistory: () => Promise<void>;
+  onViewPriceHistory: (itemId: string, relistingGroupId: string | undefined) => void;
 }) {
   const [selectedItemId, setSelectedItemId] = useState<string | undefined>();
-  const chartPoints = useMemo(
-    () => (historyState.status === "ready" ? buildPurchaseChartPoints(historyState.history.wonItems) : []),
+  const [searchQuery, setSearchQuery] = useState("");
+  const [summariesState, setSummariesState] = useState<MatchedSalesSummariesState>({ status: "idle" });
+  const wonItems = useMemo(
+    () => (historyState.status === "ready" ? historyState.history.wonItems : []),
     [historyState]
   );
-  const selectedItem =
-    historyState.status === "ready" ? historyState.history.wonItems.find((item) => item.itemId === selectedItemId) : undefined;
+  const chartPoints = useMemo(() => buildPurchaseChartPoints(wonItems), [wonItems]);
+  const filteredItems = useMemo(() => {
+    const term = searchQuery.trim().toLocaleLowerCase("en-GB");
+    if (!term) {
+      return wonItems;
+    }
+    return wonItems.filter(
+      (item) => item.title.toLocaleLowerCase("en-GB").includes(term) || item.sellerUserId?.toLocaleLowerCase("en-GB").includes(term)
+    );
+  }, [wonItems, searchQuery]);
+  const selectedItem = wonItems.find((item) => item.itemId === selectedItemId);
   const selectedPoint = chartPoints.find((point) => point.itemId === selectedItemId);
 
   function selectPurchase(itemId: string) {
@@ -878,6 +924,50 @@ function Won({
       block: "center"
     });
   }, [selectedItemId]);
+
+  useEffect(() => {
+    const groups = new Map<string, { relistingGroupId: string; currency: string }>();
+    for (const item of wonItems) {
+      if (item.relistingGroupId && item.currentPrice?.currency) {
+        groups.set(matchedSalesSummaryKey(item.relistingGroupId, item.currentPrice.currency), {
+          relistingGroupId: item.relistingGroupId,
+          currency: item.currentPrice.currency
+        });
+      }
+    }
+
+    if (groups.size === 0) {
+      setSummariesState({ status: "idle" });
+      return;
+    }
+
+    let cancelled = false;
+    setSummariesState({ status: "loading" });
+
+    fetch("/api/market-insights/matched-sales/summary", {
+      body: JSON.stringify({ groups: [...groups.values()], matchingPreferences }),
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      method: "POST"
+    })
+      .then((response) => (response.ok ? response.json() : Promise.reject(new Error("matched_sales_summary_unavailable"))))
+      .then((body: { summaries?: Record<string, MatchedSalesSummary | undefined> }) => {
+        if (!cancelled) {
+          setSummariesState({ status: "ready", summaries: body.summaries ?? {} });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSummariesState({ status: "unavailable" });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [wonItems, matchingPreferences.criteriaText, matchingPreferences.exactTitleMatch]);
+
+  const summaries = summariesState.status === "ready" ? summariesState.summaries : {};
 
   return (
     <section className="content">
@@ -896,14 +986,30 @@ function Won({
         <>
           <PurchaseChart points={chartPoints} selectedItemId={selectedItemId} onSelect={selectPurchase} />
 
-          {historyState.history.wonItems.length > 0 ? (
+          <form className="search-box tab-search" onSubmit={(event) => event.preventDefault()}>
+            <Search size={18} />
+            <input
+              aria-label="Search purchases"
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search by title or seller"
+              value={searchQuery}
+            />
+          </form>
+
+          {filteredItems.length > 0 ? (
             <div className="candidate-list purchase-list">
-              {historyState.history.wonItems.map((item) => (
+              {filteredItems.map((item) => (
                 <PurchaseCard
                   item={item}
                   key={item.itemId}
                   onSelect={selectPurchase}
+                  onViewPriceHistory={onViewPriceHistory}
                   selected={item.itemId === selectedPoint?.itemId || item.itemId === selectedItem?.itemId}
+                  summary={
+                    item.relistingGroupId && item.currentPrice?.currency
+                      ? summaries[matchedSalesSummaryKey(item.relistingGroupId, item.currentPrice.currency)]
+                      : undefined
+                  }
                 />
               ))}
             </div>
@@ -911,7 +1017,7 @@ function Won({
             <div className="empty-panel">
               <ShoppingBag size={20} />
               <h2>No purchases yet</h2>
-              <p>Won items will appear here after eBay reports them in your buying history.</p>
+              <p>{searchQuery.trim() ? "No purchases match your search." : "Won items will appear here after eBay reports them in your buying history."}</p>
             </div>
           )}
         </>
@@ -1067,15 +1173,24 @@ function PurchaseChart({
 function PurchaseCard({
   item,
   onSelect,
-  selected
+  onViewPriceHistory,
+  selected,
+  summary
 }: {
   item: HistoryItem;
   onSelect: (itemId: string) => void;
+  onViewPriceHistory: (itemId: string, relistingGroupId: string | undefined) => void;
   selected: boolean;
+  summary: MatchedSalesSummary | undefined;
 }) {
   const imageUrl = safeEbayImageUrl(item.imageUrl);
-  const itemWebUrl = safeEbayItemUrl(item.itemWebUrl);
   const wonDate = formatAbsoluteDate(item.endTime);
+  const paidValue = item.currentPrice?.value;
+  const paidCurrency = item.currentPrice?.currency;
+  const comparableSummary = summary && summary.count > 1 ? summary : undefined;
+  const diff = comparableSummary && paidValue !== undefined ? paidValue - comparableSummary.average : undefined;
+  const diffPercent =
+    diff !== undefined && comparableSummary && comparableSummary.average !== 0 ? (diff / comparableSummary.average) * 100 : undefined;
 
   return (
     <article
@@ -1101,23 +1216,39 @@ function PurchaseCard({
           {selected && <span className="signal attention">Selected</span>}
         </div>
       </div>
-      <div className="listing-side">
-        <strong>{item.currentPrice ? formatMoneyValue(item.currentPrice) : "-"}</strong>
-        <span>paid price</span>
+      <div className="market-stats">
+        <div className="stat-row">
+          <strong className="stat-value">{item.currentPrice ? formatMoneyValue(item.currentPrice) : "-"}</strong>
+          <span className="stat-label">paid</span>
+        </div>
+        <div className="stat-row">
+          <strong className="stat-value">
+            {comparableSummary && paidCurrency ? formatMoneyAmount(comparableSummary.average, paidCurrency) : "--"}
+          </strong>
+          <span className="stat-label">avg</span>
+        </div>
+        <div className={diff === undefined ? "stat-row" : diff > 0 ? "stat-row negative" : diff < 0 ? "stat-row positive" : "stat-row"}>
+          <strong className="stat-value">
+            {diff !== undefined && paidCurrency ? `${diff > 0 ? "+" : ""}${formatMoneyAmount(diff, paidCurrency)}` : "--"}
+          </strong>
+          {diff !== undefined && diffPercent !== undefined && (
+            <span className="stat-note">{`${diffPercent > 0 ? "+" : ""}${diffPercent.toFixed(0)}%`}</span>
+          )}
+          <span className="stat-label">diff</span>
+        </div>
       </div>
       <div className="card-actions">
-        {itemWebUrl && (
-          <a
-            className="icon-button"
-            href={itemWebUrl}
-            onClick={(event) => event.stopPropagation()}
-            rel="noopener noreferrer"
-            target="_blank"
-            title="View on eBay"
-          >
-            <ExternalLink size={18} />
-          </a>
-        )}
+        <button
+          className="icon-button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onViewPriceHistory(item.itemId, item.relistingGroupId);
+          }}
+          title="View price history"
+          type="button"
+        >
+          <TrendingUp size={18} />
+        </button>
       </div>
     </article>
   );
@@ -1126,41 +1257,96 @@ function PurchaseCard({
 function Analytics({
   historyState,
   matchingPreferences,
-  refreshBuyingHistory
+  refreshBuyingHistory,
+  selectedItemId,
+  onSelectItem,
+  groupFilter,
+  onClearGroupFilter
 }: {
   historyState: HistoryState;
   matchingPreferences: MatchingPreferences;
   refreshBuyingHistory: () => Promise<void>;
+  selectedItemId: string | undefined;
+  onSelectItem: (itemId: string | undefined) => void;
+  groupFilter: string | undefined;
+  onClearGroupFilter: () => void;
 }) {
   const [filter, setFilter] = useState<CaptureFilter>("all");
+  const [winFilter, setWinFilter] = useState<WinStatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingItemIds, setPendingItemIds] = useState<string[]>([]);
   const [bulkCapturing, setBulkCapturing] = useState(false);
   const [message, setMessage] = useState("");
   const [locallyCapturedIds, setLocallyCapturedIds] = useState<string[]>([]);
-  const [selectedItemId, setSelectedItemId] = useState<string | undefined>();
   const [matchedSalesState, setMatchedSalesState] = useState<MatchedSalesState>({ status: "idle" });
 
-  const items = useMemo(() => {
-    const endedItems = historyState.status === "ready" ? historyState.history.endedWatchlistItems : [];
-    return endedItems.map((item) =>
-      locallyCapturedIds.includes(item.itemId) ? { ...item, captured: true } : item
+  const items: AnalyticsItem[] = useMemo(() => {
+    if (historyState.status !== "ready") {
+      return [];
+    }
+
+    const { endedWatchlistItems, wonItems } = historyState.history;
+    const wonItemIds = new Set(wonItems.map((won) => won.itemId));
+    const wonGroupIds = new Set(
+      wonItems.map((won) => won.relistingGroupId).filter((groupId): groupId is string => Boolean(groupId))
     );
+
+    const watchlistRows: AnalyticsItem[] = endedWatchlistItems.map((item) => {
+      const captured = locallyCapturedIds.includes(item.itemId) || item.captured;
+      const won = wonItemIds.has(item.itemId);
+      return {
+        ...item,
+        captured,
+        won,
+        eventuallyWon: !won && Boolean(item.relistingGroupId) && wonGroupIds.has(item.relistingGroupId as string)
+      };
+    });
+    const watchlistIds = new Set(watchlistRows.map((row) => row.itemId));
+    const wonOnlyRows: AnalyticsItem[] = wonItems
+      .filter((won) => !watchlistIds.has(won.itemId))
+      .map((won) => ({ ...won, captured: false, won: true, eventuallyWon: false }));
+
+    return [...watchlistRows, ...wonOnlyRows].sort((a, b) => Date.parse(b.endTime ?? "") - Date.parse(a.endTime ?? ""));
   }, [historyState, locallyCapturedIds]);
   const capturedCount = items.filter((item) => item.captured).length;
-  const notCapturedItems = items.filter((item) => !item.captured);
+  const notCapturedCount = items.length - capturedCount;
   const filteredItems = useMemo(() => {
-    const statusFiltered = filter === "captured" ? items.filter((item) => item.captured) : filter === "notCaptured" ? notCapturedItems : items;
+    const groupFiltered = groupFilter ? items.filter((item) => item.relistingGroupId === groupFilter) : items;
+    const captureFiltered =
+      filter === "captured"
+        ? groupFiltered.filter((item) => item.captured)
+        : filter === "notCaptured"
+          ? groupFiltered.filter((item) => !item.captured)
+          : groupFiltered;
+    const winFiltered =
+      winFilter === "won"
+        ? captureFiltered.filter((item) => item.won)
+        : winFilter === "eventuallyWon"
+          ? captureFiltered.filter((item) => item.eventuallyWon)
+          : winFilter === "neverWon"
+            ? captureFiltered.filter((item) => !item.won && !item.eventuallyWon)
+            : captureFiltered;
     const term = searchQuery.trim().toLocaleLowerCase("en-GB");
     if (!term) {
-      return statusFiltered;
+      return winFiltered;
     }
-    return statusFiltered.filter(
+    return winFiltered.filter(
       (item) => item.title.toLocaleLowerCase("en-GB").includes(term) || item.sellerUserId?.toLocaleLowerCase("en-GB").includes(term)
     );
-  }, [filter, items, notCapturedItems, searchQuery]);
+  }, [filter, winFilter, items, searchQuery, groupFilter]);
 
   const selectedItem = items.find((item) => item.itemId === selectedItemId);
+
+  useEffect(() => {
+    if (!selectedItemId) {
+      return;
+    }
+
+    document.getElementById(analyticsRowDomId(selectedItemId))?.scrollIntoView({
+      behavior: "smooth",
+      block: "center"
+    });
+  }, [selectedItemId]);
 
   useEffect(() => {
     if (!selectedItem) {
@@ -1187,9 +1373,9 @@ function Analytics({
 
     fetch(`/api/market-insights/matched-sales?${params.toString()}`, { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : Promise.reject(new Error("matched_sales_unavailable"))))
-      .then((body: { sales?: MatchedSalePoint[] }) => {
+      .then((body: { sales?: MatchedSalePoint[]; summary?: MatchedSalesSummary }) => {
         if (!cancelled) {
-          setMatchedSalesState({ status: "ready", sales: Array.isArray(body.sales) ? body.sales : [] });
+          setMatchedSalesState({ status: "ready", sales: Array.isArray(body.sales) ? body.sales : [], summary: body.summary });
         }
       })
       .catch(() => {
@@ -1204,6 +1390,7 @@ function Analytics({
   }, [matchingPreferences.criteriaText, matchingPreferences.exactTitleMatch, selectedItem]);
 
   const matchedSales = matchedSalesState.status === "ready" ? matchedSalesState.sales : [];
+  const summary = matchedSalesState.status === "ready" ? matchedSalesState.summary : undefined;
   const chartPoints: PurchaseChartPoint[] = useMemo(
     () =>
       matchedSales
@@ -1219,18 +1406,6 @@ function Analytics({
   );
   const wonSales = matchedSales.filter((sale) => sale.won);
   const myPricePaid = wonSales[wonSales.length - 1];
-  const lowestSale = matchedSales.reduce<MatchedSalePoint | undefined>(
-    (lowest, sale) => (!lowest || sale.price.value < lowest.price.value ? sale : lowest),
-    undefined
-  );
-  const highestSale = matchedSales.reduce<MatchedSalePoint | undefined>(
-    (highest, sale) => (!highest || sale.price.value > highest.price.value ? sale : highest),
-    undefined
-  );
-  const averagePrice =
-    matchedSales.length > 0
-      ? matchedSales.reduce((sum, sale) => sum + sale.price.value, 0) / matchedSales.length
-      : undefined;
   const salesCurrency = matchedSales[0]?.price.currency ?? selectedItem?.currentPrice?.currency;
 
   async function captureVenueItemIds(venueItemIds: string[]) {
@@ -1262,7 +1437,9 @@ function Analytics({
   }
 
   async function captureAllVisible() {
-    const visibleNotCaptured = filteredItems.filter((item) => !item.captured).map((item) => item.itemId);
+    const visibleNotCaptured = filteredItems
+      .filter((item) => !item.captured && item.list === "WatchList")
+      .map((item) => item.itemId);
     if (visibleNotCaptured.length === 0) {
       return;
     }
@@ -1291,9 +1468,9 @@ function Analytics({
       {historyState.status === "ready" ? (
         <>
           <div className="summary-grid">
-            <Metric label="Ended items" value={String(items.length)} detail="From your eBay watchlist" />
+            <Metric label="Items" value={String(items.length)} detail="Ended watchlist + won purchases" />
             <Metric label="Captured" value={String(capturedCount)} detail="In price history" />
-            <Metric label="Not captured" value={String(notCapturedItems.length)} detail="Available to add" />
+            <Metric label="Not captured" value={String(notCapturedCount)} detail="Available to add" />
           </div>
 
           <PurchaseChart
@@ -1321,23 +1498,33 @@ function Analytics({
               />
               <Metric
                 label="Average"
-                value={averagePrice !== undefined && salesCurrency ? formatMoneyAmount(averagePrice, salesCurrency) : "-"}
+                value={summary && salesCurrency ? formatMoneyAmount(summary.average, salesCurrency) : "-"}
                 detail={`${matchedSales.length} matched sales`}
               />
               <Metric
                 label="Lowest"
-                value={lowestSale ? formatMoneyAmount(lowestSale.price.value, lowestSale.price.currency) : "-"}
-                detail={lowestSale?.endedAt ? formatShortDate(lowestSale.endedAt) : ""}
+                value={summary && salesCurrency ? formatMoneyAmount(summary.lowest.value, salesCurrency) : "-"}
+                detail={summary?.lowest.endedAt ? formatShortDate(summary.lowest.endedAt) : ""}
               />
               <Metric
                 label="Highest"
-                value={highestSale ? formatMoneyAmount(highestSale.price.value, highestSale.price.currency) : "-"}
-                detail={highestSale?.endedAt ? formatShortDate(highestSale.endedAt) : ""}
+                value={summary && salesCurrency ? formatMoneyAmount(summary.highest.value, salesCurrency) : "-"}
+                detail={summary?.highest.endedAt ? formatShortDate(summary.highest.endedAt) : ""}
               />
             </div>
           )}
 
-          <form className="search-box analytics-search" onSubmit={(event) => event.preventDefault()}>
+          {groupFilter && (
+            <div className="group-filter-banner">
+              <span>Showing matches for "{selectedItem?.title ?? "selected item"}"</span>
+              <button className="secondary-button compact" onClick={onClearGroupFilter} type="button">
+                <X size={14} />
+                <span>Clear filter</span>
+              </button>
+            </div>
+          )}
+
+          <form className="search-box tab-search" onSubmit={(event) => event.preventDefault()}>
             <Search size={18} />
             <input
               aria-label="Search ended watchlist items"
@@ -1348,23 +1535,48 @@ function Analytics({
           </form>
 
           <div className="section-heading">
-            <div className="segmented-control" aria-label="Capture status filter">
-              <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")} type="button">
-                All
-              </button>
-              <button className={filter === "captured" ? "active" : ""} onClick={() => setFilter("captured")} type="button">
-                Captured
-              </button>
-              <button
-                className={filter === "notCaptured" ? "active" : ""}
-                onClick={() => setFilter("notCaptured")}
-                type="button"
-              >
-                Not captured
-              </button>
+            <div className="filter-row">
+              <div className="segmented-control" aria-label="Capture status filter">
+                <button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")} type="button">
+                  All
+                </button>
+                <button className={filter === "captured" ? "active" : ""} onClick={() => setFilter("captured")} type="button">
+                  Captured
+                </button>
+                <button
+                  className={filter === "notCaptured" ? "active" : ""}
+                  onClick={() => setFilter("notCaptured")}
+                  type="button"
+                >
+                  Not captured
+                </button>
+              </div>
+
+              <div className="segmented-control win-status-filter" aria-label="Win status filter">
+                <button className={winFilter === "all" ? "active" : ""} onClick={() => setWinFilter("all")} type="button">
+                  All
+                </button>
+                <button className={winFilter === "won" ? "active" : ""} onClick={() => setWinFilter("won")} type="button">
+                  Won
+                </button>
+                <button
+                  className={winFilter === "eventuallyWon" ? "active" : ""}
+                  onClick={() => setWinFilter("eventuallyWon")}
+                  type="button"
+                >
+                  Eventually won
+                </button>
+                <button
+                  className={winFilter === "neverWon" ? "active" : ""}
+                  onClick={() => setWinFilter("neverWon")}
+                  type="button"
+                >
+                  Never won
+                </button>
+              </div>
             </div>
 
-            {filteredItems.some((item) => !item.captured) && (
+            {filteredItems.some((item) => !item.captured && item.list === "WatchList") && (
               <button
                 className="secondary-button compact capture-action"
                 disabled={bulkCapturing}
@@ -1387,7 +1599,7 @@ function Analytics({
                   item={item}
                   key={item.itemId}
                   onCapture={() => void captureOne(item.itemId)}
-                  onSelect={() => setSelectedItemId(item.itemId)}
+                  onSelect={() => onSelectItem(item.itemId)}
                   selected={item.itemId === selectedItemId}
                 />
               ))}
@@ -1415,17 +1627,19 @@ function AnalyticsRow({
   selected
 }: {
   capturing: boolean;
-  item: EndedWatchlistItem;
+  item: AnalyticsItem;
   onCapture: () => void;
   onSelect: () => void;
   selected: boolean;
 }) {
   const imageUrl = safeEbayImageUrl(item.imageUrl);
-  const endedDate = formatAbsoluteDate(item.endTime);
+  const dateLabel = formatAbsoluteDate(item.endTime);
+  const isWonOnly = item.list === "WonList";
 
   return (
     <article
       className={selected ? "candidate-card home-feed-card analytics-row selected" : "candidate-card home-feed-card analytics-row"}
+      id={analyticsRowDomId(item.itemId)}
       onClick={onSelect}
     >
       <div className="watch-thumbnail" title={imageUrl ? "eBay listing image" : "Ended watchlist item"}>
@@ -1439,18 +1653,20 @@ function AnalyticsRow({
         </div>
         <div className="meta-row">
           <span>seller: <SellerLink inline sellerUserId={item.sellerUserId} /></span>
-          {endedDate && <span>ended: {endedDate}</span>}
+          {dateLabel && <span>{isWonOnly ? "won" : "ended"}: {dateLabel}</span>}
         </div>
         <div className="signal-row">
           <span className={item.captured ? "signal" : "signal attention"}>{item.captured ? "Captured" : "Not captured"}</span>
+          {item.won && <span className="signal">Won</span>}
+          {item.eventuallyWon && <span className="signal attention">Eventually won</span>}
         </div>
       </div>
       <div className="listing-side listing-side-centered">
         <strong>{item.currentPrice ? formatMoneyValue(item.currentPrice) : "-"}</strong>
-        <span>final price</span>
+        <span>{isWonOnly ? "paid price" : "final price"}</span>
       </div>
       <div className="card-actions">
-        {!item.captured && (
+        {!item.captured && !isWonOnly && (
           <button
             className="secondary-button compact capture-action"
             disabled={capturing}
@@ -1849,6 +2065,14 @@ function normalizeSearchComparable(value: string): string {
 
 function purchaseCardDomId(itemId: string): string {
   return `purchase-${itemId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
+function analyticsRowDomId(itemId: string): string {
+  return `analytics-row-${itemId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
+function matchedSalesSummaryKey(relistingGroupId: string, currency: string): string {
+  return `${relistingGroupId}::${currency}`;
 }
 
 function weeklyTicks(minTime: number, maxTime: number): number[] {
