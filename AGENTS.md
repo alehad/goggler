@@ -19,6 +19,15 @@ goggler is a personal-first eBay UK auction tracker. It imports authenticated bu
 - Any change that introduces or modifies persistence must include deterministic checks proving that eBay OAuth credential material is not represented in the persistent schema and is not written during runtime behavior.
 - If a proposed feature appears to require persisted eBay OAuth credential material, stop and redesign it around fresh user authentication or active-session credentials instead.
 
+## Manual Testing Against Production eBay
+
+- Meaningful manual testing requires Production eBay OAuth, which requires a public HTTPS callback URL — `localhost` cannot complete a real eBay login. Default to standing up the ngrok tunnel and sharing that URL whenever a manual test link is needed (including the "manual functional testing pause" step below), unless the user explicitly says to test locally instead.
+- Start the tunnel from the repo root: `ngrok http 3000 --traffic-policy-file ngrok/oauth.yml` (requires the `goggler-dev` dev server already running on port 3000).
+- Reserved public URL: `https://unrigged-fifth-nastily.ngrok-free.dev`. This is gated by Google OAuth at the tunnel edge (`ngrok/oauth.yml`, `auth_id: goggler-dev`) before any request reaches localhost — the user authenticates with Google first, then reaches the app.
+- If ngrok reports an invalid OAuth state, reset it: `https://unrigged-fifth-nastily.ngrok-free.dev/ngrok/logout?auth_id=goggler-dev`.
+- If the full edge gate ever breaks eBay's OAuth callback (`code`/`state` round-trip), `ngrok/oauth-callback-fallback.yml` is the documented fallback policy — it exempts only `/api/auth/ebay/callback`, relying on the app's own signed-state protection there.
+- `EBAY_PRODUCTION_REDIRECT_URI` in `.env.local` must match the ngrok callback URL (`https://unrigged-fifth-nastily.ngrok-free.dev/api/auth/ebay/callback`). If the reserved domain ever changes, the eBay Developer Portal's accepted/declined RuName URLs must be updated to match.
+
 ## Git Workflow
 
 - Do development work on short-lived branches using the `codex/` prefix by default.
@@ -54,7 +63,7 @@ When Claude Code is doing the implementation work in this repository, the featur
 1. **Plan.** Discuss the change and produce the OpenSpec proposal/design/tasks under `openspec/changes/<name>/`. Mandatory before any implementation.
 2. **Design sign-off.** Wait for the user to review the OpenSpec design and explicitly grant permission to implement. Do not start implementation before this.
 3. **Implement.** Build the feature on the `codex/`-prefixed feature branch. Immediately after implementing, run the relevant deterministic checks (`npm run build`, `npm run lint`, `npm run test:unit`, `npm run openspec:validate` as applicable) and fix any failures before handing off — this is pre-approved and does not require a confirmation prompt.
-4. **Manual functional testing pause.** Stop and hand the feature to the user to exercise against dev or production eBay. Do not proceed past this point on your own.
+4. **Manual functional testing pause.** Stop and hand the feature to the user to exercise against Production eBay via the ngrok tunnel (see "Manual Testing Against Production eBay" above — start the tunnel and share that URL, not `localhost`, unless told otherwise). Do not proceed past this point on your own.
 5. **User sign-off.** Wait for the user to explicitly confirm the feature works as intended.
 6. **Security review — dual gate.** Once sign-off is received, run both:
    - Claude Code's built-in `security-review` skill against the diff, and

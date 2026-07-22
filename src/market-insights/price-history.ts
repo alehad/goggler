@@ -25,6 +25,18 @@ export type MatchedSalePoint = {
   won: boolean;
 };
 
+export type MatchedSalesSummary = {
+  count: number;
+  average: number;
+  lowest: { value: number; endedAt: string | undefined };
+  highest: { value: number; endedAt: string | undefined };
+};
+
+export type MatchedSalesGroupKey = {
+  relistingGroupId: string;
+  currency: string;
+};
+
 /**
  * The only place that knows historical price candidates currently come from
  * ended eBay watchlist items. Callers (API routes, UI data fetching) only
@@ -75,6 +87,54 @@ export async function listMatchedSales(
   ];
 
   return points.sort((a, b) => Date.parse(a.endedAt ?? "") - Date.parse(b.endedAt ?? ""));
+}
+
+/**
+ * Pure reduction over already-fetched matched sales. The only place that
+ * computes count/average/lowest/highest, so both the single-item Analytics
+ * view and the batch Purchases-tab summary agree on the same numbers.
+ */
+export function summarizeMatchedSales(sales: MatchedSalePoint[]): MatchedSalesSummary | undefined {
+  if (sales.length === 0) {
+    return undefined;
+  }
+
+  const lowest = sales.reduce((lowest, sale) => (sale.price.value < lowest.price.value ? sale : lowest));
+  const highest = sales.reduce((highest, sale) => (sale.price.value > highest.price.value ? sale : highest));
+  const average = sales.reduce((sum, sale) => sum + sale.price.value, 0) / sales.length;
+
+  return {
+    count: sales.length,
+    average,
+    lowest: { value: lowest.price.value, endedAt: lowest.endedAt },
+    highest: { value: highest.price.value, endedAt: highest.endedAt }
+  };
+}
+
+/**
+ * Batch counterpart to listMatchedSales for the Purchases tab, where many
+ * cards each need their own group's summary in one round trip instead of
+ * one matched-sales fetch per card.
+ */
+export async function listMatchedSalesSummaries(
+  userId: string,
+  groups: MatchedSalesGroupKey[],
+  matchingPreferences: MatchingPreferences
+): Promise<Record<string, MatchedSalesSummary | undefined>> {
+  const uniqueGroups = new Map(groups.map((group) => [matchedSalesSummaryKey(group), group]));
+
+  const entries = await Promise.all(
+    [...uniqueGroups.entries()].map(async ([key, group]) => {
+      const sales = await listMatchedSales(userId, group.relistingGroupId, group.currency, matchingPreferences);
+      return [key, summarizeMatchedSales(sales)] as const;
+    })
+  );
+
+  return Object.fromEntries(entries);
+}
+
+export function matchedSalesSummaryKey(group: MatchedSalesGroupKey): string {
+  return `${group.relistingGroupId}::${group.currency}`;
 }
 
 export async function captureItems(
