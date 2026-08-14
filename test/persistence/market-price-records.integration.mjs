@@ -4,6 +4,7 @@ import { config } from "dotenv";
 import { DEFAULT_MATCHING_PREFERENCES } from "../../src/ebay/matching-preferences.ts";
 import {
   captureMarketPriceRecords,
+  listAllMarketPriceRecords,
   listCapturedVenueItemIds,
   listMarketPriceRecordsByGroup
 } from "../../src/persistence/market-price-records.ts";
@@ -123,6 +124,35 @@ test("listMarketPriceRecordsByGroup scopes by user, relisting group, and currenc
     ["ended-001", "ended-002"]
   );
   assert.equal(sales.every((sale) => sale.price.currency === "GBP"), true);
+});
+
+test("listAllMarketPriceRecords returns every captured record for the user, scoped away from other users", async () => {
+  await captureMarketPriceRecords(
+    [
+      endedItem("ended-001", "Blue Note style LP BNJ71001", 62.5),
+      endedItem("ended-002", "Unrelated record BNJ99999", 15)
+    ],
+    "local-saja",
+    DEFAULT_MATCHING_PREFERENCES,
+    prisma
+  );
+  await captureMarketPriceRecords(
+    [endedItem("ended-003", "Other user's record", 20)],
+    "other-user",
+    DEFAULT_MATCHING_PREFERENCES,
+    prisma
+  );
+
+  const records = await listAllMarketPriceRecords("local-saja", prisma);
+
+  assert.deepEqual(
+    records.map((record) => record.itemId).sort(),
+    ["ended-001", "ended-002"]
+  );
+  const first = records.find((record) => record.itemId === "ended-001");
+  assert.equal(first?.list, "WatchList");
+  assert.deepEqual(first?.currentPrice, { value: 62.5, currency: "GBP" });
+  assert.equal(first?.relistingGroupId, "criteria:BNJ71001");
 });
 
 function endedItem(itemId, title, value) {

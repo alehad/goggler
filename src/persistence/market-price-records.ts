@@ -95,6 +95,44 @@ export async function listMarketPriceRecordsByGroup(
   });
 }
 
+/**
+ * Every MarketPriceRecord ever captured for this user, shaped like a live
+ * ended-watchlist item so it can be unioned with the live fetch — the same
+ * "persisted history outlives what eBay's live fetch currently returns"
+ * pattern already used for WonItem.
+ */
+export async function listAllMarketPriceRecords(
+  userId: string,
+  prisma: PrismaClient | undefined = getPrismaClient()
+): Promise<EbayBuyingHistoryItem[]> {
+  if (!prisma) {
+    return [];
+  }
+
+  const records = await prisma.marketPriceRecord.findMany({
+    where: { userId, venue: "ebay" },
+    orderBy: { endedAt: "desc" }
+  });
+
+  return records.map((record) => ({
+    itemId: record.venueItemId,
+    title: record.title,
+    list: "WatchList" as const,
+    currentPrice:
+      record.soldPriceAmount !== null && record.soldPriceCurrency
+        ? { value: record.soldPriceAmount.toNumber(), currency: record.soldPriceCurrency }
+        : undefined,
+    endTime: record.endedAt?.toISOString(),
+    sellerUserId: record.sellerUserId ?? undefined,
+    conditionDisplayName: record.conditionDisplayName ?? undefined,
+    categoryId: record.categoryId ?? undefined,
+    categoryName: record.categoryName ?? undefined,
+    imageUrl: record.imageUrl ?? undefined,
+    itemWebUrl: record.itemWebUrl ?? undefined,
+    relistingGroupId: record.relistingGroupId ?? undefined
+  }));
+}
+
 function toMarketPriceRecordCreate(
   item: EbayBuyingHistoryItem,
   userId: string,

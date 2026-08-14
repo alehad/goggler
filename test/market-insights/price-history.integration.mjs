@@ -50,6 +50,62 @@ test("listCaptureCandidates marks ended watchlist items already captured for thi
   );
 });
 
+test("listCaptureCandidates includes a captured item no longer present in the live watchlist fetch", async () => {
+  await captureMarketPriceRecords(
+    [{ itemId: "aged-out", title: "No longer live", list: "WatchList", currentPrice: { value: 45, currency: "GBP" }, endTime: "2026-01-01T00:00:00.000Z" }],
+    "local-saja",
+    DEFAULT_MATCHING_PREFERENCES,
+    prisma
+  );
+
+  const history = {
+    endedWatchlistItems: [
+      { itemId: "still-live", title: "Still on the live watchlist", list: "WatchList", currentPrice: { value: 20, currency: "GBP" } }
+    ]
+  };
+
+  const candidates = await listCaptureCandidates(history, "local-saja");
+  assert.deepEqual(
+    candidates.map((candidate) => [candidate.itemId, candidate.captured]).sort(),
+    [
+      ["aged-out", true],
+      ["still-live", false]
+    ]
+  );
+});
+
+test("listCaptureCandidates returns historical captures even when the live fetch has no ended items", async () => {
+  await captureMarketPriceRecords(
+    [{ itemId: "only-in-db", title: "Only in the database", list: "WatchList", currentPrice: { value: 33, currency: "GBP" } }],
+    "local-saja",
+    DEFAULT_MATCHING_PREFERENCES,
+    prisma
+  );
+
+  const candidates = await listCaptureCandidates({ endedWatchlistItems: [] }, "local-saja");
+  assert.deepEqual(candidates.map((candidate) => candidate.itemId), ["only-in-db"]);
+  assert.equal(candidates[0].captured, true);
+});
+
+test("listCaptureCandidates does not duplicate an item that is both live-fetched and captured", async () => {
+  await captureMarketPriceRecords(
+    [{ itemId: "both", title: "Live and captured", list: "WatchList", currentPrice: { value: 15, currency: "GBP" } }],
+    "local-saja",
+    DEFAULT_MATCHING_PREFERENCES,
+    prisma
+  );
+
+  const history = {
+    endedWatchlistItems: [
+      { itemId: "both", title: "Live and captured", list: "WatchList", currentPrice: { value: 15, currency: "GBP" } }
+    ]
+  };
+
+  const candidates = await listCaptureCandidates(history, "local-saja");
+  assert.equal(candidates.filter((candidate) => candidate.itemId === "both").length, 1);
+  assert.equal(candidates.find((candidate) => candidate.itemId === "both")?.captured, true);
+});
+
 test("captureItems only persists items whose price can be independently verified from eBay", async () => {
   const freshConfig = loadEbayConfig({
     EBAY_ENVIRONMENT: "sandbox",

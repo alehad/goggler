@@ -5,6 +5,7 @@ import type { MatchingPreferences } from "../ebay/matching-preferences.ts";
 import type { EbayBuyingHistoryItem, EbayMoney } from "../ebay/trading-client.ts";
 import {
   captureMarketPriceRecords,
+  listAllMarketPriceRecords,
   listCapturedVenueItemIds,
   listMarketPriceRecordsByGroup
 } from "../persistence/market-price-records.ts";
@@ -42,22 +43,38 @@ export type MatchedSalesGroupKey = {
  * ended eBay watchlist items. Callers (API routes, UI data fetching) only
  * ever see this module's exports, so the underlying source can change later
  * (e.g. a commercial Marketplace Insights integration) without touching them.
+ *
+ * Returns the union of eBay's live watchlist fetch (ended items) and every
+ * MarketPriceRecord already captured for this user — the same
+ * "persisted history outlives what eBay's live fetch currently returns"
+ * pattern already used for WonItem, so a captured item stays visible even
+ * after it drops out of eBay's live watchlist.
  */
 export async function listCaptureCandidates(
   history: EbayHistoryResponse,
   userId: string
 ): Promise<PriceHistoryCandidate[]> {
-  const endedItems = history.endedWatchlistItems;
-  if (endedItems.length === 0) {
-    return [];
-  }
+  const liveEndedItems = history.endedWatchlistItems;
+  const liveIds = new Set(liveEndedItems.map((item) => item.itemId));
 
-  const capturedIds = await listCapturedVenueItemIds(
-    userId,
-    endedItems.map((item) => item.itemId)
-  );
+  const [capturedIds, allCaptured] = await Promise.all([
+    listCapturedVenueItemIds(
+      userId,
+      liveEndedItems.map((item) => item.itemId)
+    ),
+    listAllMarketPriceRecords(userId)
+  ]);
 
-  return endedItems.map((item) => ({ ...item, captured: capturedIds.has(item.itemId) }));
+  const liveCandidates: PriceHistoryCandidate[] = liveEndedItems.map((item) => ({
+    ...item,
+    captured: capturedIds.has(item.itemId)
+  }));
+
+  const historicalOnlyCandidates: PriceHistoryCandidate[] = allCaptured
+    .filter((record) => !liveIds.has(record.itemId))
+    .map((record) => ({ ...record, captured: true }));
+
+  return [...liveCandidates, ...historicalOnlyCandidates];
 }
 
 /**
