@@ -40,8 +40,8 @@ export async function fetchLiveEbayHistoryResponse(
   accessToken: string,
   options: FetchLiveEbayHistoryOptions = {}
 ): Promise<EbayHistoryResponse> {
-  const entriesPerPage = options.entriesPerPage ?? 50;
-  const maxPages = options.maxPagesPerList ?? 3;
+  const entriesPerPage = options.entriesPerPage ?? 200;
+  const maxPages = options.maxPagesPerList ?? 10;
   const getOrdersWindowDays = options.getOrdersWindowDays ?? 30;
   const getOrdersWindowEndDaysAgo = options.getOrdersWindowEndDaysAgo ?? 60;
   const matchingPreferences = options.matchingPreferences ?? DEFAULT_MATCHING_PREFERENCES;
@@ -150,8 +150,8 @@ export async function fetchEndedWatchlistItems(
   accessToken: string,
   options: FetchLiveEbayHistoryOptions = {}
 ): Promise<EbayBuyingHistoryItem[]> {
-  const entriesPerPage = options.entriesPerPage ?? 50;
-  const maxPages = options.maxPagesPerList ?? 3;
+  const entriesPerPage = options.entriesPerPage ?? 200;
+  const maxPages = options.maxPagesPerList ?? 10;
   const matchingPreferences = options.matchingPreferences ?? DEFAULT_MATCHING_PREFERENCES;
   const now = options.now ?? new Date();
 

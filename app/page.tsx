@@ -157,6 +157,7 @@ type BuyingHistory = {
       resolved: number;
     };
   };
+  warnings?: string[];
 };
 
 type HistoryState =
@@ -583,6 +584,14 @@ function Dashboard({
           <span>Refresh feed</span>
         </button>
       </div>
+
+      {historyState.status === "ready" && historyState.history.warnings && historyState.history.warnings.length > 0 && (
+        <div className="warning-banner">
+          {historyState.history.warnings.map((warning) => (
+            <p key={warning}>{warning}</p>
+          ))}
+        </div>
+      )}
 
       {historyState.status === "ready" ? (
         <>
