@@ -99,8 +99,8 @@ export function summarizeMatchedSales(sales: MatchedSalePoint[]): MatchedSalesSu
     return undefined;
   }
 
-  const lowest = sales.reduce((lowest, sale) => (sale.price.value < lowest.price.value ? sale : lowest));
-  const highest = sales.reduce((highest, sale) => (sale.price.value > highest.price.value ? sale : highest));
+  const lowest = sales.reduce((lowest, sale) => (sale.price.value <= lowest.price.value ? sale : lowest));
+  const highest = sales.reduce((highest, sale) => (sale.price.value >= highest.price.value ? sale : highest));
   const average = sales.reduce((sum, sale) => sum + sale.price.value, 0) / sales.length;
 
   return {
