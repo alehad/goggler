@@ -50,7 +50,7 @@ test("listCaptureCandidates marks ended watchlist items already captured for thi
   );
 });
 
-test("captureItems only persists requested ids present in a fresh live-fetched ended set", async () => {
+test("captureItems only persists items whose price can be independently verified from eBay", async () => {
   const freshConfig = loadEbayConfig({
     EBAY_ENVIRONMENT: "sandbox",
     EBAY_SANDBOX_CLIENT_ID: "capture-id-filter-client-id",
@@ -61,11 +61,13 @@ test("captureItems only persists requested ids present in a fresh live-fetched e
 
   const result = await captureItems(
     freshConfig,
-    "session-access-token",
     "local-saja",
-    ["watch-ended", "not-really-ended"],
+    [
+      { itemId: "watch-ended", title: "Ended watchlist item", list: "WatchList", endTime: "2020-01-01T00:00:00.000Z" },
+      { itemId: "not-really-ended", title: "Cannot be verified", list: "WatchList" }
+    ],
     DEFAULT_MATCHING_PREFERENCES,
-    { fetch: mockEbayFetch() }
+    { fetch: mockEbayFetch({ "watch-ended": { value: "88.00", currency: "GBP" } }) }
   );
 
   assert.deepEqual(result.captured, ["watch-ended"]);
@@ -76,7 +78,7 @@ test("captureItems only persists requested ids present in a fresh live-fetched e
   assert.equal(stored.soldPriceAmount.toNumber(), 88);
 });
 
-test("captureItems persists the Browse-resolved native price, not eBay's marketplace-converted price", async () => {
+test("captureItems persists the Browse-resolved native price, not eBay's marketplace-converted price, and ignores any client-supplied price", async () => {
   const freshConfig = loadEbayConfig({
     EBAY_ENVIRONMENT: "sandbox",
     EBAY_SANDBOX_CLIENT_ID: "capture-native-price-client-id",
@@ -87,9 +89,16 @@ test("captureItems persists the Browse-resolved native price, not eBay's marketp
 
   await captureItems(
     freshConfig,
-    "session-access-token",
     "local-saja",
-    ["watch-ended"],
+    [
+      {
+        itemId: "watch-ended",
+        title: "Ended watchlist item",
+        list: "WatchList",
+        endTime: "2020-01-01T00:00:00.000Z",
+        currentPrice: { value: 1, currency: "XXX" }
+      }
+    ],
     DEFAULT_MATCHING_PREFERENCES,
     {
       fetch: mockEbayFetch({
@@ -123,28 +132,6 @@ function mockEbayFetch(nativePricesByItemId = {}) {
       });
     }
 
-    return new Response(watchListXml(), { headers: { "Content-Type": "text/xml" } });
+    return new Response("not found", { status: 404 });
   };
-}
-
-function watchListXml() {
-  return `<?xml version="1.0" encoding="utf-8"?>
-<GetMyeBayBuyingResponse xmlns="urn:ebay:apis:eBLBaseComponents">
-  <Ack>Success</Ack>
-  <WatchList>
-    <PaginationResult>
-      <TotalNumberOfPages>1</TotalNumberOfPages>
-      <TotalNumberOfEntries>1</TotalNumberOfEntries>
-    </PaginationResult>
-    <PageNumber>1</PageNumber>
-    <ItemArray>
-      <Item>
-        <ItemID>watch-ended</ItemID>
-        <Title>Ended watchlist item</Title>
-        <ListingDetails><EndTime>2020-01-01T00:00:00.000Z</EndTime></ListingDetails>
-        <SellingStatus><CurrentPrice currencyID="GBP">88.00</CurrentPrice></SellingStatus>
-      </Item>
-    </ItemArray>
-  </WatchList>
-</GetMyeBayBuyingResponse>`;
 }

@@ -371,7 +371,7 @@ function mergeNativePrices(
   }));
 }
 
-async function fetchNativeWatchlistPrices(
+export async function fetchNativeWatchlistPrices(
   config: EbayConfig,
   items: EbayBuyingHistoryItem[],
   fetchOptions: { fetch?: typeof fetch }
