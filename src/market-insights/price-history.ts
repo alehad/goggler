@@ -1,6 +1,6 @@
 import type { EbayConfig } from "../ebay/config.ts";
 import type { EbayHistoryResponse } from "../ebay/history-response.ts";
-import { fetchEndedWatchlistItems } from "../ebay/live-history-source.ts";
+import { fetchNativeWatchlistPrices } from "../ebay/live-history-source.ts";
 import type { MatchingPreferences } from "../ebay/matching-preferences.ts";
 import type { EbayBuyingHistoryItem, EbayMoney } from "../ebay/trading-client.ts";
 import {
@@ -137,28 +137,35 @@ export function matchedSalesSummaryKey(group: MatchedSalesGroupKey): string {
   return `${group.relistingGroupId}::${group.currency}`;
 }
 
+/**
+ * Persists price-history records for items the client already has displayed
+ * (title, seller, condition, end time, etc. — all sourced from an
+ * authenticated eBay fetch when the page loaded). The one field never
+ * trusted from the client is price: each item's current native price is
+ * independently resolved from eBay by item id at capture time, and an item
+ * whose price can't be resolved is skipped rather than persisted with an
+ * unverified value.
+ */
 export async function captureItems(
   config: EbayConfig,
-  accessToken: string,
   userId: string,
-  venueItemIds: string[],
+  items: EbayBuyingHistoryItem[],
   matchingPreferences: MatchingPreferences,
   options: { fetch?: typeof fetch } = {}
 ): Promise<CaptureResult> {
-  if (venueItemIds.length === 0) {
+  if (items.length === 0) {
     return { captured: [], skipped: [] };
   }
 
-  const requestedIds = new Set(venueItemIds);
-  const endedItems = await fetchEndedWatchlistItems(config, accessToken, {
-    matchingPreferences,
-    fetch: options.fetch
+  const nativePrices = await fetchNativeWatchlistPrices(config, items, { fetch: options.fetch });
+  const verifiedItems = items.flatMap((item) => {
+    const price = nativePrices.get(item.itemId);
+    return price ? [{ ...item, currentPrice: price }] : [];
   });
-  const eligibleItems = endedItems.filter((item) => requestedIds.has(item.itemId));
 
-  const { captured } = await captureMarketPriceRecords(eligibleItems, userId, matchingPreferences);
+  const { captured } = await captureMarketPriceRecords(verifiedItems, userId, matchingPreferences);
   const capturedIds = new Set(captured);
-  const skipped = venueItemIds.filter((itemId) => !capturedIds.has(itemId));
+  const skipped = items.map((item) => item.itemId).filter((itemId) => !capturedIds.has(itemId));
 
   return { captured, skipped };
 }

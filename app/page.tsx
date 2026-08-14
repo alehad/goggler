@@ -1436,10 +1436,10 @@ function Analytics({
   const myPricePaid = wonSales[wonSales.length - 1];
   const salesCurrency = matchedSales[0]?.price.currency ?? selectedItem?.currentPrice?.currency;
 
-  async function captureVenueItemIds(venueItemIds: string[]) {
+  async function captureVenueItems(itemsToCapture: AnalyticsItem[]) {
     setMessage("");
     const response = await fetch("/api/market-insights/capture", {
-      body: JSON.stringify({ venueItemIds }),
+      body: JSON.stringify({ items: itemsToCapture.map(toCaptureRequestItem) }),
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
       method: "POST"
@@ -1450,31 +1450,43 @@ function Analytics({
       return;
     }
 
-    const result = (await response.json().catch(() => ({}))) as Partial<{ captured: string[] }>;
-    const captured = Array.isArray(result.captured) ? result.captured : venueItemIds;
+    const result = (await response.json().catch(() => ({}))) as Partial<{ captured: string[]; skipped: string[] }>;
+    const captured = Array.isArray(result.captured) ? result.captured : itemsToCapture.map((item) => item.itemId);
+    const skipped = Array.isArray(result.skipped) ? result.skipped : [];
     onItemsCaptured(captured);
+
+    if (skipped.length > 0) {
+      const skippedTitles = skipped.map((itemId) => items.find((item) => item.itemId === itemId)?.title ?? itemId);
+      setMessage(
+        `Captured ${captured.length} of ${itemsToCapture.length} item${itemsToCapture.length === 1 ? "" : "s"}. ` +
+          `Skipped (price could not be verified): ${skippedTitles.join(", ")}. Try refreshing and capturing again.`
+      );
+    }
   }
 
   async function captureOne(itemId: string) {
+    const item = items.find((candidate) => candidate.itemId === itemId);
+    if (!item) {
+      return;
+    }
+
     setPendingItemIds((ids) => [...ids, itemId]);
     try {
-      await captureVenueItemIds([itemId]);
+      await captureVenueItems([item]);
     } finally {
       setPendingItemIds((ids) => ids.filter((id) => id !== itemId));
     }
   }
 
   async function captureAllVisible() {
-    const visibleNotCaptured = filteredItems
-      .filter((item) => !item.captured && item.list === "WatchList")
-      .map((item) => item.itemId);
+    const visibleNotCaptured = filteredItems.filter((item) => !item.captured && item.list === "WatchList");
     if (visibleNotCaptured.length === 0) {
       return;
     }
 
     setBulkCapturing(true);
     try {
-      await captureVenueItemIds(visibleNotCaptured);
+      await captureVenueItems(visibleNotCaptured);
     } finally {
       setBulkCapturing(false);
     }
@@ -2101,6 +2113,19 @@ function analyticsRowDomId(itemId: string): string {
 
 function matchedSalesSummaryKey(relistingGroupId: string, currency: string): string {
   return `${relistingGroupId}::${currency}`;
+}
+
+function toCaptureRequestItem(item: AnalyticsItem) {
+  return {
+    itemId: item.itemId,
+    title: item.title,
+    list: item.list,
+    endTime: item.endTime,
+    sellerUserId: item.sellerUserId,
+    conditionDisplayName: item.conditionDisplayName,
+    imageUrl: item.imageUrl,
+    itemWebUrl: item.itemWebUrl
+  };
 }
 
 function weeklyTicks(minTime: number, maxTime: number): number[] {
