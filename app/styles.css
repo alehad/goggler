@@ -509,6 +509,25 @@ h1 {
   flex-shrink: 0;
 }
 
+.warning-banner {
+  background: #fff5df;
+  border: 1px solid #f5d28b;
+  border-radius: 8px;
+  color: var(--warn);
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+}
+
+.warning-banner p {
+  margin: 0;
+}
+
+.warning-banner p + p {
+  margin-top: 6px;
+}
+
 .purchase-card.selected {
   border-color: #7aa2ff;
   box-shadow: 0 14px 34px rgba(37, 99, 235, 0.16);
