@@ -222,6 +222,25 @@ export default function Home() {
     setActiveTab("analytics");
   }
 
+  function markItemsCaptured(itemIds: string[]) {
+    setHistoryState((current) => {
+      if (current.status !== "ready") {
+        return current;
+      }
+
+      const idSet = new Set(itemIds);
+      return {
+        ...current,
+        history: {
+          ...current.history,
+          endedWatchlistItems: current.history.endedWatchlistItems.map((item) =>
+            idSet.has(item.itemId) ? { ...item, captured: true } : item
+          )
+        }
+      };
+    });
+  }
+
   async function refreshEbayConfigStatus() {
     const response = await fetch("/api/auth/ebay/config-status");
     setEbayConfigStatus(response.ok ? ((await response.json()) as EbayConfigStatus) : null);
@@ -469,6 +488,7 @@ export default function Home() {
             onSelectItem={setAnalyticsSelectedItemId}
             groupFilter={analyticsGroupFilter}
             onClearGroupFilter={() => setAnalyticsGroupFilter(undefined)}
+            onItemsCaptured={markItemsCaptured}
           />
         )}
         {activeTab === "account" && (
@@ -1261,7 +1281,8 @@ function Analytics({
   selectedItemId,
   onSelectItem,
   groupFilter,
-  onClearGroupFilter
+  onClearGroupFilter,
+  onItemsCaptured
 }: {
   historyState: HistoryState;
   matchingPreferences: MatchingPreferences;
@@ -1270,6 +1291,7 @@ function Analytics({
   onSelectItem: (itemId: string | undefined) => void;
   groupFilter: string | undefined;
   onClearGroupFilter: () => void;
+  onItemsCaptured: (itemIds: string[]) => void;
 }) {
   const [filter, setFilter] = useState<CaptureFilter>("all");
   const [winFilter, setWinFilter] = useState<WinStatusFilter>("all");
@@ -1277,7 +1299,6 @@ function Analytics({
   const [pendingItemIds, setPendingItemIds] = useState<string[]>([]);
   const [bulkCapturing, setBulkCapturing] = useState(false);
   const [message, setMessage] = useState("");
-  const [locallyCapturedIds, setLocallyCapturedIds] = useState<string[]>([]);
   const [matchedSalesState, setMatchedSalesState] = useState<MatchedSalesState>({ status: "idle" });
 
   const items: AnalyticsItem[] = useMemo(() => {
@@ -1292,11 +1313,9 @@ function Analytics({
     );
 
     const watchlistRows: AnalyticsItem[] = endedWatchlistItems.map((item) => {
-      const captured = locallyCapturedIds.includes(item.itemId) || item.captured;
       const won = wonItemIds.has(item.itemId);
       return {
         ...item,
-        captured,
         won,
         eventuallyWon: !won && Boolean(item.relistingGroupId) && wonGroupIds.has(item.relistingGroupId as string)
       };
@@ -1307,7 +1326,7 @@ function Analytics({
       .map((won) => ({ ...won, captured: false, won: true, eventuallyWon: false }));
 
     return [...watchlistRows, ...wonOnlyRows].sort((a, b) => Date.parse(b.endTime ?? "") - Date.parse(a.endTime ?? ""));
-  }, [historyState, locallyCapturedIds]);
+  }, [historyState]);
   const capturedCount = items.filter((item) => item.captured).length;
   const notCapturedCount = items.length - capturedCount;
   const filteredItems = useMemo(() => {
@@ -1424,7 +1443,7 @@ function Analytics({
 
     const result = (await response.json().catch(() => ({}))) as Partial<{ captured: string[] }>;
     const captured = Array.isArray(result.captured) ? result.captured : venueItemIds;
-    setLocallyCapturedIds((ids) => [...new Set([...ids, ...captured])]);
+    onItemsCaptured(captured);
   }
 
   async function captureOne(itemId: string) {
