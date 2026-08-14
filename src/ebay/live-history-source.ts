@@ -22,6 +22,12 @@ import {
 } from "./trading-client.ts";
 
 const WATCHLIST_PRICE_LOOKUP_CONCURRENCY = 8;
+/**
+ * GetOrders rejects EntriesPerPage above 100 (eBay error 10007), unlike
+ * GetMyeBayBuying which accepts up to 200 — so it can't share the same
+ * entriesPerPage value used for WatchList/LostList/WonList.
+ */
+const GET_ORDERS_MAX_ENTRIES_PER_PAGE = 100;
 
 export type FetchLiveEbayHistoryOptions = {
   fetch?: typeof fetch;
@@ -70,7 +76,7 @@ export async function fetchLiveEbayHistoryResponse(
     config,
     accessToken,
     {
-      entriesPerPage,
+      entriesPerPage: Math.min(entriesPerPage, GET_ORDERS_MAX_ENTRIES_PER_PAGE),
       maxPages: options.maxGetOrdersPages ?? maxPages,
       now,
       windowDays: getOrdersWindowDays,

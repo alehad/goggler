@@ -101,6 +101,36 @@ test("fetches live watchlist, lost, and won lists into the Home feed contract", 
   );
 });
 
+test("caps GetOrders EntriesPerPage at 100 even when a larger entriesPerPage is used for the watchlist lists", async () => {
+  const calls = [];
+  await fetchLiveEbayHistoryResponse(config, "session-access-token", {
+    entriesPerPage: 200,
+    maxPagesPerList: 1,
+    now: new Date("2026-05-13T12:00:00.000Z"),
+    fetch: async (url, init) => {
+      if (isWatchlistPriceLookupRequest(String(url))) {
+        return watchlistPriceLookupUnavailableResponse();
+      }
+
+      const body = String(init.body);
+      const callName = init.headers["X-EBAY-API-CALL-NAME"];
+      if (callName === "GetOrders") {
+        calls.push({ callName, body });
+        return new Response(getOrdersResponseXml(), { headers: { "Content-Type": "text/xml" } });
+      }
+
+      const list = body.match(/<(WatchList|LostList|WonList)>/)?.[1];
+      calls.push({ callName, list, body });
+      return new Response(responseXml(list), { headers: { "Content-Type": "text/xml" } });
+    }
+  });
+
+  const getOrdersCall = calls.find((call) => call.callName === "GetOrders");
+  assert.match(getOrdersCall?.body ?? "", /<EntriesPerPage>100<\/EntriesPerPage>/);
+  const watchListCall = calls.find((call) => call.list === "WatchList");
+  assert.match(watchListCall?.body ?? "", /<EntriesPerPage>200<\/EntriesPerPage>/);
+});
+
 test("prefers the Browse API native price over a Trading API price that eBay silently converted", async () => {
   const freshConfig = loadEbayConfig({
     EBAY_ENVIRONMENT: "sandbox",
