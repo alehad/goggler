@@ -4,6 +4,14 @@ import { PrismaClient } from "../generated/prisma/client.ts";
 
 const NEON_HOST_SUFFIX = ".neon.tech";
 
+const DB_TARGETS = ["local", "neon"] as const;
+type DbTarget = (typeof DB_TARGETS)[number];
+
+const DB_TARGET_ENV_VARS: Record<DbTarget, string> = {
+  local: "DATABASE_URL",
+  neon: "NEON_DATABASE_URL"
+};
+
 const globalForPrisma = globalThis as typeof globalThis & {
   gogglerPrisma?: PrismaClient;
 };
@@ -26,8 +34,31 @@ export function createPrismaClient(connectionString: string): PrismaClient {
   });
 }
 
+function resolveDbTarget(): DbTarget {
+  const raw = process.env.GOGGLER_DB_TARGET;
+  if (raw === undefined) {
+    return "neon";
+  }
+  if ((DB_TARGETS as readonly string[]).includes(raw)) {
+    return raw as DbTarget;
+  }
+  throw new Error(`Invalid GOGGLER_DB_TARGET "${raw}" — expected one of: ${DB_TARGETS.join(", ")}`);
+}
+
+/**
+ * Which named database target to use — defaults to Neon (the durable,
+ * always-available copy) unless GOGGLER_DB_TARGET explicitly says
+ * otherwise. An unrecognized value fails loudly rather than silently
+ * falling back, since this decides which real database gets read and
+ * written.
+ */
+export function resolveDatabaseUrl(): string | undefined {
+  const target = resolveDbTarget();
+  return process.env[DB_TARGET_ENV_VARS[target]];
+}
+
 export function getPrismaClient(): PrismaClient | undefined {
-  const connectionString = process.env.DATABASE_URL;
+  const connectionString = resolveDatabaseUrl();
   if (!connectionString) {
     return undefined;
   }
