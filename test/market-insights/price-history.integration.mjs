@@ -15,6 +15,7 @@ before(async () => {
   assert.ok(process.env.TEST_DATABASE_URL, "TEST_DATABASE_URL is required");
   prisma = createPrismaClient(process.env.TEST_DATABASE_URL);
   process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
+  process.env.GOGGLER_DB_TARGET = "local";
 });
 
 beforeEach(async () => {
