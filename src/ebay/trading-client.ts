@@ -177,6 +177,60 @@ export function buildGetOrdersRequest(
   };
 }
 
+export function buildAddToWatchListRequest(config: EbayConfig, accessToken: string, itemId: string): EbayTradingRequest {
+  assertTrustedTradingApiUrl(config);
+
+  return {
+    url: config.tradingApiUrl,
+    headers: {
+      "Content-Type": "text/xml",
+      "X-EBAY-API-CALL-NAME": "AddToWatchList",
+      "X-EBAY-API-COMPATIBILITY-LEVEL": TRADING_API_COMPATIBILITY_LEVEL,
+      "X-EBAY-API-SITEID": config.tradingSiteId,
+      "X-EBAY-API-IAF-TOKEN": accessToken
+    },
+    body: [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<AddToWatchListRequest xmlns="urn:ebay:apis:eBLBaseComponents">',
+      "  <WarningLevel>High</WarningLevel>",
+      `  <ItemID>${escapeXml(itemId)}</ItemID>`,
+      "</AddToWatchListRequest>"
+    ].join("\n")
+  };
+}
+
+export async function fetchAddToWatchList(
+  config: EbayConfig,
+  accessToken: string,
+  itemId: string,
+  options: { fetch?: typeof fetch } = {}
+): Promise<{ ack: string }> {
+  const fetchImpl = options.fetch ?? fetch;
+  const request = buildAddToWatchListRequest(config, accessToken, itemId);
+  const response = await fetchImpl(request.url, {
+    method: "POST",
+    headers: request.headers,
+    body: request.body
+  });
+
+  if (!response.ok) {
+    throw new EbayTradingApiError(`eBay Trading API request failed with status ${response.status}`, {
+      status: response.status
+    });
+  }
+
+  const xml = await response.text();
+  const ack = firstText(xml, "Ack");
+  if (!ack || (ack !== "Success" && ack !== "Warning")) {
+    throw new EbayTradingApiError(`eBay Trading API returned ${ack ?? "no Ack"}`, {
+      ack,
+      errorCodes: tradingApiErrorCodes(xml)
+    });
+  }
+
+  return { ack };
+}
+
 export async function fetchGetMyeBayBuyingPage(
   config: EbayConfig,
   accessToken: string,
@@ -506,6 +560,15 @@ function tradingApiErrorCodes(xml: string): string[] | undefined {
     .map((errorXml) => firstText(errorXml, "ErrorCode"))
     .filter((value): value is string => Boolean(value));
   return codes.length > 0 ? codes : undefined;
+}
+
+function escapeXml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
 }
 
 function escapeRegex(value: string): string {

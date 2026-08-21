@@ -100,6 +100,34 @@ export async function persistWonItemsAndMerge(
   });
 }
 
+export async function listAllWonItems(
+  userId: string,
+  prisma: PrismaClient | undefined = getPrismaClient()
+): Promise<EbayBuyingHistoryItem[]> {
+  if (!prisma) {
+    return [];
+  }
+
+  const items = await prisma.wonItem.findMany({ where: { userId, venue: "ebay" } });
+
+  return items.map((item) => ({
+    itemId: item.venueItemId,
+    title: item.title,
+    list: "WonList" as const,
+    currentPrice:
+      item.itemPriceAmount !== null && item.currency
+        ? { value: item.itemPriceAmount.toNumber(), currency: item.currency }
+        : undefined,
+    endTime: item.purchasedAt?.toISOString(),
+    sellerUserId: item.sellerUserId ?? undefined,
+    conditionDisplayName: item.conditionDisplayName ?? undefined,
+    categoryId: item.categoryId ?? undefined,
+    categoryName: item.categoryName ?? undefined,
+    imageUrl: item.imageUrl ?? undefined,
+    itemWebUrl: item.itemWebUrl ?? undefined
+  }));
+}
+
 export async function listWonItemsForGroup(
   userId: string,
   relistingGroupId: string,

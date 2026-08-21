@@ -75,6 +75,20 @@ test("can constrain live eBay Browse search to trusted category ids", async () =
   assert.equal(requestUrl.searchParams.get("category_ids"), "176985");
 });
 
+test("can restrict live eBay Browse search to auction listings only", async () => {
+  let requestUrl;
+  await fetchEbayBrowseSearchResponse(config, "app-token", "BNJ71001", {
+    buyingOptions: ["AUCTION"],
+    matchingPreferences: DEFAULT_MATCHING_PREFERENCES,
+    fetch: async (url) => {
+      requestUrl = new URL(String(url));
+      return jsonResponse({ itemSummaries: [] });
+    }
+  });
+
+  assert.equal(requestUrl.searchParams.get("filter"), "buyingOptions:{AUCTION}");
+});
+
 test("drops unsafe live eBay Browse URLs before returning rows", async () => {
   const response = await fetchEbayBrowseSearchResponse(config, "app-token", "KENNY BURRELL", {
     matchingPreferences: DEFAULT_MATCHING_PREFERENCES,

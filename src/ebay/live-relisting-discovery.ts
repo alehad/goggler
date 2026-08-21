@@ -2,6 +2,7 @@ import type { EbayConfig } from "./config.ts";
 import { fetchEbayBrowseSearchResponse } from "./browse-client.ts";
 import type { HomeFeedRelistingCandidate } from "./home-feed.ts";
 import { catalogueIdForTitle, type MatchingPreferences } from "./matching-preferences.ts";
+import { sameCategory } from "./relisting-match.ts";
 import type { EbayBuyingHistoryItem } from "./trading-client.ts";
 
 export const DEFAULT_MAX_RELISTING_SEARCHES = 12;
@@ -115,23 +116,3 @@ function recordIdsForItems(items: EbayBuyingHistoryItem[], criteriaText: string)
   return new Set(items.flatMap((item) => catalogueIdForTitle(item.title, criteriaText) ?? []));
 }
 
-function sameCategory(lostItem: EbayBuyingHistoryItem, row: { categoryId?: string; categoryName?: string }): boolean {
-  if (lostItem.categoryId) {
-    return row.categoryId === lostItem.categoryId;
-  }
-
-  if (lostItem.categoryName) {
-    return normalizedCategoryName(row.categoryName) === normalizedCategoryName(lostItem.categoryName);
-  }
-
-  return isRecordCategory(row);
-}
-
-function normalizedCategoryName(value: string | undefined): string | undefined {
-  return value?.trim().toLocaleLowerCase("en-GB").replace(/\s+/g, " ");
-}
-
-function isRecordCategory(row: { categoryId?: string; categoryName?: string }): boolean {
-  const categoryName = normalizedCategoryName(row.categoryName);
-  return Boolean(categoryName && /\b(vinyl|record|records|lp|lps)\b/.test(categoryName));
-}

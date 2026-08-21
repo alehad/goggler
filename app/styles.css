@@ -257,6 +257,13 @@ button:disabled {
   margin-bottom: 22px;
 }
 
+.section-heading-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .filter-row {
   display: flex;
   flex-wrap: wrap;

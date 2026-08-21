@@ -28,6 +28,7 @@ import {
 import { buildPurchaseChartPoints, type PurchaseChartPoint } from "../src/ebay/purchase-analytics.ts";
 import { ebaySellerProfileUrl } from "../src/ebay/seller-profile.ts";
 import { safeEbayImageUrl, safeEbayItemUrl } from "../src/http/safe-external-url.ts";
+import type { WatchlistAutomationCandidate, WatchlistAutomationEvent } from "../src/market-insights/watchlist-automation.ts";
 import { formatAbsoluteDate } from "../src/ui/date-format.ts";
 
 type Tab = "dashboard" | "tracking" | "won" | "analytics" | "account";
@@ -461,6 +462,7 @@ export default function Home() {
         {activeTab === "dashboard" && (
           <Dashboard
             historyState={historyState}
+            matchingPreferences={matchingPreferences}
             searchQuery={homeSearchQuery}
             searchState={homeSearchState}
             clearSearch={() => {
@@ -527,12 +529,14 @@ export default function Home() {
 function Dashboard({
   clearSearch,
   historyState,
+  matchingPreferences,
   searchQuery,
   searchState,
   refreshBuyingHistory
 }: {
   clearSearch: () => void;
   historyState: HistoryState;
+  matchingPreferences: MatchingPreferences;
   searchQuery: string;
   searchState: HomeSearchState;
   refreshBuyingHistory: () => Promise<void>;
@@ -541,6 +545,9 @@ function Dashboard({
   const [relistingFormatFilter, setRelistingFormatFilter] = useState<RelistingFormatFilter>("both");
   const [locallyWatchedIds, setLocallyWatchedIds] = useState<string[]>([]);
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
+  const [findingAuctions, setFindingAuctions] = useState(false);
+  const [automationStatus, setAutomationStatus] = useState("");
+  const [justAddedRows, setJustAddedRows] = useState<HomeFeedRow[]>([]);
   const trimmedSearchQuery = searchQuery.trim();
   const rows = useMemo(() => {
     if (historyState.status !== "ready") {
@@ -559,8 +566,88 @@ function Dashboard({
       };
     });
 
-    return filter === "search" ? searchRowsForState(searchState, updatedRows) : filterHomeRows(updatedRows, filter, relistingFormatFilter);
-  }, [filter, historyState, locallyWatchedIds, relistingFormatFilter, searchState]);
+    const knownIds = new Set(updatedRows.map((row) => row.id));
+    const newlyAddedRows = justAddedRows.filter((row) => !knownIds.has(row.id));
+    const combinedRows = [...newlyAddedRows, ...updatedRows];
+
+    return filter === "search" ? searchRowsForState(searchState, combinedRows) : filterHomeRows(combinedRows, filter, relistingFormatFilter);
+  }, [filter, historyState, justAddedRows, locallyWatchedIds, relistingFormatFilter, searchState]);
+
+  async function findAndWatchNewAuctions() {
+    setAutomationStatus("Starting search...");
+    setFindingAuctions(true);
+    try {
+      const response = await fetch("/api/market-insights/watchlist-automation", {
+        body: JSON.stringify(matchingPreferences),
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+
+      if (!response.ok || !response.body) {
+        setAutomationStatus("Could not search for new auctions to watch");
+        return;
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let done = false;
+      while (!done) {
+        const chunk = await reader.read();
+        done = chunk.done;
+        buffer += decoder.decode(chunk.value ?? new Uint8Array(), { stream: !done });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (line.trim()) {
+            handleAutomationEvent(JSON.parse(line));
+          }
+        }
+      }
+
+      await refreshBuyingHistory();
+      setJustAddedRows([]);
+    } finally {
+      setFindingAuctions(false);
+    }
+  }
+
+  function handleAutomationEvent(event: WatchlistAutomationEvent) {
+    switch (event.type) {
+      case "search_started":
+        setAutomationStatus(`Searching ${event.recordId}... (${event.completed}/${event.total} record IDs)`);
+        break;
+      case "search_completed":
+        setAutomationStatus(`Searched ${event.completed}/${event.total} record IDs...`);
+        break;
+      case "added":
+        setJustAddedRows((existing) => [candidateToRow(event.candidate), ...existing]);
+        setAutomationStatus(`Added "${event.candidate.title}" to the watchlist`);
+        break;
+      case "already_watched":
+      case "skipped_per_record_cap":
+      case "failed":
+        break;
+      case "done": {
+        const { result } = event;
+        setAutomationStatus(
+          `Searched ${result.recordIdsSearched} record ID${result.recordIdsSearched === 1 ? "" : "s"}, ` +
+            `found ${result.candidatesFound} live auction${result.candidatesFound === 1 ? "" : "s"}. ` +
+            `Added ${result.added.length} new item${result.added.length === 1 ? "" : "s"} to the watchlist` +
+            (result.alreadyWatched ? ` (${result.alreadyWatched} already watched)` : "") +
+            (result.skippedPerRecordCap
+              ? ` (${result.skippedPerRecordCap} skipped: per-record limit reached for that catalogue number)`
+              : "") +
+            "." +
+            (result.failed.length > 0
+              ? ` Failed to add ${result.failed.length}: ${result.failed.map((item) => `${item.title} (${item.reason})`).join("; ")}.`
+              : "")
+        );
+        break;
+      }
+    }
+  }
 
   useEffect(() => {
     if (trimmedSearchQuery && trimmedSearchQuery !== activeSearchQuery) {
@@ -579,11 +666,24 @@ function Dashboard({
           <p className="eyebrow">Home</p>
           <h1>Watchlist and relistings</h1>
         </div>
-        <button className="primary-button" onClick={() => void refreshBuyingHistory()} type="button">
-          <Sparkles size={17} />
-          <span>Refresh feed</span>
-        </button>
+        <div className="section-heading-actions">
+          <button
+            className="secondary-button compact"
+            disabled={findingAuctions}
+            onClick={() => void findAndWatchNewAuctions()}
+            type="button"
+          >
+            <Gavel size={16} />
+            <span>{findingAuctions ? "Searching..." : "Find & watch new auctions"}</span>
+          </button>
+          <button className="primary-button" onClick={() => void refreshBuyingHistory()} type="button">
+            <Sparkles size={17} />
+            <span>Refresh feed</span>
+          </button>
+        </div>
       </div>
+
+      {automationStatus && <p className="form-message">{automationStatus}</p>}
 
       {historyState.status === "ready" && historyState.history.warnings && historyState.history.warnings.length > 0 && (
         <div className="warning-banner">
@@ -2113,6 +2213,26 @@ function analyticsRowDomId(itemId: string): string {
 
 function matchedSalesSummaryKey(relistingGroupId: string, currency: string): string {
   return `${relistingGroupId}::${currency}`;
+}
+
+function candidateToRow(candidate: WatchlistAutomationCandidate): HomeFeedRow {
+  return {
+    id: `watchlist-${candidate.itemId}`,
+    modelList: "ebay",
+    section: "watchlist",
+    title: candidate.title,
+    currentPrice: candidate.currentPrice,
+    endsAt: candidate.endsAt,
+    sellerUserId: candidate.sellerUserId,
+    conditionDisplayName: candidate.conditionDisplayName,
+    imageUrl: candidate.imageUrl,
+    itemWebUrl: candidate.itemWebUrl,
+    matchSignals: [],
+    relistingGroupId: `criteria:${candidate.recordId}`,
+    sourceItemId: candidate.itemId,
+    tags: ["On eBay watchlist", "Just added"],
+    actions: candidate.itemWebUrl ? ["open_on_ebay"] : []
+  };
 }
 
 function toCaptureRequestItem(item: AnalyticsItem) {

@@ -35,7 +35,8 @@ export type HomeFeedTag =
   | "On eBay watchlist"
   | "Not watched"
   | "Auction"
-  | "Buy now";
+  | "Buy now"
+  | "Just added";
 
 export type HomeFeedRow = {
   id: string;
@@ -58,6 +59,7 @@ export type HomeFeedRow = {
   matchSignals: string[];
   relistingGroupId?: string;
   sourceItemId?: string;
+  legacyItemId?: string;
   lostItemId?: string;
   tags: HomeFeedTag[];
   actions: ("add_to_watchlist" | "open_on_ebay" | "confirm_match" | "dismiss")[];
