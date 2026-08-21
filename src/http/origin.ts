@@ -11,6 +11,14 @@ export function getPublicOrigin(request: NextRequest): string {
   return request.nextUrl.origin;
 }
 
+export function getPrimaryPublicOrigin(request: NextRequest): string {
+  const host = trustedTunnelHost();
+  if (host) {
+    return `https://${host}`;
+  }
+  return request.nextUrl.origin;
+}
+
 export function getAllowedRequestOrigins(request: NextRequest): Set<string> {
   return new Set([request.nextUrl.origin, getPublicOrigin(request)]);
 }

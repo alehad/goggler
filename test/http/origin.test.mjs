@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { NextRequest } from "next/server.js";
-import { getAllowedRequestOrigins, getPublicOrigin, isSecureRequest } from "../../src/http/origin.ts";
+import { getAllowedRequestOrigins, getPrimaryPublicOrigin, getPublicOrigin, isSecureRequest } from "../../src/http/origin.ts";
 
 const TUNNEL_ENV_KEYS = [
   "GOGGLER_TUNNEL_TARGET",
@@ -111,5 +111,21 @@ test("uses explicitly configured forwarded origins regardless of tunnel target",
     const request = forwardedRequest("goggler-dev.example.com");
 
     assert.equal(getPublicOrigin(request), "https://goggler-dev.example.com");
+  });
+});
+
+test("getPrimaryPublicOrigin ignores the request's own forwarded host/port and uses the configured trusted hostname", () => {
+  withTunnelEnv({ GOGGLER_TAILSCALE_HOSTNAME: "goggler.tailde35d2.ts.net" }, () => {
+    const request = forwardedRequest("goggler.tailde35d2.ts.net:8443");
+
+    assert.equal(getPrimaryPublicOrigin(request), "https://goggler.tailde35d2.ts.net");
+  });
+});
+
+test("getPrimaryPublicOrigin falls back to the request's own origin when no tunnel hostname is configured", () => {
+  withTunnelEnv({}, () => {
+    const request = new NextRequest("http://localhost:3000/api/auth/ebay/callback");
+
+    assert.equal(getPrimaryPublicOrigin(request), "http://localhost:3000");
   });
 });
