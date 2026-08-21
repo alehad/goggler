@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { loadEbayConfig } from "../../src/ebay/config.ts";
 import {
+  buildAddToWatchListRequest,
   buildGetMyeBayBuyingRequest,
   buildGetOrdersRequest,
+  fetchAddToWatchList,
   fetchGetMyeBayBuyingPage,
   fetchGetMyeBayBuyingPages,
   fetchGetOrdersPages,
@@ -317,6 +319,64 @@ test("normalizes HTTP and API failures without leaking token values", async () =
   assert.throws(
     () => parseGetOrdersResponse("<GetOrdersResponse><Ack>Failure</Ack></GetOrdersResponse>"),
     /Failure/
+  );
+});
+
+test("builds AddToWatchList Trading API requests with OAuth bearer material only in headers", () => {
+  const request = buildAddToWatchListRequest(config, "session-access-token", "sandbox-item-001");
+
+  assert.equal(request.url, "https://api.sandbox.ebay.com/ws/api.dll");
+  assert.equal(request.headers["X-EBAY-API-CALL-NAME"], "AddToWatchList");
+  assert.equal(request.headers["X-EBAY-API-SITEID"], "3");
+  assert.equal(request.headers["X-EBAY-API-IAF-TOKEN"], "session-access-token");
+  assert.match(request.body, /<ItemID>sandbox-item-001<\/ItemID>/);
+  assert.equal(request.body.includes("RequesterCredentials"), false);
+  assert.equal(request.body.includes("session-access-token"), false);
+});
+
+test("escapes special characters in the item ID for AddToWatchList", () => {
+  const request = buildAddToWatchListRequest(config, "session-access-token", "1<2>&\"3'");
+
+  assert.match(request.body, /<ItemID>1&lt;2&gt;&amp;&quot;3&apos;<\/ItemID>/);
+});
+
+test("fetchAddToWatchList resolves on Success/Warning Ack", async () => {
+  const result = await fetchAddToWatchList(config, "session-access-token", "sandbox-item-001", {
+    fetch: async () =>
+      new Response("<AddToWatchListResponse><Ack>Success</Ack></AddToWatchListResponse>", {
+        headers: { "Content-Type": "text/xml" }
+      })
+  });
+
+  assert.equal(result.ack, "Success");
+});
+
+test("fetchAddToWatchList rejects on Failure Ack without leaking token values", async () => {
+  await assert.rejects(
+    () =>
+      fetchAddToWatchList(config, "secret-token-value", "sandbox-item-001", {
+        fetch: async () =>
+          new Response(
+            "<AddToWatchListResponse><Ack>Failure</Ack><Errors><ErrorCode>1234</ErrorCode></Errors></AddToWatchListResponse>",
+            { headers: { "Content-Type": "text/xml" } }
+          )
+      }),
+    (error) => {
+      assert.match(error.message, /Failure/);
+      assert.deepEqual(error.errorCodes, ["1234"]);
+      assert.equal(error.message.includes("secret-token-value"), false);
+      return true;
+    }
+  );
+});
+
+test("fetchAddToWatchList rejects on HTTP failure", async () => {
+  await assert.rejects(
+    () =>
+      fetchAddToWatchList(config, "session-access-token", "sandbox-item-001", {
+        fetch: async () => new Response("nope", { status: 500 })
+      }),
+    /status 500/
   );
 });
 

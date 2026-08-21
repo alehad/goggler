@@ -4,7 +4,7 @@ import { after, before, beforeEach, test } from "node:test";
 import { config } from "dotenv";
 import { DEFAULT_MATCHING_PREFERENCES } from "../../src/ebay/matching-preferences.ts";
 import { createPrismaClient } from "../../src/persistence/prisma.ts";
-import { persistWonItemsAndMerge } from "../../src/persistence/won-items.ts";
+import { listAllWonItems, persistWonItemsAndMerge } from "../../src/persistence/won-items.ts";
 
 config({ path: ".env.local" });
 
@@ -100,6 +100,33 @@ test("isolates persisted won items by owning user", async () => {
   assert.equal(otherUserHistory.wonItems.length, 1);
   assert.equal(otherUserHistory.wonItems[0].title, "Other user item");
   assert.equal(await prisma.wonItem.count(), 2);
+});
+
+test("listAllWonItems returns all of a user's won items and isolates by owning user", async () => {
+  await persistWonItemsAndMerge(
+    liveHistory([
+      wonItem("won-001", "Kenny Burrell BNJ71001 LP", 35, { sellerUserId: "record-seller", categoryId: "176985" }),
+      wonItem("won-002", "Terumasa Hino TBM17 LP", 40)
+    ]),
+    "local-saja",
+    DEFAULT_MATCHING_PREFERENCES,
+    prisma
+  );
+  await persistWonItemsAndMerge(
+    liveHistory([wonItem("won-003", "Other user's item", 20)]),
+    "other-user",
+    DEFAULT_MATCHING_PREFERENCES,
+    prisma
+  );
+
+  const items = await listAllWonItems("local-saja", prisma);
+
+  assert.deepEqual(items.map((item) => item.itemId).sort(), ["won-001", "won-002"]);
+  const first = items.find((item) => item.itemId === "won-001");
+  assert.equal(first.list, "WonList");
+  assert.deepEqual(first.currentPrice, { value: 35, currency: "USD" });
+  assert.equal(first.sellerUserId, "record-seller");
+  assert.equal(first.categoryId, "176985");
 });
 
 test("persistent schema has no OAuth credential or raw upstream payload fields", async () => {

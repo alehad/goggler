@@ -24,7 +24,13 @@ export async function fetchEbayBrowseSearchResponse(
   config: EbayConfig,
   appAccessToken: string,
   query: string,
-  options: { categoryIds?: string[]; fetch?: typeof fetch; limit?: number; matchingPreferences: MatchingPreferences }
+  options: {
+    categoryIds?: string[];
+    fetch?: typeof fetch;
+    limit?: number;
+    matchingPreferences: MatchingPreferences;
+    buyingOptions?: Array<"AUCTION" | "FIXED_PRICE">;
+  }
 ): Promise<EbayBrowseSearchResponse> {
   assertTrustedBrowseApiUrl(config);
   const boundedQuery = boundedBrowseQuery(query);
@@ -35,7 +41,8 @@ export async function fetchEbayBrowseSearchResponse(
   const url = new URL(config.browseApiUrl);
   url.searchParams.set("q", boundedQuery);
   url.searchParams.set("limit", String(options.limit ?? 50));
-  url.searchParams.set("filter", "buyingOptions:{AUCTION|FIXED_PRICE}");
+  const buyingOptions = options.buyingOptions ?? ["AUCTION", "FIXED_PRICE"];
+  url.searchParams.set("filter", `buyingOptions:{${buyingOptions.join("|")}}`);
   const categoryIds = boundedCategoryIds(options.categoryIds ?? []);
   if (categoryIds.length > 0) {
     url.searchParams.set("category_ids", categoryIds.join(","));
@@ -121,7 +128,8 @@ function parseBrowseRow(raw: unknown, matchingPreferences: MatchingPreferences):
   }
 
   const item = raw as Record<string, unknown>;
-  const itemId = stringValue(item.itemId) ?? stringValue(item.legacyItemId);
+  const legacyItemId = stringValue(item.legacyItemId);
+  const itemId = stringValue(item.itemId) ?? legacyItemId;
   const title = stringValue(item.title);
   if (!itemId || !title) {
     return undefined;
@@ -153,6 +161,7 @@ function parseBrowseRow(raw: unknown, matchingPreferences: MatchingPreferences):
     matchSignals: buyingOptions,
     relistingGroupId,
     sourceItemId: itemId,
+    legacyItemId,
     tags: ["Live eBay listing"],
     actions: itemWebUrl ? ["open_on_ebay"] : []
   };

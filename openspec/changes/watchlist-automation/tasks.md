@@ -1,0 +1,27 @@
+# Tasks: Discover live auctions from purchase/price history and add them to the watchlist
+
+- [x] Create OpenSpec change documenting the design.
+- [x] Wait for user sign-off on this design before implementing.
+- [x] Add `buildAddToWatchListRequest`/`fetchAddToWatchList` to `src/ebay/trading-client.ts`.
+- [x] Add an optional `buyingOptions` filter parameter to `fetchEbayBrowseSearchResponse` in `src/ebay/browse-client.ts`; existing callers unaffected.
+- [x] Add `listAllWonItems(userId)` to `src/persistence/won-items.ts`.
+- [x] Extract `sameCategory`/`isRecordCategory`/`normalizedCategoryName` from `src/ebay/live-relisting-discovery.ts` into `src/ebay/relisting-match.ts`; update `live-relisting-discovery.ts` to import from there (pure refactor, no behavior change).
+- [x] Implement `discoverAndWatchLiveAuctions` in `src/market-insights/watchlist-automation.ts`.
+- [x] Implement `POST /api/market-insights/watchlist-automation` route.
+- [x] Add the "Find & watch new auctions" button to `app/page.tsx` next to "Capture all visible".
+- [x] Unit/integration tests: `AddToWatchList` request/response (unit), `buyingOptions` filter (unit), `listAllWonItems` (persistence integration), `discoverAndWatchLiveAuctions` (persistence integration: dedup, category filter, already-watched skip, `maxAdds` cap, per-item failure isolation).
+- [x] Run OpenSpec validation (47/47), unit tests (191/191), persistence integration tests (28/28), build — all clean.
+- [x] Manual functional confirmation (round 1): real Production eBay account, click the button. Found and fixed two real bugs — REST-vs-legacy item ID mismatch causing silent `AddToWatchList` failures, and a search cap (12) far too low for the user's real dataset (~150-200 record IDs). See design.md "Testing" for details.
+- [x] Fix `legacyItemId` bug: `HomeFeedRow`/`browse-client.ts` gain a `legacyItemId` field; `discoverAndWatchLiveAuctions` uses it instead of the REST-format `sourceItemId`; UI surfaces `failed` items instead of silently dropping them; integration tests rewritten with distinct REST/legacy IDs.
+- [x] Fix search cap: `maxSearches` now defaults to unbounded instead of reusing `live-relisting-discovery.ts`'s home-feed-tuned constant.
+- [x] Add concurrency-limited search (default 5 at once, via a `mapWithConcurrency` helper) and a streaming (NDJSON) progress channel (`onEvent` callback → route returns a `ReadableStream`) instead of a single final result blob, per user request after round-1 testing.
+- [x] Expand `WatchlistAutomationCandidate` to carry full listing data (price, image, seller, URL) so the UI can render a real row for a newly-added item without a second round-trip.
+- [x] Move the trigger button from the Analytics tab to the Home tab (`Dashboard`), since Analytics only shows already-ended auctions — a newly-added live auction would never appear there. Wire `matchingPreferences` into `Dashboard`.
+- [x] Client-side: read the NDJSON stream incrementally, show live progress text, optimistically inject a `HomeFeedRow` (tagged "Just added") at the top of the watchlist view as each `added` event arrives, reconcile with a real `refreshBuyingHistory()` once the stream closes.
+- [x] Additional tests: concurrency-limit enforcement (never exceeds `searchConcurrency` in-flight), `onEvent` sequence/payload correctness.
+- [x] Re-run OpenSpec validation (47/47), unit tests (191/191), persistence integration tests (30/30), build — all clean.
+- [x] Manual functional confirmation (round 2): confirmed live progress display and items appearing at the top of the Home tab worked. Surfaced a third finding — one record ID (a seller mass-listing many copies of the same pressing) consumed the entire `maxAdds` budget, starving other record IDs.
+- [x] Add a per-record add cap (`maxAddsPerRecord`, default 3) independent of the existing global `maxAdds` cap, with its own `skippedPerRecordCap` result field and `skipped_per_record_cap` event. Add a test mirroring the real scenario (one record ID with far more live listings than others).
+- [x] Re-run OpenSpec validation (47/47), unit tests (191/191), persistence integration tests (31/31), build — all clean.
+- [x] Manual functional confirmation (round 3): confirmed the per-record cap works — additions now spread across multiple distinct record IDs instead of one seller's listings dominating the run.
+- [ ] Run dual security review (security-review skill + Copilot CLI) after sign-off, then ship via PR.
