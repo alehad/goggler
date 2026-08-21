@@ -44,6 +44,17 @@ Only the eBay OAuth callback path is ever reachable from outside the tailnet. Th
 - If the full edge gate ever breaks eBay's OAuth callback (`code`/`state` round-trip), `ngrok/oauth-callback-fallback.yml` is the documented fallback policy — it exempts only `/api/auth/ebay/callback`, relying on the app's own signed-state protection there.
 - `EBAY_PRODUCTION_REDIRECT_URI` in `.env.local` must match the ngrok callback URL (`https://unrigged-fifth-nastily.ngrok-free.dev/api/auth/ebay/callback`). If the reserved domain ever changes, the eBay Developer Portal's accepted/declined RuName URLs must be updated to match, along with `GOGGLER_NGROK_HOSTNAME`.
 
+## Deployment
+
+goggler runs as a Docker image, on-demand rather than always-on — start it when you want to use the app, stop it when done, same usage shape as `next dev`. The same image is portable across machines (verified on this Mac and the user's iMac); only the env file and which machine's Tailscale identity is active differ.
+
+- **Build**: `docker build -t goggler .` — multi-stage `Dockerfile`, Next.js `output: "standalone"` mode, non-root runtime user. No `.env*` file is ever baked into the image (`.dockerignore` excludes them) — all configuration comes from environment variables at container start.
+- **Run**: `docker run --rm --name goggler -p 3000:3000 --env-file /path/to/goggler.env goggler` — the env file uses the exact same variable names as `.env.local` (see `.env.example`), typically with `GOGGLER_DB_TARGET=neon` regardless of which machine is running it, since the local Postgres target only makes sense on a machine that has it installed.
+- **Access**: whenever the container is running, wire up Tailscale exactly as in "Manual Testing Against Production eBay" above — `tailscale serve` for the primary app (tailnet-only), `tailscale funnel` scoped to the callback path on a separate port. `GOGGLER_TAILSCALE_HOSTNAME` in the container's env file must match whichever machine is currently running it, and the eBay Developer Portal's registered callback URL must point at that same machine's `:8443` callback URL.
+- **Sessions are not persisted across restarts** — this is expected, not a bug: the app's in-memory eBay session model (see "Security And Persistence Invariants" above) means a container restart requires signing back in with eBay, same as closing a browser tab does today.
+- **Publishing to Docker Hub** (`.github/workflows/docker-publish.yml`): triggered only by pushing a tag matching `v*`, never by an ordinary merge to `main`. Publishes `alehad/goggler:<tag>` and `alehad/goggler:latest`. Requires `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` GitHub repository secrets (a Docker Hub access token, not the account password) — set up by the user directly, never handled by Claude. See step 8 of the Autonomous PR Workflow above for when a tag actually gets pushed.
+- **Local dev (`next dev` + this Mac's Tailscale) remains the workflow for making changes** — the Docker image is for using the app day-to-day, not for iterating on it. Deploying a new build anywhere is a manual, explicit step, not automatic on every merge.
+
 ## Git Workflow
 
 - Do development work on short-lived branches using the `codex/` prefix by default.
@@ -89,5 +100,6 @@ When Claude Code is doing the implementation work in this repository, the featur
      ```
    The review passes only if neither raises a blocking finding. If either does, stop and get explicit user direction rather than committing. (ChatGPT is not part of this automated gate — no scriptable connector exists; if the user wants a ChatGPT opinion, that happens manually outside this pipeline.)
 7. **Ship it.** Once the dual security review passes, commit, push, open the PR (`gh pr create`), and merge (`gh pr merge --squash --delete-branch`), then sync local `main` and delete the local feature branch — all without a further confirmation prompt.
+8. **Ask about a Docker Hub version.** After the merge, ask the user whether this change warrants a new Docker Hub version. If yes, create and push the version tag (`git tag vX.Y.Z && git push origin vX.Y.Z`), which triggers `.github/workflows/docker-publish.yml`; if no, this step ends here. See "Deployment" below for the publishing pipeline itself.
 
 This standing authorization covers only this exact lifecycle on feature branches following the OpenSpec-first workflow above. It does not extend to direct commits on `main` (other than the session-notes exception above), force-pushes, history rewrites, or skipping steps 2, 4, or 5 — those still require the user's explicit go-ahead each time.
