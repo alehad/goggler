@@ -5,7 +5,7 @@ import { loadEbayConfig } from "../../../../../src/ebay/config.ts";
 import { fetchEbayAccountIdentity } from "../../../../../src/ebay/identity-client.ts";
 import { exchangeEbayAuthorizationCode } from "../../../../../src/ebay/oauth-client.ts";
 import { getEbayOAuthStateStore } from "../../../../../src/ebay/oauth-state.ts";
-import { getPublicOrigin } from "../../../../../src/http/origin.ts";
+import { getPrimaryPublicOrigin } from "../../../../../src/http/origin.ts";
 
 export async function GET(request: NextRequest) {
   const currentUser = getCurrentUser(request);
@@ -55,5 +55,5 @@ export async function GET(request: NextRequest) {
 }
 
 function redirectToAccount(request: NextRequest, status: string): NextResponse {
-  return NextResponse.redirect(new URL(`/?account=${encodeURIComponent(status)}`, getPublicOrigin(request)));
+  return NextResponse.redirect(new URL(`/?account=${encodeURIComponent(status)}`, getPrimaryPublicOrigin(request)));
 }
