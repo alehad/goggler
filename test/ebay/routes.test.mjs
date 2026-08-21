@@ -150,21 +150,39 @@ test("eBay start prewarm reports config errors generically", async () => {
 });
 
 test("eBay session route creates the internal local session when missing", async () => {
-  const response = await getEbaySession(
-    new NextRequest("http://localhost:3000/api/auth/ebay/session", {
-      headers: {
-        "x-forwarded-host": "example.ngrok-free.dev",
-        "x-forwarded-proto": "https"
-      }
-    })
-  );
-  const body = await response.json();
+  const previousTarget = process.env.GOGGLER_TUNNEL_TARGET;
+  const previousHostname = process.env.GOGGLER_NGROK_HOSTNAME;
+  process.env.GOGGLER_TUNNEL_TARGET = "ngrok";
+  process.env.GOGGLER_NGROK_HOSTNAME = "example.ngrok-free.dev";
 
-  assert.equal(response.status, 200);
-  assert.equal(body.connection.connected, false);
-  assert.equal(body.connection.status, "reauth_required");
-  assert.ok(response.headers.get("set-cookie"));
-  assert.match(response.headers.get("set-cookie") ?? "", /;\s*Secure/);
+  try {
+    const response = await getEbaySession(
+      new NextRequest("http://localhost:3000/api/auth/ebay/session", {
+        headers: {
+          "x-forwarded-host": "example.ngrok-free.dev",
+          "x-forwarded-proto": "https"
+        }
+      })
+    );
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.connection.connected, false);
+    assert.equal(body.connection.status, "reauth_required");
+    assert.ok(response.headers.get("set-cookie"));
+    assert.match(response.headers.get("set-cookie") ?? "", /;\s*Secure/);
+  } finally {
+    if (previousTarget === undefined) {
+      delete process.env.GOGGLER_TUNNEL_TARGET;
+    } else {
+      process.env.GOGGLER_TUNNEL_TARGET = previousTarget;
+    }
+    if (previousHostname === undefined) {
+      delete process.env.GOGGLER_NGROK_HOSTNAME;
+    } else {
+      process.env.GOGGLER_NGROK_HOSTNAME = previousHostname;
+    }
+  }
 });
 
 test("eBay session route returns status without token values", async () => {

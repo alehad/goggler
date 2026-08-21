@@ -21,12 +21,25 @@ goggler is a personal-first eBay UK auction tracker. It imports authenticated bu
 
 ## Manual Testing Against Production eBay
 
-- Meaningful manual testing requires Production eBay OAuth, which requires a public HTTPS callback URL — `localhost` cannot complete a real eBay login. Default to standing up the ngrok tunnel and sharing that URL whenever a manual test link is needed (including the "manual functional testing pause" step below), unless the user explicitly says to test locally instead.
+- Meaningful manual testing requires Production eBay OAuth, which requires a public HTTPS callback URL — `localhost` cannot complete a real eBay login. Default to standing up the Tailscale Funnel tunnel and sharing that URL whenever a manual test link is needed (including the "manual functional testing pause" step below), unless the user explicitly says to test locally instead.
+- Which tunnel's hostname the app trusts for the OAuth redirect is controlled by `GOGGLER_TUNNEL_TARGET` (`src/http/origin.ts`): defaults to `tailscale` when unset, or set to `ngrok` to use the ngrok fallback below. Each target's exact expected hostname comes from `GOGGLER_TAILSCALE_HOSTNAME`/`GOGGLER_NGROK_HOSTNAME` in `.env.local` — matched exactly, not by suffix, since `.ts.net`/`.ngrok-free.dev` are shared public suffixes, not exclusively ours.
+
+### Tailscale Funnel (default)
+
+- Requires the `goggler-dev` dev server already running on port 3000, and Tailscale installed, signed in, and connected (`tailscale status`). Tailscale is started manually per testing session, not on login.
+- Start Funnel from anywhere: `tailscale funnel 3000`. It prints the public hostname on success (e.g. `https://goggler.tailde35d2.ts.net`), which should match `GOGGLER_TAILSCALE_HOSTNAME` in `.env.local`.
+- Funnel must be enabled once per tailnet via the admin console (the CLI prints an enablement link the first time if it isn't).
+- **No auth gate in front of Funnel.** Unlike the ngrok setup below, Tailscale Funnel exposes the whole app to the public internet with no OAuth gate at the edge — Funnel is the public-facing counterpart to tailnet-only Serve, and this project doesn't put anything in front of it. The accepted mitigation is operational: only run Funnel briefly, by hand, during active manual testing, and never leave it running unattended. The app itself exposes nothing sensitive to an unauthenticated visitor (it shows the "connect eBay" screen until a real eBay login completes). Revisit this if the tunnel is ever left running unattended or the app starts exposing more before login.
+- Stop the tunnel when done (`Ctrl+C`, or kill the `tailscale funnel` process) and disconnect Tailscale (`tailscale down`) rather than leaving it connected between sessions.
+- `EBAY_PRODUCTION_REDIRECT_URI`'s registered RuName in the eBay Developer Portal must have its accepted/declined URLs pointed at the current Funnel hostname's `/api/auth/ebay/callback`. If the tailnet name or device hostname ever changes, both `GOGGLER_TAILSCALE_HOSTNAME` and the eBay portal URLs need updating to match.
+
+### ngrok (fallback via `GOGGLER_TUNNEL_TARGET=ngrok`)
+
 - Start the tunnel from the repo root: `ngrok http 3000 --traffic-policy-file ngrok/oauth.yml` (requires the `goggler-dev` dev server already running on port 3000).
 - Reserved public URL: `https://unrigged-fifth-nastily.ngrok-free.dev`. This is gated by Google OAuth at the tunnel edge (`ngrok/oauth.yml`, `auth_id: goggler-dev`) before any request reaches localhost — the user authenticates with Google first, then reaches the app.
 - If ngrok reports an invalid OAuth state, reset it: `https://unrigged-fifth-nastily.ngrok-free.dev/ngrok/logout?auth_id=goggler-dev`.
 - If the full edge gate ever breaks eBay's OAuth callback (`code`/`state` round-trip), `ngrok/oauth-callback-fallback.yml` is the documented fallback policy — it exempts only `/api/auth/ebay/callback`, relying on the app's own signed-state protection there.
-- `EBAY_PRODUCTION_REDIRECT_URI` in `.env.local` must match the ngrok callback URL (`https://unrigged-fifth-nastily.ngrok-free.dev/api/auth/ebay/callback`). If the reserved domain ever changes, the eBay Developer Portal's accepted/declined RuName URLs must be updated to match.
+- `EBAY_PRODUCTION_REDIRECT_URI` in `.env.local` must match the ngrok callback URL (`https://unrigged-fifth-nastily.ngrok-free.dev/api/auth/ebay/callback`). If the reserved domain ever changes, the eBay Developer Portal's accepted/declined RuName URLs must be updated to match, along with `GOGGLER_NGROK_HOSTNAME`.
 
 ## Git Workflow
 

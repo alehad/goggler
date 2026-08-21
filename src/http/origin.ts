@@ -23,6 +23,29 @@ function firstForwardedValue(value: string | null): string | undefined {
   return value?.split(",")[0]?.trim() || undefined;
 }
 
+const TUNNEL_TARGETS = ["tailscale", "ngrok"] as const;
+type TunnelTarget = (typeof TUNNEL_TARGETS)[number];
+
+const TUNNEL_TARGET_HOSTNAME_ENV_VARS: Record<TunnelTarget, string> = {
+  tailscale: "GOGGLER_TAILSCALE_HOSTNAME",
+  ngrok: "GOGGLER_NGROK_HOSTNAME"
+};
+
+function resolveTunnelTarget(): TunnelTarget {
+  const raw = process.env.GOGGLER_TUNNEL_TARGET;
+  if (raw === undefined) {
+    return "tailscale";
+  }
+  if ((TUNNEL_TARGETS as readonly string[]).includes(raw)) {
+    return raw as TunnelTarget;
+  }
+  throw new Error(`Invalid GOGGLER_TUNNEL_TARGET "${raw}" — expected one of: ${TUNNEL_TARGETS.join(", ")}`);
+}
+
+function trustedTunnelHost(): string | undefined {
+  return process.env[TUNNEL_TARGET_HOSTNAME_ENV_VARS[resolveTunnelTarget()]];
+}
+
 function isAllowedForwardedOrigin(proto: string, host: string): boolean {
   const origin = `${proto}://${host}`;
   if (allowedConfiguredOrigins().has(origin)) {
@@ -33,7 +56,7 @@ function isAllowedForwardedOrigin(proto: string, host: string): boolean {
     return false;
   }
 
-  return host === "localhost" || host.startsWith("localhost:") || host.endsWith(".ngrok-free.dev");
+  return host === "localhost" || host.startsWith("localhost:") || host === trustedTunnelHost();
 }
 
 function allowedConfiguredOrigins(): Set<string> {
