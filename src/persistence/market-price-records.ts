@@ -40,6 +40,22 @@ export async function captureMarketPriceRecords(
   return { captured: items.map((item) => item.itemId) };
 }
 
+export async function deleteMarketPriceRecords(
+  userId: string,
+  venueItemIds: string[],
+  prisma: PrismaClient | undefined = getPrismaClient()
+): Promise<{ deletedCount: number }> {
+  if (!prisma || venueItemIds.length === 0) {
+    return { deletedCount: 0 };
+  }
+
+  const result = await prisma.marketPriceRecord.deleteMany({
+    where: { userId, venue: "ebay", venueItemId: { in: venueItemIds } }
+  });
+
+  return { deletedCount: result.count };
+}
+
 export async function listCapturedVenueItemIds(
   userId: string,
   venueItemIds: string[],

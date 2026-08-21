@@ -192,6 +192,11 @@ button {
   font-weight: 800;
 }
 
+.danger-action {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
 .primary-button {
   background: var(--accent);
   border: 1px solid var(--accent);
