@@ -4,6 +4,7 @@ import { config } from "dotenv";
 import { DEFAULT_MATCHING_PREFERENCES } from "../../src/ebay/matching-preferences.ts";
 import {
   captureMarketPriceRecords,
+  deleteMarketPriceRecords,
   listAllMarketPriceRecords,
   listCapturedVenueItemIds,
   listMarketPriceRecordsByGroup
@@ -153,6 +154,62 @@ test("listAllMarketPriceRecords returns every captured record for the user, scop
   assert.equal(first?.list, "WatchList");
   assert.deepEqual(first?.currentPrice, { value: 62.5, currency: "GBP" });
   assert.equal(first?.relistingGroupId, "criteria:BNJ71001");
+});
+
+test("deleteMarketPriceRecords removes only the specified records for the given user", async () => {
+  await captureMarketPriceRecords(
+    [
+      endedItem("ended-001", "Blue Note style LP BNJ71001", 62.5),
+      endedItem("ended-002", "Unrelated record BNJ99999", 15),
+      endedItem("ended-003", "Another record ABC1234", 30)
+    ],
+    "local-saja",
+    DEFAULT_MATCHING_PREFERENCES,
+    prisma
+  );
+
+  const result = await deleteMarketPriceRecords("local-saja", ["ended-001", "ended-003"], prisma);
+
+  assert.equal(result.deletedCount, 2);
+  assert.equal(await prisma.marketPriceRecord.count({ where: { userId: "local-saja" } }), 1);
+  const remaining = await prisma.marketPriceRecord.findFirstOrThrow({ where: { userId: "local-saja" } });
+  assert.equal(remaining.venueItemId, "ended-002");
+});
+
+test("deleteMarketPriceRecords never deletes another user's records, even for the same venueItemId", async () => {
+  await captureMarketPriceRecords(
+    [endedItem("shared-item-id", "local-saja's record", 62.5)],
+    "local-saja",
+    DEFAULT_MATCHING_PREFERENCES,
+    prisma
+  );
+  await captureMarketPriceRecords(
+    [endedItem("shared-item-id", "other-user's record", 40)],
+    "other-user",
+    DEFAULT_MATCHING_PREFERENCES,
+    prisma
+  );
+
+  const result = await deleteMarketPriceRecords("local-saja", ["shared-item-id"], prisma);
+
+  assert.equal(result.deletedCount, 1);
+  assert.equal(await prisma.marketPriceRecord.count(), 1);
+  const remaining = await prisma.marketPriceRecord.findFirstOrThrow({});
+  assert.equal(remaining.userId, "other-user");
+});
+
+test("deleteMarketPriceRecords no-ops cleanly on an empty ID list", async () => {
+  await captureMarketPriceRecords(
+    [endedItem("ended-001", "Blue Note style LP BNJ71001", 62.5)],
+    "local-saja",
+    DEFAULT_MATCHING_PREFERENCES,
+    prisma
+  );
+
+  const result = await deleteMarketPriceRecords("local-saja", [], prisma);
+
+  assert.equal(result.deletedCount, 0);
+  assert.equal(await prisma.marketPriceRecord.count(), 1);
 });
 
 function endedItem(itemId, title, value) {

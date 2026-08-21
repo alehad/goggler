@@ -16,6 +16,7 @@ import {
   ShoppingBag,
   SlidersHorizontal,
   Sparkles,
+  Trash2,
   TrendingUp,
   X
 } from "lucide-react";
@@ -238,6 +239,23 @@ export default function Home() {
           endedWatchlistItems: current.history.endedWatchlistItems.map((item) =>
             idSet.has(item.itemId) ? { ...item, captured: true } : item
           )
+        }
+      };
+    });
+  }
+
+  function removeHistoryItems(itemIds: string[]) {
+    setHistoryState((current) => {
+      if (current.status !== "ready") {
+        return current;
+      }
+
+      const idSet = new Set(itemIds);
+      return {
+        ...current,
+        history: {
+          ...current.history,
+          endedWatchlistItems: current.history.endedWatchlistItems.filter((item) => !idSet.has(item.itemId))
         }
       };
     });
@@ -492,6 +510,7 @@ export default function Home() {
             groupFilter={analyticsGroupFilter}
             onClearGroupFilter={() => setAnalyticsGroupFilter(undefined)}
             onItemsCaptured={markItemsCaptured}
+            onItemsRemoved={removeHistoryItems}
           />
         )}
         {activeTab === "account" && (
@@ -1391,7 +1410,8 @@ function Analytics({
   onSelectItem,
   groupFilter,
   onClearGroupFilter,
-  onItemsCaptured
+  onItemsCaptured,
+  onItemsRemoved
 }: {
   historyState: HistoryState;
   matchingPreferences: MatchingPreferences;
@@ -1401,12 +1421,15 @@ function Analytics({
   groupFilter: string | undefined;
   onClearGroupFilter: () => void;
   onItemsCaptured: (itemIds: string[]) => void;
+  onItemsRemoved: (itemIds: string[]) => void;
 }) {
   const [filter, setFilter] = useState<CaptureFilter>("all");
   const [winFilter, setWinFilter] = useState<WinStatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingItemIds, setPendingItemIds] = useState<string[]>([]);
+  const [deletingItemIds, setDeletingItemIds] = useState<string[]>([]);
   const [bulkCapturing, setBulkCapturing] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [message, setMessage] = useState("");
   const [matchedSalesState, setMatchedSalesState] = useState<MatchedSalesState>({ status: "idle" });
 
@@ -1592,6 +1615,59 @@ function Analytics({
     }
   }
 
+  async function deleteHistoryItems(itemIds: string[]) {
+    setMessage("");
+    let response: Response;
+    try {
+      response = await fetch("/api/market-insights/history", {
+        body: JSON.stringify({ itemIds }),
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        method: "DELETE"
+      });
+    } catch {
+      setMessage("Could not remove items from price history: network error");
+      return;
+    }
+
+    if (!response.ok) {
+      setMessage("Could not remove items from price history");
+      return;
+    }
+
+    onItemsRemoved(itemIds);
+  }
+
+  async function deleteOne(itemId: string) {
+    setDeletingItemIds((ids) => [...ids, itemId]);
+    try {
+      await deleteHistoryItems([itemId]);
+    } finally {
+      setDeletingItemIds((ids) => ids.filter((id) => id !== itemId));
+    }
+  }
+
+  async function deleteAllVisible() {
+    const deletable = filteredItems.filter((item) => item.captured && item.list === "WatchList");
+    if (deletable.length === 0) {
+      return;
+    }
+    if (
+      !window.confirm(
+        `Remove ${deletable.length} item${deletable.length === 1 ? "" : "s"} from price history? This can't be undone.`
+      )
+    ) {
+      return;
+    }
+
+    setBulkDeleting(true);
+    try {
+      await deleteHistoryItems(deletable.map((item) => item.itemId));
+    } finally {
+      setBulkDeleting(false);
+    }
+  }
+
   return (
     <section className="content">
       <div className="section-heading">
@@ -1727,6 +1803,18 @@ function Analytics({
                 <span>{bulkCapturing ? "Capturing..." : "Capture all visible"}</span>
               </button>
             )}
+
+            {filteredItems.some((item) => item.captured && item.list === "WatchList") && (
+              <button
+                className="secondary-button compact capture-action danger-action"
+                disabled={bulkDeleting}
+                onClick={() => void deleteAllVisible()}
+                type="button"
+              >
+                <Trash2 size={16} />
+                <span>{bulkDeleting ? "Removing..." : "Delete all visible"}</span>
+              </button>
+            )}
           </div>
 
           {message && <p className="form-message">{message}</p>}
@@ -1736,9 +1824,11 @@ function Analytics({
               {filteredItems.map((item) => (
                 <AnalyticsRow
                   capturing={pendingItemIds.includes(item.itemId)}
+                  deleting={deletingItemIds.includes(item.itemId)}
                   item={item}
                   key={item.itemId}
                   onCapture={() => void captureOne(item.itemId)}
+                  onDelete={() => void deleteOne(item.itemId)}
                   onSelect={() => onSelectItem(item.itemId)}
                   selected={item.itemId === selectedItemId}
                 />
@@ -1761,14 +1851,18 @@ function Analytics({
 
 function AnalyticsRow({
   capturing,
+  deleting,
   item,
   onCapture,
+  onDelete,
   onSelect,
   selected
 }: {
   capturing: boolean;
+  deleting: boolean;
   item: AnalyticsItem;
   onCapture: () => void;
+  onDelete: () => void;
   onSelect: () => void;
   selected: boolean;
 }) {
@@ -1818,6 +1912,22 @@ function AnalyticsRow({
           >
             <Check size={16} />
             <span>{capturing ? "Adding..." : "Add to history"}</span>
+          </button>
+        )}
+        {item.captured && !isWonOnly && (
+          <button
+            className="secondary-button compact capture-action danger-action"
+            disabled={deleting}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (window.confirm(`Remove "${item.title}" from price history? This can't be undone.`)) {
+                onDelete();
+              }
+            }}
+            type="button"
+          >
+            <Trash2 size={16} />
+            <span>{deleting ? "Removing..." : "Remove from history"}</span>
           </button>
         )}
       </div>
