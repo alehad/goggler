@@ -21,6 +21,8 @@ import {
   X
 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   DEFAULT_MATCHING_PREFERENCES,
   LEGACY_DEFAULT_MATCHING_CRITERIA_TEXTS,
@@ -38,6 +40,29 @@ type CaptureFilter = "all" | "captured" | "notCaptured";
 type HomeFeedFilter = "search" | "all" | "onWatchlist" | "relistings" | "won" | "neverWon";
 type RelistingFormatFilter = "both" | "auction" | "buyNow";
 const MATCHING_PREFERENCES_STORAGE_KEY = "goggler.matchingPreferences";
+
+// The assistant's answer text can echo real eBay listing titles, which are third-party
+// content (any seller can title a listing however they like) flowing in unsanitized from
+// src/persistence/market-price-records.ts. Markdown syntax in a title (e.g. an embedded
+// image) would otherwise render as a live <img>/<a> and fire an unsanitized cross-origin
+// request the moment the answer renders — restrict both to the same trusted-eBay-host allow
+// list already used for images/links sourced directly from the API elsewhere in this file.
+const AI_MARKDOWN_COMPONENTS: Components = {
+  img: ({ alt, src }) => {
+    const safeSrc = typeof src === "string" ? safeEbayImageUrl(src) : undefined;
+    return safeSrc ? <img alt={alt ?? ""} src={safeSrc} /> : null;
+  },
+  a: ({ children, href }) => {
+    const safeHref = typeof href === "string" ? safeEbayItemUrl(href) : undefined;
+    return safeHref ? (
+      <a href={safeHref} rel="noopener noreferrer" target="_blank">
+        {children}
+      </a>
+    ) : (
+      <>{children}</>
+    );
+  }
+};
 
 type Candidate = {
   id: string;
@@ -1432,6 +1457,11 @@ function Analytics({
   const [bulkDeleting, setBulkDeleting] = useState(false);
   const [message, setMessage] = useState("");
   const [matchedSalesState, setMatchedSalesState] = useState<MatchedSalesState>({ status: "idle" });
+  const [aiQuestion, setAiQuestion] = useState("");
+  const [aiAnswer, setAiAnswer] = useState("");
+  const [aiError, setAiError] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiFilterItemIds, setAiFilterItemIds] = useState<string[] | undefined>();
 
   const items: AnalyticsItem[] = useMemo(() => {
     if (historyState.status !== "ready") {
@@ -1462,6 +1492,14 @@ function Analytics({
   const capturedCount = items.filter((item) => item.captured).length;
   const notCapturedCount = items.length - capturedCount;
   const filteredItems = useMemo(() => {
+    if (aiFilterItemIds) {
+      const itemsById = new Map(items.map((item) => [item.itemId, item]));
+      return aiFilterItemIds.flatMap((itemId) => {
+        const item = itemsById.get(itemId);
+        return item ? [item] : [];
+      });
+    }
+
     const groupFiltered = groupFilter ? items.filter((item) => item.relistingGroupId === groupFilter) : items;
     const captureFiltered =
       filter === "captured"
@@ -1484,7 +1522,7 @@ function Analytics({
     return winFiltered.filter(
       (item) => item.title.toLocaleLowerCase("en-GB").includes(term) || item.sellerUserId?.toLocaleLowerCase("en-GB").includes(term)
     );
-  }, [filter, winFilter, items, searchQuery, groupFilter]);
+  }, [filter, winFilter, items, searchQuery, groupFilter, aiFilterItemIds]);
 
   const selectedItem = items.find((item) => item.itemId === selectedItemId);
 
@@ -1558,6 +1596,49 @@ function Analytics({
   const wonSales = matchedSales.filter((sale) => sale.won);
   const myPricePaid = wonSales[wonSales.length - 1];
   const salesCurrency = matchedSales[0]?.price.currency ?? selectedItem?.currentPrice?.currency;
+
+  async function askAssistant(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const question = aiQuestion.trim();
+    if (!question || aiLoading) {
+      return;
+    }
+
+    setAiLoading(true);
+    setAiError("");
+
+    try {
+      const response = await fetch("/api/market-insights/chat", {
+        body: JSON.stringify({
+          question,
+          exactTitleMatch: matchingPreferences.exactTitleMatch,
+          criteriaText: matchingPreferences.criteriaText
+        }),
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+
+      if (!response.ok) {
+        setAiError("Could not answer that question right now.");
+        return;
+      }
+
+      const result = (await response.json().catch(() => ({}))) as Partial<{ answer: string; itemIds: string[] }>;
+      setAiAnswer(typeof result.answer === "string" ? result.answer : "");
+      setAiFilterItemIds(Array.isArray(result.itemIds) ? result.itemIds : []);
+    } catch {
+      setAiError("Could not answer that question right now.");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  function clearAiFilter() {
+    setAiFilterItemIds(undefined);
+    setAiAnswer("");
+    setAiError("");
+  }
 
   async function captureVenueItems(itemsToCapture: AnalyticsItem[]) {
     setMessage("");
@@ -1739,6 +1820,36 @@ function Analytics({
               </button>
             </div>
           )}
+
+          <form className="ai-assistant" onSubmit={(event) => void askAssistant(event)}>
+            <div className="ai-assistant-input-row">
+              <input
+                aria-label="Ask about your price history"
+                onChange={(event) => setAiQuestion(event.target.value)}
+                placeholder='Ask about your items, e.g. "what is the highest paid item?"'
+                value={aiQuestion}
+              />
+              <button className="primary-button compact" disabled={aiLoading || aiQuestion.trim().length === 0} type="submit">
+                <span>{aiLoading ? "Thinking..." : "Ask"}</span>
+              </button>
+            </div>
+            {aiError && <p className="form-message">{aiError}</p>}
+            {aiAnswer && (
+              <div className="ai-assistant-answer">
+                <div className="ai-assistant-markdown">
+                  <ReactMarkdown components={AI_MARKDOWN_COMPONENTS} remarkPlugins={[remarkGfm]}>
+                    {aiAnswer}
+                  </ReactMarkdown>
+                </div>
+                {aiFilterItemIds && (
+                  <button className="secondary-button compact" onClick={clearAiFilter} type="button">
+                    <X size={14} />
+                    <span>Clear</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </form>
 
           <form className="search-box tab-search" onSubmit={(event) => event.preventDefault()}>
             <Search size={18} />
