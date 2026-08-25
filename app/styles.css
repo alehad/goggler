@@ -534,6 +534,23 @@ h1 {
   gap: 10px;
 }
 
+.ai-assistant-input-row .listening {
+  animation: ai-mic-pulse 1.4s ease-in-out infinite;
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #fff;
+}
+
+@keyframes ai-mic-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
 .ai-assistant-input-row input {
   background: transparent;
   border: 1px solid var(--line);

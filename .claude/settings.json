@@ -4,7 +4,16 @@
       "Bash(git *)",
       "Bash(npm *)",
       "Bash(gh *)",
-      "Bash(copilot *)"
+      "Bash(copilot *)",
+      "Bash(curl * https://goggler.tailde35d2.ts.net)",
+      "Bash(curl * https://goggler.tailde35d2.ts.net/*)",
+      "mcp__Claude_Browser__preview_list",
+      "Bash(curl * https://unrigged-fifth-nastily.ngrok-free.dev)",
+      "Bash(curl * https://unrigged-fifth-nastily.ngrok-free.dev/*)",
+      "mcp__Claude_Browser__read_page",
+      "mcp__Claude_Browser__read_console_messages",
+      "Bash(curl -s -o /dev/null -w * http://localhost:3000)",
+      "Bash(curl -s -o /dev/null -w * http://localhost:3000/*)"
     ]
   }
 }
