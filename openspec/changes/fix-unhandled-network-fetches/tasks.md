@@ -1,0 +1,12 @@
+# Tasks: Fix remaining unhandled network-level fetch failures in app/page.tsx
+
+- [x] Create OpenSpec change documenting the root cause and fix for all five deferred functions.
+- [x] Wrap `refreshEbayConfigStatus`'s `fetch` in `try`/`catch`, falling back to `null` on network failure (same as its existing non-`ok` branch).
+- [x] Wrap `refreshEbaySessionState`'s `fetch` in `try`/`catch`, falling back to `null` on network failure (same as its existing non-`ok` branch).
+- [x] Wrap `disconnectEbay`'s `fetch` in `try`/`catch`, setting `accountMessage` to `"Could not disconnect eBay: network error"` on network failure.
+- [x] Wrap `executeHomeSearch`'s `fetch` in `try`/`catch`, setting `homeSearchState` to `{ status: "unavailable", query, message: "Could not reach the server. Check your connection and try again." }` on network failure.
+- [x] Wrap `captureVenueItems`'s `fetch` in `try`/`catch`, setting `message` to `"Could not capture price history for this item: network error"` on network failure.
+- [x] `npx tsc --noEmit`, `npm run build` (dev server stopped first), `npm run test:unit` (195 passing) — all clean.
+- [x] `npm run test:persistence` (52 passing), `npm run openspec:validate` (54 passing) — also clean.
+- [x] Manual confirmation attempted for all five; only partially possible. `executeHomeSearch`, `disconnectEbay`, and `captureVenueItems` all render inside UI that's itself gated behind `historyState.status === "ready"` (an active eBay session) — same constraint already hit and accepted for the Analytics tab and the original `refreshBuyingHistory` fix. Without a live eBay session in this environment, none of the three could be click-tested; `refreshEbayConfigStatus`/`refreshEbaySessionState` are mount-only effects with no way to re-trigger them post-load without a fresh page load, which itself requires the server to be up. Confidence instead comes from: (1) the exact same try/catch-around-fetch mechanism was already proven live for `refreshBuyingHistory` in the prior change (stopped the server, watched the fallback message appear) — all five new call sites use structurally identical code; (2) full code review confirms each function's fallback matches its own pre-existing non-`ok`-response behavior, per function; (3) the full deterministic suite (typecheck/build/tests/openspec) passes clean. Flagged transparently rather than claimed as fully click-tested.
+- [x] Run dual security review (security-review skill + Copilot CLI), then ship via PR.

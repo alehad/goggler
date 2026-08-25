@@ -290,14 +290,22 @@ export default function Home() {
   }
 
   async function refreshEbayConfigStatus() {
-    const response = await fetch("/api/auth/ebay/config-status");
-    setEbayConfigStatus(response.ok ? ((await response.json()) as EbayConfigStatus) : null);
+    try {
+      const response = await fetch("/api/auth/ebay/config-status");
+      setEbayConfigStatus(response.ok ? ((await response.json()) as EbayConfigStatus) : null);
+    } catch {
+      setEbayConfigStatus(null);
+    }
   }
 
   async function refreshEbaySessionState() {
     await refreshEbayConfigStatus();
-    const ebayResponse = await fetch("/api/auth/ebay/session");
-    setEbaySession(ebayResponse.ok ? ((await ebayResponse.json()) as EbaySession) : null);
+    try {
+      const ebayResponse = await fetch("/api/auth/ebay/session");
+      setEbaySession(ebayResponse.ok ? ((await ebayResponse.json()) as EbaySession) : null);
+    } catch {
+      setEbaySession(null);
+    }
   }
 
   async function refreshBuyingHistory() {
@@ -428,7 +436,14 @@ export default function Home() {
 
   async function disconnectEbay() {
     setAccountMessage("");
-    const response = await fetch("/api/auth/ebay/disconnect", { method: "POST" });
+    let response: Response;
+    try {
+      response = await fetch("/api/auth/ebay/disconnect", { method: "POST" });
+    } catch {
+      setAccountMessage("Could not disconnect eBay: network error");
+      return;
+    }
+
     if (!response.ok) {
       setAccountMessage("Could not disconnect eBay");
       return;
@@ -450,16 +465,26 @@ export default function Home() {
     if (query) {
       setActiveTab("dashboard");
       setHomeSearchState({ status: "loading", query });
-      const response = await fetch("/api/ebay/search", {
-        body: JSON.stringify({
+      let response: Response;
+      try {
+        response = await fetch("/api/ebay/search", {
+          body: JSON.stringify({
+            query,
+            exactTitleMatch: matchingPreferences.exactTitleMatch,
+            criteriaText: matchingPreferences.criteriaText
+          }),
+          cache: "no-store",
+          headers: { "Content-Type": "application/json" },
+          method: "POST"
+        });
+      } catch {
+        setHomeSearchState({
+          status: "unavailable",
           query,
-          exactTitleMatch: matchingPreferences.exactTitleMatch,
-          criteriaText: matchingPreferences.criteriaText
-        }),
-        cache: "no-store",
-        headers: { "Content-Type": "application/json" },
-        method: "POST"
-      });
+          message: "Could not reach the server. Check your connection and try again."
+        });
+        return;
+      }
       const body = await response.json().catch(() => ({}));
 
       if (response.ok) {
@@ -1719,12 +1744,18 @@ function Analytics({
 
   async function captureVenueItems(itemsToCapture: AnalyticsItem[]) {
     setMessage("");
-    const response = await fetch("/api/market-insights/capture", {
-      body: JSON.stringify({ items: itemsToCapture.map(toCaptureRequestItem) }),
-      cache: "no-store",
-      headers: { "Content-Type": "application/json" },
-      method: "POST"
-    });
+    let response: Response;
+    try {
+      response = await fetch("/api/market-insights/capture", {
+        body: JSON.stringify({ items: itemsToCapture.map(toCaptureRequestItem) }),
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+    } catch {
+      setMessage("Could not capture price history for this item: network error");
+      return;
+    }
 
     if (!response.ok) {
       setMessage("Could not capture price history for this item");
