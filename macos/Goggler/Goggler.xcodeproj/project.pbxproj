@@ -1,0 +1,483 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0ABE6D01C2D8BC92F6881190 /* GogglerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1150D777D085C386062588FB /* GogglerApp.swift */; };
+		0DFC3CF7C7B3DA8DAC855615 /* GogglerAPIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2406BE03869F1785AB112D23 /* GogglerAPIClientTests.swift */; };
+		49A41487B519818EEAB472E8 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E94B49448B845CEC8C134C52 /* HomeView.swift */; };
+		56F1544FB3933716B55D52BE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18BC7B7CFDC67EC4840C3894 /* SettingsView.swift */; };
+		5BEEC5A23EECE0956B00A895 /* GogglerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D36B4554FFF125BA6F273C2 /* GogglerModels.swift */; };
+		7B3E434E5936662D519A0915 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D123E0D30D1E5062A142D7 /* AppSettings.swift */; };
+		8002E3A21B405ABA6BE15D8D /* SidebarItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33BF77981399A54BB83AF659 /* SidebarItem.swift */; };
+		8BE7BDC82C9489CE9C141E78 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DEEA0975DB009F7C5D9A6FC /* ContentView.swift */; };
+		9D1A4B43C3DD9658F2CA94BD /* PlaceholderTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB9BB0E2B16150DCCB464766 /* PlaceholderTabView.swift */; };
+		A47C18E7A116E9C0EBB30E56 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CEC02C6744BC91C2D0CAF4DA /* Assets.xcassets */; };
+		FA16F552EC82F44513467C8A /* GogglerAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E83D9C94B60534BF268CA5C /* GogglerAPIClient.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		CFF797F35EFD59D6C6B10211 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 536074E1380C92054D109E6E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DFD23011B996BD03A9A6C87A;
+			remoteInfo = Goggler;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		1150D777D085C386062588FB /* GogglerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GogglerApp.swift; sourceTree = "<group>"; };
+		18BC7B7CFDC67EC4840C3894 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		2406BE03869F1785AB112D23 /* GogglerAPIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GogglerAPIClientTests.swift; sourceTree = "<group>"; };
+		27F08A2BB9770A8B21EDF79E /* GogglerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GogglerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		33BF77981399A54BB83AF659 /* SidebarItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarItem.swift; sourceTree = "<group>"; };
+		4DEEA0975DB009F7C5D9A6FC /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		5E83D9C94B60534BF268CA5C /* GogglerAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GogglerAPIClient.swift; sourceTree = "<group>"; };
+		70B8F2E8252603A70AF850A6 /* Goggler.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Goggler.entitlements; sourceTree = "<group>"; };
+		78D123E0D30D1E5062A142D7 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
+		828C06ECA99FAAC2EC49704C /* Goggler.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Goggler.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9D36B4554FFF125BA6F273C2 /* GogglerModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GogglerModels.swift; sourceTree = "<group>"; };
+		AB9BB0E2B16150DCCB464766 /* PlaceholderTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderTabView.swift; sourceTree = "<group>"; };
+		CEC02C6744BC91C2D0CAF4DA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E94B49448B845CEC8C134C52 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		0CA8B8BC7CF2C255FB79B2D3 = {
+			isa = PBXGroup;
+			children = (
+				DCF9D6E7B29718F63D383181 /* Goggler */,
+				E976D2B05EE7F1CD262AF6C9 /* GogglerTests */,
+				D671B7C7650AE4E68B2B97A7 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		594FABB6BE0325EF6E669C8A /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				78D123E0D30D1E5062A142D7 /* AppSettings.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+		6DF94A1F832E5EE7C09EEDFF /* Networking */ = {
+			isa = PBXGroup;
+			children = (
+				5E83D9C94B60534BF268CA5C /* GogglerAPIClient.swift */,
+				9D36B4554FFF125BA6F273C2 /* GogglerModels.swift */,
+			);
+			path = Networking;
+			sourceTree = "<group>";
+		};
+		804DD9CD3A1795D35129B488 /* Tabs */ = {
+			isa = PBXGroup;
+			children = (
+				E94B49448B845CEC8C134C52 /* HomeView.swift */,
+				AB9BB0E2B16150DCCB464766 /* PlaceholderTabView.swift */,
+			);
+			path = Tabs;
+			sourceTree = "<group>";
+		};
+		D671B7C7650AE4E68B2B97A7 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				828C06ECA99FAAC2EC49704C /* Goggler.app */,
+				27F08A2BB9770A8B21EDF79E /* GogglerTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		DCF9D6E7B29718F63D383181 /* Goggler */ = {
+			isa = PBXGroup;
+			children = (
+				CEC02C6744BC91C2D0CAF4DA /* Assets.xcassets */,
+				4DEEA0975DB009F7C5D9A6FC /* ContentView.swift */,
+				70B8F2E8252603A70AF850A6 /* Goggler.entitlements */,
+				1150D777D085C386062588FB /* GogglerApp.swift */,
+				18BC7B7CFDC67EC4840C3894 /* SettingsView.swift */,
+				6DF94A1F832E5EE7C09EEDFF /* Networking */,
+				594FABB6BE0325EF6E669C8A /* Settings */,
+				F55A4A4612ADE84E5D938924 /* Sidebar */,
+				804DD9CD3A1795D35129B488 /* Tabs */,
+			);
+			path = Goggler;
+			sourceTree = "<group>";
+		};
+		E976D2B05EE7F1CD262AF6C9 /* GogglerTests */ = {
+			isa = PBXGroup;
+			children = (
+				2406BE03869F1785AB112D23 /* GogglerAPIClientTests.swift */,
+			);
+			path = GogglerTests;
+			sourceTree = "<group>";
+		};
+		F55A4A4612ADE84E5D938924 /* Sidebar */ = {
+			isa = PBXGroup;
+			children = (
+				33BF77981399A54BB83AF659 /* SidebarItem.swift */,
+			);
+			path = Sidebar;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B2567AC623819EC05A388FB1 /* GogglerTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0854B753DF1784728A2D4961 /* Build configuration list for PBXNativeTarget "GogglerTests" */;
+			buildPhases = (
+				F5AC2ADA0BDCFB6071AC2887 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4F1C831E98B69D15E56DB078 /* PBXTargetDependency */,
+			);
+			name = GogglerTests;
+			packageProductDependencies = (
+			);
+			productName = GogglerTests;
+			productReference = 27F08A2BB9770A8B21EDF79E /* GogglerTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		DFD23011B996BD03A9A6C87A /* Goggler */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8FED6F7025F8FD608E6B5AA1 /* Build configuration list for PBXNativeTarget "Goggler" */;
+			buildPhases = (
+				03600C325D91B609D3BAA420 /* Sources */,
+				F884E7455B8007BA8BCF76BF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Goggler;
+			packageProductDependencies = (
+			);
+			productName = Goggler;
+			productReference = 828C06ECA99FAAC2EC49704C /* Goggler.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		536074E1380C92054D109E6E /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					DFD23011B996BD03A9A6C87A = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 0A98B0CD0D23B0F8105D993E /* Build configuration list for PBXProject "Goggler" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 0CA8B8BC7CF2C255FB79B2D3;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = D671B7C7650AE4E68B2B97A7 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				DFD23011B996BD03A9A6C87A /* Goggler */,
+				B2567AC623819EC05A388FB1 /* GogglerTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		F884E7455B8007BA8BCF76BF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A47C18E7A116E9C0EBB30E56 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		03600C325D91B609D3BAA420 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7B3E434E5936662D519A0915 /* AppSettings.swift in Sources */,
+				8BE7BDC82C9489CE9C141E78 /* ContentView.swift in Sources */,
+				FA16F552EC82F44513467C8A /* GogglerAPIClient.swift in Sources */,
+				0ABE6D01C2D8BC92F6881190 /* GogglerApp.swift in Sources */,
+				5BEEC5A23EECE0956B00A895 /* GogglerModels.swift in Sources */,
+				49A41487B519818EEAB472E8 /* HomeView.swift in Sources */,
+				9D1A4B43C3DD9658F2CA94BD /* PlaceholderTabView.swift in Sources */,
+				56F1544FB3933716B55D52BE /* SettingsView.swift in Sources */,
+				8002E3A21B405ABA6BE15D8D /* SidebarItem.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F5AC2ADA0BDCFB6071AC2887 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0DFC3CF7C7B3DA8DAC855615 /* GogglerAPIClientTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		4F1C831E98B69D15E56DB078 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = DFD23011B996BD03A9A6C87A /* Goggler */;
+			targetProxy = CFF797F35EFD59D6C6B10211 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0681247210827B2EFCF6DA8B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Goggler/Goggler.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Generated-Info.plist";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.goggler.Goggler;
+				PRODUCT_NAME = Goggler;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		24FD06A601E941A4E49E1E0F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.goggler.GogglerTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Goggler.app/Contents/MacOS/Goggler";
+			};
+			name = Release;
+		};
+		40EF0993AC75D64B6DBDDCE5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.goggler.GogglerTests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Goggler.app/Contents/MacOS/Goggler";
+			};
+			name = Debug;
+		};
+		4BD606FD22E5122553C2C3D3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		96B44508331125090A20FFFA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		EFB039D13D69984A448D5815 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Goggler/Goggler.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Generated-Info.plist";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.goggler.Goggler;
+				PRODUCT_NAME = Goggler;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0854B753DF1784728A2D4961 /* Build configuration list for PBXNativeTarget "GogglerTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				40EF0993AC75D64B6DBDDCE5 /* Debug */,
+				24FD06A601E941A4E49E1E0F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		0A98B0CD0D23B0F8105D993E /* Build configuration list for PBXProject "Goggler" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4BD606FD22E5122553C2C3D3 /* Debug */,
+				96B44508331125090A20FFFA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		8FED6F7025F8FD608E6B5AA1 /* Build configuration list for PBXNativeTarget "Goggler" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0681247210827B2EFCF6DA8B /* Debug */,
+				EFB039D13D69984A448D5815 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 536074E1380C92054D109E6E /* Project object */;
+}
