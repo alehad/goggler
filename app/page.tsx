@@ -11,6 +11,8 @@ import {
   Heart,
   House,
   Link2,
+  Mic,
+  MicOff,
   Search,
   ShieldCheck,
   ShoppingBag,
@@ -20,7 +22,7 @@ import {
   TrendingUp,
   X
 } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -33,6 +35,7 @@ import { ebaySellerProfileUrl } from "../src/ebay/seller-profile.ts";
 import { safeEbayImageUrl, safeEbayItemUrl } from "../src/http/safe-external-url.ts";
 import type { WatchlistAutomationCandidate, WatchlistAutomationEvent } from "../src/market-insights/watchlist-automation.ts";
 import { formatAbsoluteDate } from "../src/ui/date-format.ts";
+import { getSpeechRecognitionConstructor, type SpeechRecognition, type SpeechRecognitionEvent } from "../src/ui/speech-recognition.ts";
 
 type Tab = "dashboard" | "tracking" | "won" | "analytics" | "account";
 type LostFilter = "all" | "neverWon" | "eventuallyWon";
@@ -1462,6 +1465,20 @@ function Analytics({
   const [aiError, setAiError] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiFilterItemIds, setAiFilterItemIds] = useState<string[] | undefined>();
+  const [voiceSupported, setVoiceSupported] = useState(false);
+  const [voiceListening, setVoiceListening] = useState(false);
+  const [voiceError, setVoiceError] = useState("");
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  useEffect(() => {
+    setVoiceSupported(Boolean(getSpeechRecognitionConstructor(typeof window === "undefined" ? undefined : window)));
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.abort();
+    };
+  }, []);
 
   const items: AnalyticsItem[] = useMemo(() => {
     if (historyState.status !== "ready") {
@@ -1638,6 +1655,51 @@ function Analytics({
     setAiFilterItemIds(undefined);
     setAiAnswer("");
     setAiError("");
+  }
+
+  function toggleVoiceInput() {
+    if (voiceListening) {
+      recognitionRef.current?.stop();
+      return;
+    }
+
+    const SpeechRecognitionCtor = getSpeechRecognitionConstructor(typeof window === "undefined" ? undefined : window);
+    if (!SpeechRecognitionCtor) {
+      return;
+    }
+
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = "en-GB";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let transcript = "";
+      for (let i = 0; i < event.results.length; i += 1) {
+        transcript += event.results[i]?.[0]?.transcript ?? "";
+      }
+      setAiQuestion(transcript);
+    };
+
+    recognition.onerror = (event) => {
+      setVoiceError(
+        event.error === "not-allowed" || event.error === "permission-denied"
+          ? "Microphone access denied"
+          : event.error === "no-speech"
+            ? "Didn't catch that — try again"
+            : "Voice input failed"
+      );
+      setVoiceListening(false);
+    };
+
+    recognition.onend = () => {
+      setVoiceListening(false);
+    };
+
+    recognitionRef.current = recognition;
+    setVoiceError("");
+    setVoiceListening(true);
+    recognition.start();
   }
 
   async function captureVenueItems(itemsToCapture: AnalyticsItem[]) {
@@ -1829,10 +1891,22 @@ function Analytics({
                 placeholder='Ask about your items, e.g. "what is the highest paid item?"'
                 value={aiQuestion}
               />
+              {voiceSupported && (
+                <button
+                  aria-label={voiceListening ? "Stop listening" : "Ask by voice"}
+                  className={voiceListening ? "secondary-button compact listening" : "secondary-button compact"}
+                  disabled={aiLoading}
+                  onClick={toggleVoiceInput}
+                  type="button"
+                >
+                  {voiceListening ? <MicOff size={16} /> : <Mic size={16} />}
+                </button>
+              )}
               <button className="primary-button compact" disabled={aiLoading || aiQuestion.trim().length === 0} type="submit">
                 <span>{aiLoading ? "Thinking..." : "Ask"}</span>
               </button>
             </div>
+            {voiceError && <p className="form-message">{voiceError}</p>}
             {aiError && <p className="form-message">{aiError}</p>}
             {aiAnswer && (
               <div className="ai-assistant-answer">
