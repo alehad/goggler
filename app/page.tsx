@@ -1975,31 +1975,33 @@ function Analytics({
                   Never won
                 </button>
               </div>
+
+              <div className="filter-row-actions">
+                {filteredItems.some((item) => !item.captured && item.list === "WatchList") && (
+                  <button
+                    className="secondary-button compact capture-action"
+                    disabled={bulkCapturing}
+                    onClick={() => void captureAllVisible()}
+                    type="button"
+                  >
+                    <Check size={16} />
+                    <span>{bulkCapturing ? "Capturing..." : "Capture all visible"}</span>
+                  </button>
+                )}
+
+                {filteredItems.some((item) => item.captured && item.list === "WatchList") && (
+                  <button
+                    className="secondary-button compact capture-action danger-action"
+                    disabled={bulkDeleting}
+                    onClick={() => void deleteAllVisible()}
+                    type="button"
+                  >
+                    <Trash2 size={16} />
+                    <span>{bulkDeleting ? "Removing..." : "Delete all visible"}</span>
+                  </button>
+                )}
+              </div>
             </div>
-
-            {filteredItems.some((item) => !item.captured && item.list === "WatchList") && (
-              <button
-                className="secondary-button compact capture-action"
-                disabled={bulkCapturing}
-                onClick={() => void captureAllVisible()}
-                type="button"
-              >
-                <Check size={16} />
-                <span>{bulkCapturing ? "Capturing..." : "Capture all visible"}</span>
-              </button>
-            )}
-
-            {filteredItems.some((item) => item.captured && item.list === "WatchList") && (
-              <button
-                className="secondary-button compact capture-action danger-action"
-                disabled={bulkDeleting}
-                onClick={() => void deleteAllVisible()}
-                type="button"
-              >
-                <Trash2 size={16} />
-                <span>{bulkDeleting ? "Removing..." : "Delete all visible"}</span>
-              </button>
-            )}
           </div>
 
           {message && <p className="form-message">{message}</p>}
