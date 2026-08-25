@@ -269,10 +269,44 @@ button:disabled {
   gap: 10px;
 }
 
+/* Analytics tab only: both filter groups and the bulk-action buttons in one
+   row, matching the width of the search box above/list below. Deliberately
+   more compact (smaller font, tighter padding, shared fixed height) than the
+   general .segmented-control/.secondary-button sizing elsewhere in the app,
+   scoped entirely to this row so nothing else is affected. */
 .filter-row {
+  align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
+  width: 100%;
+}
+
+.filter-row .segmented-control {
+  flex-shrink: 0;
+  margin-bottom: 0;
+  padding: 3px;
+}
+
+.filter-row .segmented-control button {
+  font-size: 12px;
+  min-height: 28px;
+  padding: 0 8px;
+}
+
+.filter-row-actions {
+  align-items: center;
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.filter-row .capture-action {
+  flex-shrink: 0;
+  font-size: 12px;
+  min-height: 36px;
+  padding: 0 9px;
 }
 
 .eyebrow {
