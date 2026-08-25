@@ -303,12 +303,27 @@ export default function Home() {
   async function refreshBuyingHistory() {
     const previousHistory = historyState.status === "ready" ? historyState.history : undefined;
     setHistoryState({ status: "loading" });
-    const response = await fetch("/api/ebay/buying-history", {
-      body: JSON.stringify(matchingPreferences),
-      cache: "no-store",
-      headers: { "Content-Type": "application/json" },
-      method: "POST"
-    });
+
+    let response: Response;
+    try {
+      response = await fetch("/api/ebay/buying-history", {
+        body: JSON.stringify(matchingPreferences),
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        method: "POST"
+      });
+    } catch {
+      if (previousHistory) {
+        setHistoryState({ status: "ready", history: previousHistory });
+        return;
+      }
+      setHistoryState({
+        status: "unavailable",
+        message: "Could not reach the server. Check your connection and try again."
+      });
+      return;
+    }
+
     const body = await response.json().catch(() => ({}));
 
     if (response.ok) {
