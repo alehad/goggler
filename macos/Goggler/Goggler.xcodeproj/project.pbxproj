@@ -9,14 +9,19 @@
 /* Begin PBXBuildFile section */
 		0ABE6D01C2D8BC92F6881190 /* GogglerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1150D777D085C386062588FB /* GogglerApp.swift */; };
 		0DFC3CF7C7B3DA8DAC855615 /* GogglerAPIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2406BE03869F1785AB112D23 /* GogglerAPIClientTests.swift */; };
+		2B5497A14C2015EDAD4EC9E2 /* StartupGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A02077193843DAE8B546C410 /* StartupGateView.swift */; };
+		2ED773C62FBA0BB30C1C085C /* WatchlistView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150F9826C2EB574B99C4C6A7 /* WatchlistView.swift */; };
 		49A41487B519818EEAB472E8 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E94B49448B845CEC8C134C52 /* HomeView.swift */; };
 		56F1544FB3933716B55D52BE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18BC7B7CFDC67EC4840C3894 /* SettingsView.swift */; };
+		5B8DCEC78BCAE5BB60CA2083 /* BuyingHistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C4EE374CEF95B8D3D242E21 /* BuyingHistoryStoreTests.swift */; };
 		5BEEC5A23EECE0956B00A895 /* GogglerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D36B4554FFF125BA6F273C2 /* GogglerModels.swift */; };
+		6A86F564627F8EEBBB9B0352 /* Logging.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6CF8BC32BFF74AE18AB53F9 /* Logging.swift */; };
 		7B3E434E5936662D519A0915 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D123E0D30D1E5062A142D7 /* AppSettings.swift */; };
 		8002E3A21B405ABA6BE15D8D /* SidebarItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33BF77981399A54BB83AF659 /* SidebarItem.swift */; };
 		8BE7BDC82C9489CE9C141E78 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DEEA0975DB009F7C5D9A6FC /* ContentView.swift */; };
 		9D1A4B43C3DD9658F2CA94BD /* PlaceholderTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB9BB0E2B16150DCCB464766 /* PlaceholderTabView.swift */; };
 		A47C18E7A116E9C0EBB30E56 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CEC02C6744BC91C2D0CAF4DA /* Assets.xcassets */; };
+		ADD8991311318255F56EEB28 /* BuyingHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1DE6D115021310A2A60BB3A /* BuyingHistoryStore.swift */; };
 		FA16F552EC82F44513467C8A /* GogglerAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E83D9C94B60534BF268CA5C /* GogglerAPIClient.swift */; };
 /* End PBXBuildFile section */
 
@@ -32,17 +37,22 @@
 
 /* Begin PBXFileReference section */
 		1150D777D085C386062588FB /* GogglerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GogglerApp.swift; sourceTree = "<group>"; };
+		150F9826C2EB574B99C4C6A7 /* WatchlistView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchlistView.swift; sourceTree = "<group>"; };
 		18BC7B7CFDC67EC4840C3894 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		2406BE03869F1785AB112D23 /* GogglerAPIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GogglerAPIClientTests.swift; sourceTree = "<group>"; };
 		27F08A2BB9770A8B21EDF79E /* GogglerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GogglerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		33BF77981399A54BB83AF659 /* SidebarItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarItem.swift; sourceTree = "<group>"; };
 		4DEEA0975DB009F7C5D9A6FC /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		5E83D9C94B60534BF268CA5C /* GogglerAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GogglerAPIClient.swift; sourceTree = "<group>"; };
+		6C4EE374CEF95B8D3D242E21 /* BuyingHistoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuyingHistoryStoreTests.swift; sourceTree = "<group>"; };
 		70B8F2E8252603A70AF850A6 /* Goggler.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Goggler.entitlements; sourceTree = "<group>"; };
 		78D123E0D30D1E5062A142D7 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		828C06ECA99FAAC2EC49704C /* Goggler.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Goggler.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9D36B4554FFF125BA6F273C2 /* GogglerModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GogglerModels.swift; sourceTree = "<group>"; };
+		A02077193843DAE8B546C410 /* StartupGateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupGateView.swift; sourceTree = "<group>"; };
 		AB9BB0E2B16150DCCB464766 /* PlaceholderTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderTabView.swift; sourceTree = "<group>"; };
+		B6CF8BC32BFF74AE18AB53F9 /* Logging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logging.swift; sourceTree = "<group>"; };
+		C1DE6D115021310A2A60BB3A /* BuyingHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuyingHistoryStore.swift; sourceTree = "<group>"; };
 		CEC02C6744BC91C2D0CAF4DA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		E94B49448B845CEC8C134C52 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -55,6 +65,22 @@
 				E976D2B05EE7F1CD262AF6C9 /* GogglerTests */,
 				D671B7C7650AE4E68B2B97A7 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		20ACCCE22D2A6E4EC5EC9DB9 /* History */ = {
+			isa = PBXGroup;
+			children = (
+				C1DE6D115021310A2A60BB3A /* BuyingHistoryStore.swift */,
+			);
+			path = History;
+			sourceTree = "<group>";
+		};
+		383E6229E21BECA47982FFF7 /* Startup */ = {
+			isa = PBXGroup;
+			children = (
+				A02077193843DAE8B546C410 /* StartupGateView.swift */,
+			);
+			path = Startup;
 			sourceTree = "<group>";
 		};
 		594FABB6BE0325EF6E669C8A /* Settings */ = {
@@ -79,6 +105,7 @@
 			children = (
 				E94B49448B845CEC8C134C52 /* HomeView.swift */,
 				AB9BB0E2B16150DCCB464766 /* PlaceholderTabView.swift */,
+				150F9826C2EB574B99C4C6A7 /* WatchlistView.swift */,
 			);
 			path = Tabs;
 			sourceTree = "<group>";
@@ -99,10 +126,13 @@
 				4DEEA0975DB009F7C5D9A6FC /* ContentView.swift */,
 				70B8F2E8252603A70AF850A6 /* Goggler.entitlements */,
 				1150D777D085C386062588FB /* GogglerApp.swift */,
+				B6CF8BC32BFF74AE18AB53F9 /* Logging.swift */,
 				18BC7B7CFDC67EC4840C3894 /* SettingsView.swift */,
+				20ACCCE22D2A6E4EC5EC9DB9 /* History */,
 				6DF94A1F832E5EE7C09EEDFF /* Networking */,
 				594FABB6BE0325EF6E669C8A /* Settings */,
 				F55A4A4612ADE84E5D938924 /* Sidebar */,
+				383E6229E21BECA47982FFF7 /* Startup */,
 				804DD9CD3A1795D35129B488 /* Tabs */,
 			);
 			path = Goggler;
@@ -111,6 +141,7 @@
 		E976D2B05EE7F1CD262AF6C9 /* GogglerTests */ = {
 			isa = PBXGroup;
 			children = (
+				6C4EE374CEF95B8D3D242E21 /* BuyingHistoryStoreTests.swift */,
 				2406BE03869F1785AB112D23 /* GogglerAPIClientTests.swift */,
 			);
 			path = GogglerTests;
@@ -214,14 +245,18 @@
 			buildActionMask = 2147483647;
 			files = (
 				7B3E434E5936662D519A0915 /* AppSettings.swift in Sources */,
+				ADD8991311318255F56EEB28 /* BuyingHistoryStore.swift in Sources */,
 				8BE7BDC82C9489CE9C141E78 /* ContentView.swift in Sources */,
 				FA16F552EC82F44513467C8A /* GogglerAPIClient.swift in Sources */,
 				0ABE6D01C2D8BC92F6881190 /* GogglerApp.swift in Sources */,
 				5BEEC5A23EECE0956B00A895 /* GogglerModels.swift in Sources */,
 				49A41487B519818EEAB472E8 /* HomeView.swift in Sources */,
+				6A86F564627F8EEBBB9B0352 /* Logging.swift in Sources */,
 				9D1A4B43C3DD9658F2CA94BD /* PlaceholderTabView.swift in Sources */,
 				56F1544FB3933716B55D52BE /* SettingsView.swift in Sources */,
 				8002E3A21B405ABA6BE15D8D /* SidebarItem.swift in Sources */,
+				2B5497A14C2015EDAD4EC9E2 /* StartupGateView.swift in Sources */,
+				2ED773C62FBA0BB30C1C085C /* WatchlistView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -229,6 +264,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5B8DCEC78BCAE5BB60CA2083 /* BuyingHistoryStoreTests.swift in Sources */,
 				0DFC3CF7C7B3DA8DAC855615 /* GogglerAPIClientTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

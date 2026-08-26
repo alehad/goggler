@@ -10,30 +10,32 @@ struct ContentView: View {
     @State private var isSettingsPresented = false
 
     var body: some View {
-        NavigationSplitView {
-            VStack(spacing: 0) {
-                List(SidebarItem.allCases, selection: $selection) { item in
-                    Label(item.label, systemImage: item.systemImage)
-                }
-                .listStyle(.sidebar)
+        StartupGateView {
+            NavigationSplitView {
+                VStack(spacing: 0) {
+                    List(SidebarItem.allCases, selection: $selection) { item in
+                        Label(item.label, systemImage: item.systemImage)
+                    }
+                    .listStyle(.sidebar)
 
-                Divider()
+                    Divider()
 
-                Button {
-                    isSettingsPresented = true
-                } label: {
-                    Label("Settings", systemImage: "gearshape")
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button {
+                        isSettingsPresented = true
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.plain)
+                    .padding(12)
                 }
-                .buttonStyle(.plain)
-                .padding(12)
+                .navigationSplitViewColumnWidth(min: 180, ideal: 220)
+            } detail: {
+                detailView
             }
-            .navigationSplitViewColumnWidth(min: 180, ideal: 220)
-        } detail: {
-            detailView
-        }
-        .sheet(isPresented: $isSettingsPresented) {
-            SettingsView()
+            .sheet(isPresented: $isSettingsPresented) {
+                SettingsView()
+            }
         }
     }
 
@@ -43,7 +45,7 @@ struct ContentView: View {
         case .home:
             HomeView()
         case .watchlist:
-            PlaceholderTabView(item: .watchlist)
+            WatchlistView()
         case .purchases:
             PlaceholderTabView(item: .purchases)
         case .analytics:
@@ -57,4 +59,5 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environment(AppSettings())
+        .environment(BuyingHistoryStore())
 }
