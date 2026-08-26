@@ -22,6 +22,7 @@
 		9D1A4B43C3DD9658F2CA94BD /* PlaceholderTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB9BB0E2B16150DCCB464766 /* PlaceholderTabView.swift */; };
 		A47C18E7A116E9C0EBB30E56 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CEC02C6744BC91C2D0CAF4DA /* Assets.xcassets */; };
 		ADD8991311318255F56EEB28 /* BuyingHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1DE6D115021310A2A60BB3A /* BuyingHistoryStore.swift */; };
+		B3AC61E3D0E29C9DBC387BD6 /* PurchasesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70FE745F16172DB4570E4037 /* PurchasesView.swift */; };
 		FA16F552EC82F44513467C8A /* GogglerAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E83D9C94B60534BF268CA5C /* GogglerAPIClient.swift */; };
 /* End PBXBuildFile section */
 
@@ -46,6 +47,7 @@
 		5E83D9C94B60534BF268CA5C /* GogglerAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GogglerAPIClient.swift; sourceTree = "<group>"; };
 		6C4EE374CEF95B8D3D242E21 /* BuyingHistoryStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuyingHistoryStoreTests.swift; sourceTree = "<group>"; };
 		70B8F2E8252603A70AF850A6 /* Goggler.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Goggler.entitlements; sourceTree = "<group>"; };
+		70FE745F16172DB4570E4037 /* PurchasesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchasesView.swift; sourceTree = "<group>"; };
 		78D123E0D30D1E5062A142D7 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		828C06ECA99FAAC2EC49704C /* Goggler.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Goggler.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9D36B4554FFF125BA6F273C2 /* GogglerModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GogglerModels.swift; sourceTree = "<group>"; };
@@ -105,6 +107,7 @@
 			children = (
 				E94B49448B845CEC8C134C52 /* HomeView.swift */,
 				AB9BB0E2B16150DCCB464766 /* PlaceholderTabView.swift */,
+				70FE745F16172DB4570E4037 /* PurchasesView.swift */,
 				150F9826C2EB574B99C4C6A7 /* WatchlistView.swift */,
 			);
 			path = Tabs;
@@ -253,6 +256,7 @@
 				49A41487B519818EEAB472E8 /* HomeView.swift in Sources */,
 				6A86F564627F8EEBBB9B0352 /* Logging.swift in Sources */,
 				9D1A4B43C3DD9658F2CA94BD /* PlaceholderTabView.swift in Sources */,
+				B3AC61E3D0E29C9DBC387BD6 /* PurchasesView.swift in Sources */,
 				56F1544FB3933716B55D52BE /* SettingsView.swift in Sources */,
 				8002E3A21B405ABA6BE15D8D /* SidebarItem.swift in Sources */,
 				2B5497A14C2015EDAD4EC9E2 /* StartupGateView.swift in Sources */,
