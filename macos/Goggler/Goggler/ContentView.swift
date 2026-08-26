@@ -47,7 +47,7 @@ struct ContentView: View {
         case .watchlist:
             WatchlistView()
         case .purchases:
-            PlaceholderTabView(item: .purchases)
+            PurchasesView()
         case .analytics:
             PlaceholderTabView(item: .analytics)
         case nil:
