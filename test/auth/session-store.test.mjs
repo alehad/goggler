@@ -210,6 +210,79 @@ test("rejects expired pending eBay OAuth states", () => {
   );
 });
 
+test("reissues a working token for an existing session", () => {
+  const store = new InMemorySessionStore([user]);
+  const { session } = store.createSession(user.id, {
+    now: new Date("2026-05-01T10:00:00.000Z"),
+    ttlMs: 1000
+  });
+
+  const newToken = store.reissueToken(session.id, {
+    now: new Date("2026-05-01T10:00:00.500Z")
+  });
+
+  assert.ok(newToken);
+  const result = store.lookupSession(newToken, {
+    now: new Date("2026-05-01T10:00:00.600Z")
+  });
+  assert.equal(result?.session.id, session.id);
+});
+
+test("reissuing a token invalidates the previous one", () => {
+  const store = new InMemorySessionStore([user]);
+  const { token, session } = store.createSession(user.id, {
+    now: new Date("2026-05-01T10:00:00.000Z"),
+    ttlMs: 1000
+  });
+
+  store.reissueToken(session.id, { now: new Date("2026-05-01T10:00:00.500Z") });
+
+  assert.equal(
+    store.lookupSession(token, { now: new Date("2026-05-01T10:00:00.600Z") }),
+    undefined
+  );
+});
+
+test("reissuing preserves eBay authorization already attached to the session", () => {
+  const store = new InMemorySessionStore([user]);
+  const { session } = store.createSession(user.id);
+  store.setEbayAuthorization(session.id, {
+    accessToken: "access-token",
+    tokenType: "User Access Token",
+    authorizedAt: new Date("2026-05-07T10:00:00.000Z"),
+    expiresAt: new Date("2026-05-07T12:00:00.000Z"),
+    scopes: ["scope-one"]
+  });
+
+  store.reissueToken(session.id, { now: new Date("2026-05-07T10:30:00.000Z") });
+
+  assert.equal(
+    store.getEbayConnectionStatus(session.id, { now: new Date("2026-05-07T10:30:00.000Z") }).connected,
+    true
+  );
+});
+
+test("returns undefined when reissuing a token for an unknown session", () => {
+  const store = new InMemorySessionStore([user]);
+
+  assert.equal(store.reissueToken("does-not-exist"), undefined);
+});
+
+test("returns undefined when reissuing a token for an expired session", () => {
+  const store = new InMemorySessionStore([user]);
+  const { session } = store.createSession(user.id, {
+    now: new Date("2026-05-01T10:00:00.000Z"),
+    ttlMs: 1000
+  });
+
+  const newToken = store.reissueToken(session.id, {
+    now: new Date("2026-05-01T10:00:01.001Z")
+  });
+
+  assert.equal(newToken, undefined);
+  assert.equal(store.sessionCount(), 0);
+});
+
 test("rejects unknown users", () => {
   const store = new InMemorySessionStore();
 

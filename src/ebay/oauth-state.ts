@@ -7,6 +7,10 @@ export type EbayOAuthStatePayload = {
   sessionId: string;
   createdAt: number;
   expiresAt: number;
+  /** Absent = today's web behavior. "native" = the flow was started by the
+   * macOS app via /api/auth/ebay/start?nativeRedirect=1; the callback route
+   * redirects to the app's custom URL scheme instead of the web root. */
+  redirectTarget?: "native";
 };
 
 export type EbayOAuthStateValidation =
@@ -30,7 +34,13 @@ export class EbayOAuthStateStore {
     return this.createWithPayload(input).state;
   }
 
-  createWithPayload(input: { userId: string; sessionId: string; now?: Date; ttlMs?: number }): {
+  createWithPayload(input: {
+    userId: string;
+    sessionId: string;
+    now?: Date;
+    ttlMs?: number;
+    redirectTarget?: "native";
+  }): {
     state: string;
     payload: EbayOAuthStatePayload;
   } {
@@ -40,7 +50,8 @@ export class EbayOAuthStateStore {
       userId: input.userId,
       sessionId: input.sessionId,
       createdAt: now.getTime(),
-      expiresAt: now.getTime() + (input.ttlMs ?? DEFAULT_STATE_TTL_MS)
+      expiresAt: now.getTime() + (input.ttlMs ?? DEFAULT_STATE_TTL_MS),
+      ...(input.redirectTarget ? { redirectTarget: input.redirectTarget } : {})
     };
 
     const encodedPayload = encodeJson(payload);
@@ -101,6 +112,29 @@ export class EbayOAuthStateStore {
 
 export function getEbayOAuthStateStore(): EbayOAuthStateStore {
   return new EbayOAuthStateStore(loadRequiredAppSecret());
+}
+
+/**
+ * Best-effort, UNSIGNED read of a state parameter's `redirectTarget`, for a
+ * failed OAuth attempt where full signature validation already failed (or
+ * hasn't been attempted) but the callback route still needs to know which
+ * URL scheme to redirect the browser to. Never use this result for a trust
+ * or authorization decision — only for choosing where an error redirect
+ * goes. The actual code exchange remains fully gated by
+ * `validate`/`validateSignedState` elsewhere.
+ */
+export function peekRedirectTarget(state: string | undefined): "native" | "web" {
+  if (!state) {
+    return "web";
+  }
+
+  const [encodedPayload] = state.split(".");
+  if (!encodedPayload) {
+    return "web";
+  }
+
+  const payload = decodeJson(encodedPayload);
+  return payload?.redirectTarget === "native" ? "native" : "web";
 }
 
 function sign(value: string, secret: string): string {

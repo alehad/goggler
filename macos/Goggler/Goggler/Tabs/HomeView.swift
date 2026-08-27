@@ -7,7 +7,11 @@ import SwiftUI
 /// once by `StartupGateView`, not here — this view only renders the shared
 /// store's state, so Home and Watchlist never race to fetch independently.
 struct HomeView: View {
+    @Environment(AppSettings.self) private var appSettings
     @Environment(BuyingHistoryStore.self) private var store
+    @State private var ebayAuthService = EbayAuthService()
+    @State private var isConnectingEbay = false
+    @State private var connectEbayErrorMessage: String?
 
     var body: some View {
         ScrollView {
@@ -23,11 +27,23 @@ struct HomeView: View {
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .alert("Couldn't connect eBay", isPresented: connectEbayErrorBinding) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(connectEbayErrorMessage ?? "")
+        }
+    }
+
+    private var connectEbayErrorBinding: Binding<Bool> {
+        Binding(
+            get: { connectEbayErrorMessage != nil },
+            set: { isPresented in if !isPresented { connectEbayErrorMessage = nil } }
+        )
     }
 
     private var connectionSection: some View {
         GroupBox("eBay Connection") {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 if store.connectionLoadFailed {
                     Label("Could not reach the server", systemImage: "wifi.slash")
                         .foregroundStyle(.red)
@@ -40,6 +56,19 @@ struct HomeView: View {
                     Text(connection.status)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    if !connection.connected {
+                        Button {
+                            connectEbay()
+                        } label: {
+                            if isConnectingEbay {
+                                ProgressView().controlSize(.small)
+                            } else {
+                                Text("Connect eBay")
+                            }
+                        }
+                        .disabled(isConnectingEbay)
+                    }
                 } else {
                     ProgressView()
                 }
@@ -77,9 +106,31 @@ struct HomeView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
+
+    private func connectEbay() {
+        isConnectingEbay = true
+        Task {
+            defer { isConnectingEbay = false }
+
+            let result = await ebayAuthService.connect(appSettings: appSettings)
+            AppLog.startup.debug("HomeView: connectEbay result=\(String(describing: result), privacy: .public)")
+            switch result {
+            case .connected:
+                if let client = appSettings.apiClient {
+                    await store.refresh(using: client)
+                    AppLog.startup.debug("HomeView: post-connect refresh, connection.connected=\(store.connection?.connected ?? false, privacy: .public)")
+                }
+            case .cancelled:
+                break
+            case .failed(let message):
+                connectEbayErrorMessage = message
+            }
+        }
+    }
 }
 
 #Preview {
     HomeView()
+        .environment(AppSettings())
         .environment(BuyingHistoryStore())
 }

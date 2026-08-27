@@ -132,6 +132,34 @@ export class InMemorySessionStore {
     return undefined;
   }
 
+  /**
+   * Mints a fresh raw token for an existing session, rotating its stored
+   * hash. Needed because `createSession` only ever returns the raw token
+   * once — the store persists only its hash, so there is no way to recover
+   * a session's original raw token later. Used by the native macOS OAuth
+   * callback to hand a usable token back to the app after the OAuth flow
+   * completed against a session the app's own cookie jar never saw (see
+   * openspec/changes/macos-ebay-oauth/design.md).
+   */
+  reissueToken(sessionId: string, options: { now?: Date } = {}): string | undefined {
+    const session = this.sessions.get(sessionId);
+    if (!session) {
+      return undefined;
+    }
+
+    const now = options.now ?? new Date();
+    if (session.expiresAt <= now) {
+      this.sessions.delete(session.id);
+      this.ebayAuthorizations.delete(session.id);
+      this.pendingEbayOAuthStates.delete(session.id);
+      return undefined;
+    }
+
+    const token = randomBytes(32).toString("base64url");
+    session.tokenHash = hashSessionToken(token);
+    return token;
+  }
+
   lookupSessionById(sessionId: string, options: { now?: Date } = {}): SessionLookupResult | undefined {
     const session = this.sessions.get(sessionId);
     if (!session) {

@@ -27,12 +27,15 @@ export async function HEAD(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const currentUser = getOrCreateCurrentUser(request);
 
+  const isNativeRedirect = new URL(request.url).searchParams.get("nativeRedirect") === "1";
+
   let consentUrl: URL;
   try {
     const config = loadEbayConfig();
     const { payload, state } = getEbayOAuthStateStore().createWithPayload({
       userId: currentUser.context.user.id,
-      sessionId: currentUser.context.session.id
+      sessionId: currentUser.context.session.id,
+      ...(isNativeRedirect ? { redirectTarget: "native" as const } : {})
     });
     sessionStore.addPendingEbayOAuthState(currentUser.context.session.id, payload.id, new Date(payload.expiresAt));
     consentUrl = buildEbayConsentUrl(config, state);

@@ -32,6 +32,11 @@ targets:
       path: Generated-Info.plist
       properties:
         LSApplicationCategoryType: public.app-category.shopping
+        CFBundleURLTypes:
+          - CFBundleTypeRole: Editor
+            CFBundleURLName: com.goggler.Goggler.oauth
+            CFBundleURLSchemes:
+              - goggler
   GogglerTests:
     type: bundle.unit-test
     platform: macOS
