@@ -389,6 +389,206 @@ test("eBay callback rejects replayed cookie-less signed state before exchanging 
   assert.equal(fetchCalls, 1);
 });
 
+test("eBay start route flags the OAuth state as native when requested", async () => {
+  setEbayEnv();
+  const cookie = await signInCookie();
+  const response = await startEbayAuth(
+    new NextRequest("http://localhost:3000/api/auth/ebay/start?nativeRedirect=1", {
+      headers: { cookie }
+    })
+  );
+
+  assert.equal(response.status, 307);
+  const location = response.headers.get("location");
+  const state = new URL(location).searchParams.get("state");
+  assert.ok(state);
+
+  const [encodedPayload] = state.split(".");
+  const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
+  assert.equal(payload.redirectTarget, "native");
+});
+
+test("eBay start route omits redirectTarget for the ordinary web flow", async () => {
+  setEbayEnv();
+  const cookie = await signInCookie();
+  const response = await startEbayAuth(
+    new NextRequest("http://localhost:3000/api/auth/ebay/start", {
+      headers: { cookie }
+    })
+  );
+
+  const location = response.headers.get("location");
+  const state = new URL(location).searchParams.get("state");
+  const [encodedPayload] = state.split(".");
+  const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
+  assert.equal(payload.redirectTarget, undefined);
+});
+
+test("eBay callback redirects a native flow to the app scheme with a working session token", async () => {
+  setEbayEnv();
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  const { payload, state } = getEbayOAuthStateStore().createWithPayload({
+    userId: session.user.id,
+    sessionId: session.session.id,
+    redirectTarget: "native"
+  });
+  sessionStore.addPendingEbayOAuthState(session.session.id, payload.id, new Date(payload.expiresAt));
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    jsonResponse({
+      access_token: "native-access-token",
+      expires_in: 7200,
+      token_type: "User Access Token"
+    });
+
+  let callback;
+  try {
+    callback = await handleEbayCallback(
+      new NextRequest(`http://localhost:3000/api/auth/ebay/callback?code=auth-code&state=${encodeURIComponent(state)}`, {
+        headers: { cookie }
+      })
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(callback.status, 307);
+  const location = new URL(callback.headers.get("location"));
+  assert.equal(location.protocol, "goggler:");
+  assert.equal(location.hostname, "oauth-complete");
+  assert.equal(location.searchParams.get("account"), "ebay_connected");
+
+  const reissuedToken = location.searchParams.get("sessionToken");
+  assert.ok(reissuedToken);
+  assert.notEqual(reissuedToken, readSessionToken(cookie));
+
+  const statusResponse = await getEbaySession(
+    new NextRequest("http://localhost:3000/api/auth/ebay/session", {
+      headers: { cookie: `goggler_session=${encodeURIComponent(reissuedToken)}` }
+    })
+  );
+  const body = await statusResponse.json();
+  assert.equal(body.connection.connected, true);
+});
+
+test("eBay callback redirects a native flow's token-exchange failure to the app scheme", async () => {
+  setEbayEnv();
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  const { payload, state } = getEbayOAuthStateStore().createWithPayload({
+    userId: session.user.id,
+    sessionId: session.session.id,
+    redirectTarget: "native"
+  });
+  sessionStore.addPendingEbayOAuthState(session.session.id, payload.id, new Date(payload.expiresAt));
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response("denied", { status: 401 });
+
+  let callback;
+  try {
+    callback = await handleEbayCallback(
+      new NextRequest(`http://localhost:3000/api/auth/ebay/callback?code=auth-code&state=${encodeURIComponent(state)}`, {
+        headers: { cookie }
+      })
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(callback.status, 307);
+  const location = new URL(callback.headers.get("location"));
+  assert.equal(location.protocol, "goggler:");
+  assert.equal(location.searchParams.get("account"), "ebay_token_exchange_failed");
+  assert.equal(location.searchParams.get("sessionToken"), null);
+});
+
+test("eBay callback redirects a native flow's invalid state to the app scheme, unsigned peek only", async () => {
+  // A well-formed, decodable payload (all required fields present) but with
+  // a signature that won't validate — realistic for a tampered or stale
+  // state. peekRedirectTarget must tolerate this without validating the
+  // signature, since the whole point is routing an otherwise-failed request.
+  const malformedButDecodable = {
+    id: "state-id",
+    userId: "user-id",
+    sessionId: "session-id",
+    createdAt: Date.now(),
+    expiresAt: Date.now() + 60_000,
+    redirectTarget: "native"
+  };
+  const state = `${Buffer.from(JSON.stringify(malformedButDecodable), "utf8").toString("base64url")}.bad-signature`;
+
+  const response = await handleEbayCallback(
+    new NextRequest(`http://localhost:3000/api/auth/ebay/callback?code=auth-code&state=${encodeURIComponent(state)}`)
+  );
+
+  assert.equal(response.status, 307);
+  const location = new URL(response.headers.get("location"));
+  assert.equal(location.protocol, "goggler:");
+  assert.equal(location.searchParams.get("account"), "ebay_invalid_oauth_state");
+});
+
+test("eBay callback redirects a native flow's provider error to the app scheme", async () => {
+  setEbayEnv();
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  const { payload, state } = getEbayOAuthStateStore().createWithPayload({
+    userId: session.user.id,
+    sessionId: session.session.id,
+    redirectTarget: "native"
+  });
+  sessionStore.addPendingEbayOAuthState(session.session.id, payload.id, new Date(payload.expiresAt));
+
+  const response = await handleEbayCallback(
+    new NextRequest(
+      `http://localhost:3000/api/auth/ebay/callback?error=access_denied&state=${encodeURIComponent(state)}`,
+      { headers: { cookie } }
+    )
+  );
+
+  assert.equal(response.status, 307);
+  const location = new URL(response.headers.get("location"));
+  assert.equal(location.protocol, "goggler:");
+  assert.equal(location.searchParams.get("account"), "ebay_access_denied");
+});
+
+test("eBay callback's web flow is unaffected by the native redirect logic", async () => {
+  setEbayEnv();
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  const { payload, state } = getEbayOAuthStateStore().createWithPayload({
+    userId: session.user.id,
+    sessionId: session.session.id
+  });
+  sessionStore.addPendingEbayOAuthState(session.session.id, payload.id, new Date(payload.expiresAt));
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    jsonResponse({
+      access_token: "web-access-token",
+      expires_in: 7200,
+      token_type: "User Access Token"
+    });
+
+  let callback;
+  try {
+    callback = await handleEbayCallback(
+      new NextRequest(`http://localhost:3000/api/auth/ebay/callback?code=auth-code&state=${encodeURIComponent(state)}`, {
+        headers: { cookie }
+      })
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(callback.status, 307);
+  const location = new URL(callback.headers.get("location"));
+  assert.notEqual(location.protocol, "goggler:");
+  assert.equal(location.searchParams.get("account"), "ebay_connected");
+});
+
 test("eBay disconnect route requires local auth", async () => {
   const response = await disconnectEbay(
     new NextRequest("http://localhost:3000/api/auth/ebay/disconnect", {
