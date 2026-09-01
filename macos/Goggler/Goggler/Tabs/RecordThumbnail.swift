@@ -23,12 +23,12 @@ struct RecordThumbnail: View {
                 placeholder
             }
         }
-        .frame(width: 44, height: 44)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .frame(width: 88, height: 88)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private var placeholder: some View {
-        RoundedRectangle(cornerRadius: 6)
+        RoundedRectangle(cornerRadius: 8)
             .fill(.quaternary)
             .overlay {
                 Image(systemName: placeholderSystemImage)
