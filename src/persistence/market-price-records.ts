@@ -10,6 +10,17 @@ export type MarketPriceRecordSale = {
   endedAt: string | undefined;
 };
 
+/**
+ * Items per `$transaction` call. Chunking rather than raising the
+ * transaction timeout means this never needs revisiting as batch-size
+ * limits change elsewhere (route-level `MAX_CAPTURE_ITEMS`) — each chunk
+ * comfortably fits inside Prisma's default 5000ms transaction timeout
+ * against the real (remote, Neon) database, confirmed live: 63 items in one
+ * transaction took ~6s (~95ms/item), so 10 items per chunk stays well under
+ * 1s, regardless of how large the overall batch grows.
+ */
+const CAPTURE_BATCH_SIZE = 10;
+
 export async function captureMarketPriceRecords(
   items: EbayBuyingHistoryItem[],
   userId: string,
@@ -21,21 +32,24 @@ export async function captureMarketPriceRecords(
   }
 
   const now = new Date();
-  await prisma.$transaction(
-    items.map((item) =>
-      prisma.marketPriceRecord.upsert({
-        create: toMarketPriceRecordCreate(item, userId, matchingPreferences, now),
-        update: toMarketPriceRecordUpdate(item, matchingPreferences),
-        where: {
-          userId_venue_venueItemId: {
-            userId,
-            venue: "ebay",
-            venueItemId: item.itemId
+  for (let start = 0; start < items.length; start += CAPTURE_BATCH_SIZE) {
+    const batch = items.slice(start, start + CAPTURE_BATCH_SIZE);
+    await prisma.$transaction(
+      batch.map((item) =>
+        prisma.marketPriceRecord.upsert({
+          create: toMarketPriceRecordCreate(item, userId, matchingPreferences, now),
+          update: toMarketPriceRecordUpdate(item, matchingPreferences),
+          where: {
+            userId_venue_venueItemId: {
+              userId,
+              venue: "ebay",
+              venueItemId: item.itemId
+            }
           }
-        }
-      })
-    )
-  );
+        })
+      )
+    );
+  }
 
   return { captured: items.map((item) => item.itemId) };
 }
