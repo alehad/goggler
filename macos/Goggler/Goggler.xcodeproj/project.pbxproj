@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0ABE6D01C2D8BC92F6881190 /* GogglerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1150D777D085C386062588FB /* GogglerApp.swift */; };
 		0DFC3CF7C7B3DA8DAC855615 /* GogglerAPIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2406BE03869F1785AB112D23 /* GogglerAPIClientTests.swift */; };
+		211CA0B89A67184CC4BF81A3 /* RecordThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5B589532416DB91A56F8AA /* RecordThumbnail.swift */; };
 		2B5497A14C2015EDAD4EC9E2 /* StartupGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A02077193843DAE8B546C410 /* StartupGateView.swift */; };
 		2ED773C62FBA0BB30C1C085C /* WatchlistView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150F9826C2EB574B99C4C6A7 /* WatchlistView.swift */; };
 		33B1B04875602F6EBBA0033C /* EbayAuthServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A3E81C41309B90AE029B8D5 /* EbayAuthServiceTests.swift */; };
@@ -17,7 +18,9 @@
 		56F1544FB3933716B55D52BE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18BC7B7CFDC67EC4840C3894 /* SettingsView.swift */; };
 		5B8DCEC78BCAE5BB60CA2083 /* BuyingHistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C4EE374CEF95B8D3D242E21 /* BuyingHistoryStoreTests.swift */; };
 		5BEEC5A23EECE0956B00A895 /* GogglerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D36B4554FFF125BA6F273C2 /* GogglerModels.swift */; };
+		5E39534B3EC1B19D1CDB8299 /* SafeExternalURL.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCDF796127BFBC265BC075DF /* SafeExternalURL.swift */; };
 		6A86F564627F8EEBBB9B0352 /* Logging.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6CF8BC32BFF74AE18AB53F9 /* Logging.swift */; };
+		704C5BEC28807B6156DB0BFD /* SafeExternalURLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82EA6FB8C9E20AC45D4404EA /* SafeExternalURLTests.swift */; };
 		7B3E434E5936662D519A0915 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D123E0D30D1E5062A142D7 /* AppSettings.swift */; };
 		8002E3A21B405ABA6BE15D8D /* SidebarItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33BF77981399A54BB83AF659 /* SidebarItem.swift */; };
 		8BE7BDC82C9489CE9C141E78 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DEEA0975DB009F7C5D9A6FC /* ContentView.swift */; };
@@ -54,13 +57,16 @@
 		7351FB2E708D7C9B470EDF57 /* EbayAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EbayAuthService.swift; sourceTree = "<group>"; };
 		78D123E0D30D1E5062A142D7 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		828C06ECA99FAAC2EC49704C /* Goggler.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Goggler.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		82EA6FB8C9E20AC45D4404EA /* SafeExternalURLTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeExternalURLTests.swift; sourceTree = "<group>"; };
 		9D36B4554FFF125BA6F273C2 /* GogglerModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GogglerModels.swift; sourceTree = "<group>"; };
 		A02077193843DAE8B546C410 /* StartupGateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupGateView.swift; sourceTree = "<group>"; };
 		AB9BB0E2B16150DCCB464766 /* PlaceholderTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderTabView.swift; sourceTree = "<group>"; };
 		B6CF8BC32BFF74AE18AB53F9 /* Logging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logging.swift; sourceTree = "<group>"; };
 		C1DE6D115021310A2A60BB3A /* BuyingHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuyingHistoryStore.swift; sourceTree = "<group>"; };
 		CEC02C6744BC91C2D0CAF4DA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		DCDF796127BFBC265BC075DF /* SafeExternalURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeExternalURL.swift; sourceTree = "<group>"; };
 		E94B49448B845CEC8C134C52 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		FC5B589532416DB91A56F8AA /* RecordThumbnail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordThumbnail.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -102,6 +108,7 @@
 			children = (
 				5E83D9C94B60534BF268CA5C /* GogglerAPIClient.swift */,
 				9D36B4554FFF125BA6F273C2 /* GogglerModels.swift */,
+				DCDF796127BFBC265BC075DF /* SafeExternalURL.swift */,
 			);
 			path = Networking;
 			sourceTree = "<group>";
@@ -120,6 +127,7 @@
 				E94B49448B845CEC8C134C52 /* HomeView.swift */,
 				AB9BB0E2B16150DCCB464766 /* PlaceholderTabView.swift */,
 				70FE745F16172DB4570E4037 /* PurchasesView.swift */,
+				FC5B589532416DB91A56F8AA /* RecordThumbnail.swift */,
 				150F9826C2EB574B99C4C6A7 /* WatchlistView.swift */,
 			);
 			path = Tabs;
@@ -160,6 +168,7 @@
 				6C4EE374CEF95B8D3D242E21 /* BuyingHistoryStoreTests.swift */,
 				1A3E81C41309B90AE029B8D5 /* EbayAuthServiceTests.swift */,
 				2406BE03869F1785AB112D23 /* GogglerAPIClientTests.swift */,
+				82EA6FB8C9E20AC45D4404EA /* SafeExternalURLTests.swift */,
 			);
 			path = GogglerTests;
 			sourceTree = "<group>";
@@ -272,6 +281,8 @@
 				6A86F564627F8EEBBB9B0352 /* Logging.swift in Sources */,
 				9D1A4B43C3DD9658F2CA94BD /* PlaceholderTabView.swift in Sources */,
 				B3AC61E3D0E29C9DBC387BD6 /* PurchasesView.swift in Sources */,
+				211CA0B89A67184CC4BF81A3 /* RecordThumbnail.swift in Sources */,
+				5E39534B3EC1B19D1CDB8299 /* SafeExternalURL.swift in Sources */,
 				56F1544FB3933716B55D52BE /* SettingsView.swift in Sources */,
 				8002E3A21B405ABA6BE15D8D /* SidebarItem.swift in Sources */,
 				2B5497A14C2015EDAD4EC9E2 /* StartupGateView.swift in Sources */,
@@ -286,6 +297,7 @@
 				5B8DCEC78BCAE5BB60CA2083 /* BuyingHistoryStoreTests.swift in Sources */,
 				33B1B04875602F6EBBA0033C /* EbayAuthServiceTests.swift in Sources */,
 				0DFC3CF7C7B3DA8DAC855615 /* GogglerAPIClientTests.swift in Sources */,
+				704C5BEC28807B6156DB0BFD /* SafeExternalURLTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
