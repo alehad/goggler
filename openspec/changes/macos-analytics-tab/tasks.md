@@ -1,0 +1,11 @@
+# Tasks: macOS Analytics tab
+
+- [x] Create OpenSpec change documenting the design.
+- [x] Wait for user sign-off on this design before implementing — in particular, this phase includes capture/delete (unlike Watchlist/Purchases' read-only-first scoping), since Analytics' whole point is the capture action.
+- [x] Add `HistoryItem.captured`, `BuyingHistory.endedWatchlistItems`, `CaptureResult`, `DeleteResult` to `GogglerModels.swift`.
+- [x] Add `BuyingHistoryStore.captureItems`/`deleteItems` (public) and `markCaptured`/`removeItems` (private, in-place state updates), with unit tests for success and failure paths.
+- [x] Implement `AnalyticsView` (item computation, filters, search, thumbnails, per-item and bulk capture/delete with delete confirmation), wired into `ContentView`'s `detailView` switch in place of the Analytics placeholder. Deleted `PlaceholderTabView.swift` — with all four tabs now implemented, it was entirely dead code.
+- [x] Unit test the item-computation logic (won/eventuallyWon derivation, sort order, won-only dedup) against a fixed fixture. **Found a real crash doing this**: `computeAnalyticsItems` was originally a `static func` on `AnalyticsView`, and a type conforming to `View` gets `body`'s `@MainActor` isolation implicitly inferred onto the whole type under Swift 6 — including this unrelated, pure, synchronous static method. Confirmed via crash report (`EXC_BREAKPOINT`/`dispatch_assert_queue_fail`) the moment a unit test called it from a background thread — same class of bug already hit with `EbayAuthService`. Fixed by moving it to a free function outside the view type, which has no isolation requirement at all.
+- [x] `xcodebuild build` and `xcodebuild test` clean (27/27).
+- [x] Manual functional confirmation (user): Analytics shows real items/filters/counts against Production eBay; individual capture confirmed working (DB row count +1); bulk "Capture all visible" confirmed working after the transaction-timeout fix shipped separately ([[fix-bulk-capture-transaction-timeout]]) — 63 items captured in one action, verified directly via DB query (215 → 278) and spot-checked record contents.
+- [ ] Run dual security review (security-review skill + Copilot CLI), then ship via PR.

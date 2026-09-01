@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0ABE6D01C2D8BC92F6881190 /* GogglerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1150D777D085C386062588FB /* GogglerApp.swift */; };
 		0DFC3CF7C7B3DA8DAC855615 /* GogglerAPIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2406BE03869F1785AB112D23 /* GogglerAPIClientTests.swift */; };
+		15D4099F652DCDEFBEB88C73 /* AnalyticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2914E683C9ED57EE58B89E85 /* AnalyticsView.swift */; };
 		211CA0B89A67184CC4BF81A3 /* RecordThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5B589532416DB91A56F8AA /* RecordThumbnail.swift */; };
 		2B5497A14C2015EDAD4EC9E2 /* StartupGateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A02077193843DAE8B546C410 /* StartupGateView.swift */; };
 		2ED773C62FBA0BB30C1C085C /* WatchlistView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150F9826C2EB574B99C4C6A7 /* WatchlistView.swift */; };
@@ -24,7 +25,6 @@
 		7B3E434E5936662D519A0915 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78D123E0D30D1E5062A142D7 /* AppSettings.swift */; };
 		8002E3A21B405ABA6BE15D8D /* SidebarItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 33BF77981399A54BB83AF659 /* SidebarItem.swift */; };
 		8BE7BDC82C9489CE9C141E78 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DEEA0975DB009F7C5D9A6FC /* ContentView.swift */; };
-		9D1A4B43C3DD9658F2CA94BD /* PlaceholderTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB9BB0E2B16150DCCB464766 /* PlaceholderTabView.swift */; };
 		A47C18E7A116E9C0EBB30E56 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = CEC02C6744BC91C2D0CAF4DA /* Assets.xcassets */; };
 		ADD8991311318255F56EEB28 /* BuyingHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1DE6D115021310A2A60BB3A /* BuyingHistoryStore.swift */; };
 		B3AC61E3D0E29C9DBC387BD6 /* PurchasesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70FE745F16172DB4570E4037 /* PurchasesView.swift */; };
@@ -48,6 +48,7 @@
 		1A3E81C41309B90AE029B8D5 /* EbayAuthServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EbayAuthServiceTests.swift; sourceTree = "<group>"; };
 		2406BE03869F1785AB112D23 /* GogglerAPIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GogglerAPIClientTests.swift; sourceTree = "<group>"; };
 		27F08A2BB9770A8B21EDF79E /* GogglerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GogglerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		2914E683C9ED57EE58B89E85 /* AnalyticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsView.swift; sourceTree = "<group>"; };
 		33BF77981399A54BB83AF659 /* SidebarItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarItem.swift; sourceTree = "<group>"; };
 		4DEEA0975DB009F7C5D9A6FC /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		5E83D9C94B60534BF268CA5C /* GogglerAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GogglerAPIClient.swift; sourceTree = "<group>"; };
@@ -60,7 +61,6 @@
 		82EA6FB8C9E20AC45D4404EA /* SafeExternalURLTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeExternalURLTests.swift; sourceTree = "<group>"; };
 		9D36B4554FFF125BA6F273C2 /* GogglerModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GogglerModels.swift; sourceTree = "<group>"; };
 		A02077193843DAE8B546C410 /* StartupGateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupGateView.swift; sourceTree = "<group>"; };
-		AB9BB0E2B16150DCCB464766 /* PlaceholderTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaceholderTabView.swift; sourceTree = "<group>"; };
 		B6CF8BC32BFF74AE18AB53F9 /* Logging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logging.swift; sourceTree = "<group>"; };
 		C1DE6D115021310A2A60BB3A /* BuyingHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuyingHistoryStore.swift; sourceTree = "<group>"; };
 		CEC02C6744BC91C2D0CAF4DA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -124,8 +124,8 @@
 		804DD9CD3A1795D35129B488 /* Tabs */ = {
 			isa = PBXGroup;
 			children = (
+				2914E683C9ED57EE58B89E85 /* AnalyticsView.swift */,
 				E94B49448B845CEC8C134C52 /* HomeView.swift */,
-				AB9BB0E2B16150DCCB464766 /* PlaceholderTabView.swift */,
 				70FE745F16172DB4570E4037 /* PurchasesView.swift */,
 				FC5B589532416DB91A56F8AA /* RecordThumbnail.swift */,
 				150F9826C2EB574B99C4C6A7 /* WatchlistView.swift */,
@@ -270,6 +270,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				15D4099F652DCDEFBEB88C73 /* AnalyticsView.swift in Sources */,
 				7B3E434E5936662D519A0915 /* AppSettings.swift in Sources */,
 				ADD8991311318255F56EEB28 /* BuyingHistoryStore.swift in Sources */,
 				8BE7BDC82C9489CE9C141E78 /* ContentView.swift in Sources */,
@@ -279,7 +280,6 @@
 				5BEEC5A23EECE0956B00A895 /* GogglerModels.swift in Sources */,
 				49A41487B519818EEAB472E8 /* HomeView.swift in Sources */,
 				6A86F564627F8EEBBB9B0352 /* Logging.swift in Sources */,
-				9D1A4B43C3DD9658F2CA94BD /* PlaceholderTabView.swift in Sources */,
 				B3AC61E3D0E29C9DBC387BD6 /* PurchasesView.swift in Sources */,
 				211CA0B89A67184CC4BF81A3 /* RecordThumbnail.swift in Sources */,
 				5E39534B3EC1B19D1CDB8299 /* SafeExternalURL.swift in Sources */,

@@ -126,6 +126,95 @@ final class BuyingHistoryStore {
         }
     }
 
+    /// Captures the given items' final price into price history via the
+    /// existing `POST /api/market-insights/capture` route (no backend
+    /// change — same route and request shape the web app already uses).
+    /// On success, updates the already-loaded state in place rather than
+    /// triggering a full refresh, mirroring `app/page.tsx`'s own
+    /// `markItemsCaptured`.
+    @discardableResult
+    func captureItems(_ items: [HistoryItem], using client: GogglerAPIClient) async -> CaptureResult? {
+        guard !items.isEmpty else { return nil }
+
+        let raw: GogglerRawResponse
+        do {
+            let body: [String: Sendable] = ["items": items.map(Self.captureRequestBody)]
+            raw = try await client.request("/api/market-insights/capture", method: "POST", jsonBody: body)
+        } catch {
+            AppLog.network.error("captureItems: request failed — \(Self.describe(error), privacy: .public)")
+            return nil
+        }
+
+        guard (200..<300).contains(raw.statusCode) else {
+            let message = GogglerAPIClient.errorMessage(from: raw.data) ?? "unknown"
+            AppLog.network.error("captureItems: backend returned statusCode=\(raw.statusCode, privacy: .public), error=\(message, privacy: .public)")
+            return nil
+        }
+
+        do {
+            let result = try JSONDecoder().decode(CaptureResult.self, from: raw.data)
+            markCaptured(result.captured)
+            AppLog.network.debug("captureItems: captured=\(result.captured.count, privacy: .public), skipped=\(result.skipped.count, privacy: .public)")
+            return result
+        } catch {
+            AppLog.network.error("captureItems: decode failed — \(Self.describe(error), privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Removes the given items from price history via the existing
+    /// `DELETE /api/market-insights/history` route. On success, updates the
+    /// already-loaded state in place, mirroring `app/page.tsx`'s own
+    /// `removeHistoryItems`.
+    @discardableResult
+    func deleteItems(_ itemIds: [String], using client: GogglerAPIClient) async -> Bool {
+        guard !itemIds.isEmpty else { return false }
+
+        do {
+            let raw = try await client.request("/api/market-insights/history", method: "DELETE", jsonBody: ["itemIds": itemIds])
+            guard (200..<300).contains(raw.statusCode) else {
+                AppLog.network.error("deleteItems: backend returned statusCode=\(raw.statusCode, privacy: .public)")
+                return false
+            }
+            removeItems(itemIds)
+            AppLog.network.debug("deleteItems: removed \(itemIds.count, privacy: .public) item(s)")
+            return true
+        } catch {
+            AppLog.network.error("deleteItems: failed — \(Self.describe(error), privacy: .public)")
+            return false
+        }
+    }
+
+    private func markCaptured(_ itemIds: [String]) {
+        guard case .ready(var history) = buyingHistoryState else { return }
+        let idSet = Set(itemIds)
+        history.endedWatchlistItems = history.endedWatchlistItems.map { item in
+            var updated = item
+            if idSet.contains(item.itemId) { updated.captured = true }
+            return updated
+        }
+        buyingHistoryState = .ready(history)
+    }
+
+    private func removeItems(_ itemIds: [String]) {
+        guard case .ready(var history) = buyingHistoryState else { return }
+        let idSet = Set(itemIds)
+        history.endedWatchlistItems = history.endedWatchlistItems.filter { !idSet.contains($0.itemId) }
+        buyingHistoryState = .ready(history)
+    }
+
+    /// Matches the shape `toCaptureRequestItem` sends on the web — every
+    /// field already present on `HistoryItem`, nothing new needed.
+    private static func captureRequestBody(_ item: HistoryItem) -> [String: Sendable] {
+        var body: [String: Sendable] = ["itemId": item.itemId, "title": item.title, "list": item.list]
+        if let endTime = item.endTime { body["endTime"] = endTime }
+        if let sellerUserId = item.sellerUserId { body["sellerUserId"] = sellerUserId }
+        if let conditionDisplayName = item.conditionDisplayName { body["conditionDisplayName"] = conditionDisplayName }
+        if let imageUrl = item.imageUrl { body["imageUrl"] = imageUrl }
+        if let itemWebUrl = item.itemWebUrl { body["itemWebUrl"] = itemWebUrl }
+        return body
+    }
+
     /// Surfaces the underlying NSError domain/code (e.g. NSURLErrorDomain
     /// -1004 "could not connect") rather than just `localizedDescription`,
     /// since "could not reach the server" alone doesn't say whether it was
