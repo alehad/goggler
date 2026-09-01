@@ -68,6 +68,18 @@ test("re-capturing an already-captured item updates the existing row instead of 
   assert.equal(stored.soldPriceAmount.toNumber(), 55);
 });
 
+test("captures a batch spanning multiple transaction chunks (23 items, CAPTURE_BATCH_SIZE=10)", async () => {
+  const items = Array.from({ length: 23 }, (_, i) => endedItem(`chunked-${i}`, `Chunked item ${i} BNJ7100${i % 10}`, 10 + i));
+
+  const result = await captureMarketPriceRecords(items, "local-saja", DEFAULT_MATCHING_PREFERENCES, prisma);
+
+  assert.equal(result.captured.length, 23);
+  const storedCount = await prisma.marketPriceRecord.count({
+    where: { userId: "local-saja", venueItemId: { in: items.map((item) => item.itemId) } }
+  });
+  assert.equal(storedCount, 23, "every item across all chunks should be persisted, not just the first chunk");
+});
+
 test("listCapturedVenueItemIds returns exactly the captured set for the requesting user", async () => {
   await captureMarketPriceRecords(
     [endedItem("ended-001", "Saja item", 20)],

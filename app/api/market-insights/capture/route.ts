@@ -42,8 +42,13 @@ export async function POST(request: NextRequest) {
     const result = await captureItems(config, currentUser.context.user.id, items, matchingPreferences);
 
     return withInternalSessionCookie(NextResponse.json(result), currentUser.setCookie);
-  } catch {
-    console.warn("Market insights capture failed", { type: "unexpected_error" });
+  } catch (error) {
+    console.warn("Market insights capture failed", {
+      type: "unexpected_error",
+      itemCount: items.length,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
+    });
     return withInternalSessionCookie(
       NextResponse.json({ error: "capture_failed" }, { status: 502 }),
       currentUser.setCookie
