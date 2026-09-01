@@ -46,21 +46,27 @@ struct Money: Decodable, Sendable {
     let currency: String
 }
 
-/// Mirrors `HistoryItem` in app/page.tsx.
+/// Mirrors `HistoryItem` in app/page.tsx. `captured` mirrors the TS
+/// `EndedWatchlistItem = HistoryItem & { captured: boolean }` intersection —
+/// present only in `endedWatchlistItems`' JSON, decoding as `nil` on
+/// `lostItems`/`wonItems`, rather than a parallel Swift struct. Properties
+/// are `var` (harmless for `Decodable`) so `BuyingHistoryStore.markCaptured`
+/// can produce updated copies in place.
 struct HistoryItem: Decodable, Sendable, Identifiable {
     var id: String { itemId }
 
-    let itemId: String
-    let title: String
-    let list: String
-    let currentPrice: Money?
-    let maxBid: Money?
-    let endTime: String?
-    let sellerUserId: String?
-    let conditionDisplayName: String?
-    let imageUrl: String?
-    let itemWebUrl: String?
-    let relistingGroupId: String?
+    var itemId: String
+    var title: String
+    var list: String
+    var currentPrice: Money?
+    var maxBid: Money?
+    var endTime: String?
+    var sellerUserId: String?
+    var conditionDisplayName: String?
+    var imageUrl: String?
+    var itemWebUrl: String?
+    var relistingGroupId: String?
+    var captured: Bool?
 }
 
 /// Mirrors `BuyingHistory` in app/page.tsx — the response body of
@@ -83,4 +89,16 @@ struct BuyingHistory: Decodable, Sendable {
     let counts: Counts
     let lostItems: [HistoryItem]
     let wonItems: [HistoryItem]
+    var endedWatchlistItems: [HistoryItem]
+}
+
+/// Response of `POST /api/market-insights/capture`.
+struct CaptureResult: Decodable, Sendable {
+    let captured: [String]
+    let skipped: [String]
+}
+
+/// Response of `DELETE /api/market-insights/history`.
+struct DeleteResult: Decodable, Sendable {
+    let deletedCount: Int
 }

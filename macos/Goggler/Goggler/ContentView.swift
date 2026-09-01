@@ -49,7 +49,7 @@ struct ContentView: View {
         case .purchases:
             PurchasesView()
         case .analytics:
-            PlaceholderTabView(item: .analytics)
+            AnalyticsView()
         case nil:
             ContentUnavailableView("Select a tab", systemImage: "sidebar.left")
         }
