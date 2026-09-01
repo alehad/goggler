@@ -130,6 +130,7 @@ private struct HistoryItemRow: View {
 
     var body: some View {
         HStack(alignment: .top) {
+            RecordThumbnail(imageUrl: item.imageUrl, placeholderSystemImage: "gavel")
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title).font(.headline)
                 Text(subtitle).font(.caption).foregroundStyle(.secondary)
