@@ -127,23 +127,31 @@ struct AnalyticsView: View {
         TextField("Search by title or seller", text: $searchQuery)
             .textFieldStyle(.roundedBorder)
 
-        Picker("Capture status", selection: $captureFilter) {
-            ForEach(CaptureFilter.allCases) { option in
-                Text(option.label).tag(option)
+        // Analytics tab only: both filter groups and the bulk-action buttons
+        // in one row, matching web's `.filter-row`/`.filter-row-actions`
+        // (buttons pinned right via a trailing `Spacer()`, the SwiftUI
+        // equivalent of `margin-left: auto`).
+        HStack(alignment: .center, spacing: 8) {
+            Picker("Capture status", selection: $captureFilter) {
+                ForEach(CaptureFilter.allCases) { option in
+                    Text(option.label).tag(option)
+                }
             }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
 
-        Picker("Win status", selection: $winFilter) {
-            ForEach(WinFilter.allCases) { option in
-                Text(option.label).tag(option)
+            Picker("Win status", selection: $winFilter) {
+                ForEach(WinFilter.allCases) { option in
+                    Text(option.label).tag(option)
+                }
             }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
 
-        HStack(spacing: 12) {
+            Spacer()
+
             if filteredItems.contains(where: { !$0.captured && $0.item.list == "WatchList" }) {
                 Button {
                     Task { await captureAllVisible(filteredItems) }
@@ -383,13 +391,18 @@ private struct AnalyticsRow: View {
         return parts.joined(separator: " | ")
     }
 
+    /// Matches `.signal`/`.signal.attention` in `app/styles.css` exactly.
     private func statusPill(_ text: String, attention: Bool) -> some View {
         Text(text)
-            .font(.caption2.bold())
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(attention ? Color.orange.opacity(0.2) : Color.secondary.opacity(0.15), in: Capsule())
-            .foregroundStyle(attention ? .orange : .secondary)
+            .font(.system(size: 12, weight: .bold))
+            .padding(.horizontal, 8)
+            .frame(height: 19)
+            .background(attention ? Color(red: 1, green: 0.961, blue: 0.875) : Color(red: 0.945, green: 0.957, blue: 0.969))
+            .foregroundStyle(attention ? Color(red: 0.631, green: 0.361, blue: 0.027) : Color(red: 0.204, green: 0.251, blue: 0.314))
+            .overlay {
+                Capsule().strokeBorder(attention ? Color(red: 0.961, green: 0.824, blue: 0.545) : Color(red: 0.878, green: 0.898, blue: 0.922))
+            }
+            .clipShape(Capsule())
     }
 
     private func formatMoney(_ money: Money) -> String {
