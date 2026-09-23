@@ -54,6 +54,14 @@ export async function captureMarketPriceRecords(
   return { captured: items.map((item) => item.itemId) };
 }
 
+/**
+ * A soft delete — sets `deletedAt` rather than physically removing the row,
+ * so an inadvertent bulk removal stays recoverable (clearing `deletedAt`
+ * directly in the DB). Every read function below excludes soft-deleted
+ * rows, so a soft-deleted record is treated as nonexistent everywhere else
+ * in the app; re-capturing the same item later revives it (see
+ * `toMarketPriceRecordUpdate`).
+ */
 export async function deleteMarketPriceRecords(
   userId: string,
   venueItemIds: string[],
@@ -63,8 +71,9 @@ export async function deleteMarketPriceRecords(
     return { deletedCount: 0 };
   }
 
-  const result = await prisma.marketPriceRecord.deleteMany({
-    where: { userId, venue: "ebay", venueItemId: { in: venueItemIds } }
+  const result = await prisma.marketPriceRecord.updateMany({
+    where: { userId, venue: "ebay", venueItemId: { in: venueItemIds }, deletedAt: null },
+    data: { deletedAt: new Date() }
   });
 
   return { deletedCount: result.count };
@@ -84,7 +93,8 @@ export async function listCapturedVenueItemIds(
     where: {
       userId,
       venue: "ebay",
-      venueItemId: { in: venueItemIds }
+      venueItemId: { in: venueItemIds },
+      deletedAt: null
     }
   });
 
@@ -106,7 +116,8 @@ export async function listMarketPriceRecordsByGroup(
       userId,
       venue: "ebay",
       relistingGroupId,
-      soldPriceCurrency: currency
+      soldPriceCurrency: currency,
+      deletedAt: null
     },
     orderBy: { endedAt: "asc" }
   });
@@ -140,7 +151,7 @@ export async function listAllMarketPriceRecords(
   }
 
   const records = await prisma.marketPriceRecord.findMany({
-    where: { userId, venue: "ebay" },
+    where: { userId, venue: "ebay", deletedAt: null },
     orderBy: { endedAt: "desc" }
   });
 
@@ -192,6 +203,7 @@ function toMarketPriceRecordUpdate(item: EbayBuyingHistoryItem, matchingPreferen
   const endedAt = parseDate(item.endTime);
   return {
     title: item.title,
+    deletedAt: null,
     ...(item.currentPrice ? { soldPriceAmount: item.currentPrice.value, soldPriceCurrency: item.currentPrice.currency } : {}),
     ...(endedAt ? { endedAt } : {}),
     ...(item.sellerUserId ? { sellerUserId: item.sellerUserId } : {}),

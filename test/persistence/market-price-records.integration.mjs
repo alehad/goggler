@@ -168,7 +168,7 @@ test("listAllMarketPriceRecords returns every captured record for the user, scop
   assert.equal(first?.relistingGroupId, "criteria:BNJ71001");
 });
 
-test("deleteMarketPriceRecords removes only the specified records for the given user", async () => {
+test("deleteMarketPriceRecords soft-deletes only the specified records for the given user, leaving the row recoverable", async () => {
   await captureMarketPriceRecords(
     [
       endedItem("ended-001", "Blue Note style LP BNJ71001", 62.5),
@@ -183,9 +183,50 @@ test("deleteMarketPriceRecords removes only the specified records for the given 
   const result = await deleteMarketPriceRecords("local-saja", ["ended-001", "ended-003"], prisma);
 
   assert.equal(result.deletedCount, 2);
-  assert.equal(await prisma.marketPriceRecord.count({ where: { userId: "local-saja" } }), 1);
-  const remaining = await prisma.marketPriceRecord.findFirstOrThrow({ where: { userId: "local-saja" } });
-  assert.equal(remaining.venueItemId, "ended-002");
+  // The rows still exist in the DB (recoverable) — just marked deletedAt, not removed.
+  assert.equal(await prisma.marketPriceRecord.count({ where: { userId: "local-saja" } }), 3);
+  const deleted = await prisma.marketPriceRecord.findFirstOrThrow({ where: { userId: "local-saja", venueItemId: "ended-001" } });
+  assert.ok(deleted.deletedAt instanceof Date);
+  const remaining = await listAllMarketPriceRecords("local-saja", prisma);
+  assert.deepEqual(remaining.map((r) => r.itemId), ["ended-002"]);
+});
+
+test("deleteMarketPriceRecords is idempotent — deleting an already-soft-deleted row doesn't re-count it", async () => {
+  await captureMarketPriceRecords([endedItem("ended-001", "Blue Note style LP BNJ71001", 62.5)], "local-saja", DEFAULT_MATCHING_PREFERENCES, prisma);
+
+  const first = await deleteMarketPriceRecords("local-saja", ["ended-001"], prisma);
+  const second = await deleteMarketPriceRecords("local-saja", ["ended-001"], prisma);
+
+  assert.equal(first.deletedCount, 1);
+  assert.equal(second.deletedCount, 0);
+});
+
+test("a soft-deleted record is excluded from listCapturedVenueItemIds, listMarketPriceRecordsByGroup, and listAllMarketPriceRecords", async () => {
+  await captureMarketPriceRecords([endedItem("ended-001", "Blue Note style LP BNJ71001", 62.5)], "local-saja", DEFAULT_MATCHING_PREFERENCES, prisma);
+  await deleteMarketPriceRecords("local-saja", ["ended-001"], prisma);
+
+  const captured = await listCapturedVenueItemIds("local-saja", ["ended-001"], prisma);
+  assert.deepEqual([...captured], []);
+
+  const groupSales = await listMarketPriceRecordsByGroup("local-saja", "criteria:BNJ71001", "GBP", prisma);
+  assert.deepEqual(groupSales, []);
+
+  const all = await listAllMarketPriceRecords("local-saja", prisma);
+  assert.deepEqual(all, []);
+});
+
+test("re-capturing a soft-deleted item revives it — clears deletedAt and makes it visible again everywhere", async () => {
+  await captureMarketPriceRecords([endedItem("ended-001", "Original title BNJ71001", 50)], "local-saja", DEFAULT_MATCHING_PREFERENCES, prisma);
+  await deleteMarketPriceRecords("local-saja", ["ended-001"], prisma);
+
+  await captureMarketPriceRecords([endedItem("ended-001", "Revived title BNJ71001", 55)], "local-saja", DEFAULT_MATCHING_PREFERENCES, prisma);
+
+  assert.equal(await prisma.marketPriceRecord.count({ where: { userId: "local-saja", venueItemId: "ended-001" } }), 1, "revival updates the existing row rather than creating a second one");
+  const stored = await prisma.marketPriceRecord.findFirstOrThrow({ where: { userId: "local-saja", venueItemId: "ended-001" } });
+  assert.equal(stored.deletedAt, null);
+  assert.equal(stored.title, "Revived title BNJ71001");
+  const captured = await listCapturedVenueItemIds("local-saja", ["ended-001"], prisma);
+  assert.deepEqual([...captured], ["ended-001"]);
 });
 
 test("deleteMarketPriceRecords never deletes another user's records, even for the same venueItemId", async () => {
@@ -205,9 +246,10 @@ test("deleteMarketPriceRecords never deletes another user's records, even for th
   const result = await deleteMarketPriceRecords("local-saja", ["shared-item-id"], prisma);
 
   assert.equal(result.deletedCount, 1);
-  assert.equal(await prisma.marketPriceRecord.count(), 1);
-  const remaining = await prisma.marketPriceRecord.findFirstOrThrow({});
-  assert.equal(remaining.userId, "other-user");
+  const otherUsersRecord = await prisma.marketPriceRecord.findFirstOrThrow({ where: { userId: "other-user" } });
+  assert.equal(otherUsersRecord.deletedAt, null, "the other user's record must be untouched");
+  const localSajasRecord = await prisma.marketPriceRecord.findFirstOrThrow({ where: { userId: "local-saja" } });
+  assert.ok(localSajasRecord.deletedAt instanceof Date);
 });
 
 test("deleteMarketPriceRecords no-ops cleanly on an empty ID list", async () => {
