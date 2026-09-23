@@ -1245,6 +1245,7 @@ function Won({
 }
 
 function PurchaseChart({
+  id,
   emptyLabel = "No dated purchases to chart",
   points,
   selectedItemId,
@@ -1252,6 +1253,7 @@ function PurchaseChart({
   subtitle,
   title = "Price paid over time"
 }: {
+  id?: string;
   emptyLabel?: string;
   points: PurchaseChartPoint[];
   selectedItemId?: string;
@@ -1292,7 +1294,7 @@ function PurchaseChart({
   }
 
   return (
-    <section className="purchase-chart-panel" aria-label="Purchase prices over time">
+    <section className="purchase-chart-panel" id={id} aria-label="Purchase prices over time">
       <div className="chart-heading">
         <div>
           <h2>{title}</h2>
@@ -1588,9 +1590,9 @@ function Analytics({
       return;
     }
 
-    document.getElementById(analyticsRowDomId(selectedItemId))?.scrollIntoView({
+    document.getElementById("analytics-chart-panel")?.scrollIntoView({
       behavior: "smooth",
-      block: "center"
+      block: "start"
     });
   }, [selectedItemId]);
 
@@ -1879,6 +1881,7 @@ function Analytics({
           </div>
 
           <PurchaseChart
+            id="analytics-chart-panel"
             emptyLabel={
               !selectedItem
                 ? "Select an item below to see its price history"
