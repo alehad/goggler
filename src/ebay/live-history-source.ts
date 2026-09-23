@@ -3,6 +3,7 @@ import type { EbayConfig } from "./config.ts";
 import { buildHomeFeed, type HomeFeedWatchlistItem } from "./home-feed.ts";
 import { rebuildHistoryResponse } from "./history-assembly.ts";
 import type { EbayHistoryResponse } from "./history-response.ts";
+import { PARTIAL_SNAPSHOT_BATCH_SIZE, type BuyingHistoryStreamEvent } from "./history-stream.ts";
 import { fetchLiveRelistingCandidates, liveRelistingSearchRequests } from "./live-relisting-discovery.ts";
 import {
   DEFAULT_MATCHING_PREFERENCES,
@@ -39,6 +40,7 @@ export type FetchLiveEbayHistoryOptions = {
   discoverRelistings?: boolean;
   matchingPreferences?: MatchingPreferences;
   now?: Date;
+  onEvent?: (event: BuyingHistoryStreamEvent) => void;
 };
 
 export async function fetchLiveEbayHistoryResponse(
@@ -53,6 +55,7 @@ export async function fetchLiveEbayHistoryResponse(
   const matchingPreferences = options.matchingPreferences ?? DEFAULT_MATCHING_PREFERENCES;
   const now = options.now ?? new Date();
   const fetchOptions = { fetch: options.fetch };
+  const onEvent = options.onEvent;
 
   const [watchList, lostList, wonList] = await Promise.all(
     (["WatchList", "LostList", "WonList"] satisfies EbayBuyingListKind[]).map((list) =>
@@ -94,9 +97,94 @@ export async function fetchLiveEbayHistoryResponse(
     watchList.items.filter((item) => !isActiveListing(item, now)),
     matchingPreferences
   );
-  const endedNativePrices = await fetchNativeWatchlistPrices(config, endedWatchlistItemsBeforeNativePrices, fetchOptions);
+
+  /**
+   * Builds the full response shape from whatever's known right now — used
+   * both for the final return and, when `onEvent` is supplied, for `partial`
+   * checkpoint snapshots mid-fetch. Safe to call with not-yet-fully-enriched
+   * `watchlistItems`/`endedWatchlistItems`: any item not yet resolved simply
+   * carries its live-fetched (non-native) price via the existing
+   * `nativePrice ?? item.currentPrice` fallback already used by
+   * `toWatchlistItem`/`mergeNativePrices`.
+   */
+  function assembleResponse(
+    watchlistItems: HomeFeedWatchlistItem[],
+    endedWatchlistItems: EbayBuyingHistoryItem[],
+    relistingCandidates: EbayHistoryResponse["relistingCandidates"]
+  ): EbayHistoryResponse {
+    const homeFeed = buildHomeFeed({ lostItems, wonItems, watchlistItems, relistingCandidates });
+    const wonGroups = new Set(wonItems.map((item) => item.relistingGroupId).filter((value): value is string => Boolean(value)));
+
+    return {
+      source: "live",
+      counts: {
+        lost: lostItems.length,
+        won: wonItems.length,
+        eventuallyWon: lostItems.filter((item) => item.relistingGroupId && wonGroups.has(item.relistingGroupId)).length,
+        neverWon: lostItems.filter((item) => !item.relistingGroupId || !wonGroups.has(item.relistingGroupId)).length,
+        watchlist: watchlistItems.length,
+        watchlistRelistings: homeFeed.counts.watchlistRelistings,
+        needsAction: homeFeed.counts.needsAction,
+        relistings: homeFeed.counts.relistings
+      },
+      lostItems,
+      wonItems,
+      watchlistItems,
+      endedWatchlistItems,
+      relistingCandidates,
+      homeFeed,
+      warnings: warnings.length > 0 ? warnings : undefined,
+      diagnostics: {
+        purchases: {
+          wonListCount: wonList.items.length,
+          getOrdersCount: ordersSupplement?.items.length,
+          mergedWonCount: wonItems.length,
+          overlapCount: mergedWon.overlapCount,
+          wonListTruncated: wonList.truncated,
+          getOrdersTruncated: ordersSupplement?.truncated,
+          getOrdersWindowDays,
+          getOrdersWindowEndDaysAgo
+        }
+      }
+    };
+  }
+
+  const nativePricesTotal = endedWatchlistItemsBeforeNativePrices.length + activeWatchListItems.length;
+  let nativePricesCompleted = 0;
+  const endedPricesSoFar = new Map<string, EbayMoney | undefined>();
+  const activePricesSoFar = new Map<string, EbayMoney | undefined>();
+
+  function reportNativePriceProgress(): void {
+    if (!onEvent || nativePricesTotal === 0) {
+      return;
+    }
+    onEvent({ type: "progress", stage: "native_prices", completed: nativePricesCompleted, total: nativePricesTotal });
+    if (nativePricesCompleted % PARTIAL_SNAPSHOT_BATCH_SIZE === 0 || nativePricesCompleted === nativePricesTotal) {
+      const partialWatchlistItems = activeWatchListItems.map((item, index) =>
+        toWatchlistItem(
+          item,
+          index + 1,
+          groupForHistoryTitle(item.title, matchingPreferences),
+          lostGroups,
+          activePricesSoFar.get(item.itemId)
+        )
+      );
+      const partialEndedWatchlistItems = mergeNativePrices(endedWatchlistItemsBeforeNativePrices, endedPricesSoFar);
+      onEvent({ type: "partial", history: assembleResponse(partialWatchlistItems, partialEndedWatchlistItems, []) });
+    }
+  }
+
+  const endedNativePrices = await fetchNativeWatchlistPrices(config, endedWatchlistItemsBeforeNativePrices, fetchOptions, (item, price) => {
+    endedPricesSoFar.set(item.itemId, price);
+    nativePricesCompleted += 1;
+    reportNativePriceProgress();
+  });
   const endedWatchlistItems = mergeNativePrices(endedWatchlistItemsBeforeNativePrices, endedNativePrices);
-  const nativeWatchlistPrices = await fetchNativeWatchlistPrices(config, activeWatchListItems, fetchOptions);
+  const nativeWatchlistPrices = await fetchNativeWatchlistPrices(config, activeWatchListItems, fetchOptions, (item, price) => {
+    activePricesSoFar.set(item.itemId, price);
+    nativePricesCompleted += 1;
+    reportNativePriceProgress();
+  });
   const watchlistItems = activeWatchListItems.map((item, index) =>
     toWatchlistItem(
       item,
@@ -109,46 +197,8 @@ export async function fetchLiveEbayHistoryResponse(
   const relistingCandidates = options.discoverRelistings === false
     ? []
     : await discoverRelistingCandidates(config, lostItems, wonItems, matchingPreferences, fetchOptions, warnings);
-  const homeFeed = buildHomeFeed({
-    lostItems,
-    wonItems,
-    watchlistItems,
-    relistingCandidates
-  });
-  const wonGroups = new Set(wonItems.map((item) => item.relistingGroupId).filter((value): value is string => Boolean(value)));
 
-  return {
-    source: "live",
-    counts: {
-      lost: lostItems.length,
-      won: wonItems.length,
-      eventuallyWon: lostItems.filter((item) => item.relistingGroupId && wonGroups.has(item.relistingGroupId)).length,
-      neverWon: lostItems.filter((item) => !item.relistingGroupId || !wonGroups.has(item.relistingGroupId)).length,
-      watchlist: watchlistItems.length,
-      watchlistRelistings: homeFeed.counts.watchlistRelistings,
-      needsAction: homeFeed.counts.needsAction,
-      relistings: homeFeed.counts.relistings
-    },
-    lostItems,
-    wonItems,
-    watchlistItems,
-    endedWatchlistItems,
-    relistingCandidates,
-    homeFeed,
-    warnings: warnings.length > 0 ? warnings : undefined,
-    diagnostics: {
-      purchases: {
-        wonListCount: wonList.items.length,
-        getOrdersCount: ordersSupplement?.items.length,
-        mergedWonCount: wonItems.length,
-        overlapCount: mergedWon.overlapCount,
-        wonListTruncated: wonList.truncated,
-        getOrdersTruncated: ordersSupplement?.truncated,
-        getOrdersWindowDays,
-        getOrdersWindowEndDaysAgo
-      }
-    }
-  };
+  return assembleResponse(watchlistItems, endedWatchlistItems, relistingCandidates);
 }
 
 export async function fetchEndedWatchlistItems(
@@ -180,7 +230,8 @@ export async function refreshLiveHistoryDerivedData(
   config: EbayConfig,
   history: EbayHistoryResponse,
   matchingPreferences: MatchingPreferences,
-  fetchOptions: { fetch?: typeof fetch } = {}
+  fetchOptions: { fetch?: typeof fetch } = {},
+  onEvent?: (event: BuyingHistoryStreamEvent) => void
 ): Promise<EbayHistoryResponse> {
   if (history.source !== "live") {
     return history;
@@ -206,7 +257,16 @@ export async function refreshLiveHistoryDerivedData(
     history.wonItems,
     matchingPreferences,
     fetchOptions,
-    warnings
+    warnings,
+    (candidatesSoFar, completed, total) => {
+      onEvent?.({ type: "progress", stage: "relistings", completed, total });
+      if (completed % PARTIAL_SNAPSHOT_BATCH_SIZE === 0 || completed === total) {
+        onEvent?.({
+          type: "partial",
+          history: rebuildHistoryResponse(history, { watchlistItems, relistingCandidates: candidatesSoFar })
+        });
+      }
+    }
   );
 
   return {
@@ -324,7 +384,8 @@ async function discoverRelistingCandidates(
   wonItems: EbayBuyingHistoryItem[],
   matchingPreferences: MatchingPreferences,
   fetchOptions: { fetch?: typeof fetch },
-  warnings: string[]
+  warnings: string[],
+  onSearchDone?: (candidatesSoFar: EbayHistoryResponse["relistingCandidates"], completed: number, total: number) => void
 ) {
   if (liveRelistingSearchRequests({ lostItems, wonItems, matchingPreferences }).length === 0) {
     return [];
@@ -332,7 +393,12 @@ async function discoverRelistingCandidates(
 
   try {
     const appToken = await getCachedBrowseApplicationAccessToken(config, fetchOptions);
-    return await fetchLiveRelistingCandidates(config, appToken.accessToken, { lostItems, wonItems, matchingPreferences }, fetchOptions);
+    return await fetchLiveRelistingCandidates(
+      config,
+      appToken.accessToken,
+      { lostItems, wonItems, matchingPreferences },
+      { ...fetchOptions, onSearchDone }
+    );
   } catch {
     warnings.push("Live relisting search unavailable");
     return [];
@@ -374,7 +440,8 @@ function mergeNativePrices(
 export async function fetchNativeWatchlistPrices(
   config: EbayConfig,
   items: EbayBuyingHistoryItem[],
-  fetchOptions: { fetch?: typeof fetch }
+  fetchOptions: { fetch?: typeof fetch },
+  onItemDone?: (item: EbayBuyingHistoryItem, price: EbayMoney | undefined) => void
 ): Promise<Map<string, EbayMoney | undefined>> {
   const result = new Map<string, EbayMoney | undefined>();
   if (items.length === 0) {
@@ -385,27 +452,45 @@ export async function fetchNativeWatchlistPrices(
   try {
     appToken = await getCachedBrowseApplicationAccessToken(config, fetchOptions);
   } catch {
+    for (const item of items) {
+      onItemDone?.(item, undefined);
+    }
     return result;
   }
 
-  await mapWithConcurrency(items, WATCHLIST_PRICE_LOOKUP_CONCURRENCY, async (item) => {
-    try {
-      result.set(item.itemId, await fetchEbayItemNativePrice(config, appToken.accessToken, item.itemId, fetchOptions));
-    } catch {
-      result.set(item.itemId, undefined);
-    }
-  });
+  await mapWithConcurrency(
+    items,
+    WATCHLIST_PRICE_LOOKUP_CONCURRENCY,
+    async (item) => {
+      let price: EbayMoney | undefined;
+      try {
+        price = await fetchEbayItemNativePrice(config, appToken.accessToken, item.itemId, fetchOptions);
+      } catch {
+        price = undefined;
+      }
+      result.set(item.itemId, price);
+      return price;
+    },
+    onItemDone
+  );
 
   return result;
 }
 
-async function mapWithConcurrency<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>,
+  onItemDone?: (item: T, result: R) => void
+): Promise<void> {
   let index = 0;
 
   async function worker(): Promise<void> {
     while (index < items.length) {
       const current = index++;
-      await fn(items[current]);
+      const item = items[current];
+      const result = await fn(item);
+      onItemDone?.(item, result);
     }
   }
 

@@ -647,6 +647,144 @@ test("uses persisted-only lost items for refreshed relisting discovery and watch
   assert.equal(refreshed.counts.watchlistRelistings, 1);
 });
 
+test("reports native_prices progress and a partial snapshot via onEvent", async () => {
+  const events = [];
+  const response = await fetchLiveEbayHistoryResponse(config, "session-access-token", {
+    maxPagesPerList: 1,
+    discoverRelistings: false,
+    now: new Date("2026-05-13T12:00:00.000Z"),
+    onEvent: (event) => events.push(event),
+    fetch: async (url, init) => {
+      if (isWatchlistPriceLookupRequest(String(url))) {
+        return watchlistPriceLookupUnavailableResponse();
+      }
+
+      if (init.headers["X-EBAY-API-CALL-NAME"] === "GetOrders") {
+        return new Response(getOrdersResponseXml({ empty: true }), { headers: { "Content-Type": "text/xml" } });
+      }
+
+      const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
+      return new Response(responseXml(list), { headers: { "Content-Type": "text/xml" } });
+    }
+  });
+
+  // Fixture has 2 active watchlist items (watch-001, watch-002) + 1 ended
+  // (watch-ended) = 3 native-price lookups total.
+  const progressEvents = events.filter((event) => event.type === "progress");
+  assert.ok(progressEvents.length > 0, "expected at least one progress event");
+  assert.equal(progressEvents.every((event) => event.stage === "native_prices"), true);
+  assert.equal(progressEvents.every((event) => event.total === 3), true);
+  const completedValues = progressEvents.map((event) => event.completed);
+  assert.deepEqual(
+    completedValues,
+    [...completedValues].sort((a, b) => a - b),
+    "completed count should be monotonically increasing"
+  );
+  assert.equal(completedValues[completedValues.length - 1], 3);
+
+  const partialEvents = events.filter((event) => event.type === "partial");
+  assert.ok(partialEvents.length > 0, "expected at least one partial snapshot");
+  const lastPartial = partialEvents[partialEvents.length - 1];
+  assert.equal(lastPartial.history.source, "live");
+  assert.equal(lastPartial.history.watchlistItems.length, response.watchlistItems.length);
+  assert.equal(lastPartial.history.endedWatchlistItems.length, response.endedWatchlistItems.length);
+
+  // No "complete" event is emitted by fetchLiveEbayHistoryResponse itself —
+  // only the streaming route sends that, once, after persistence/capture-status.
+  assert.equal(events.some((event) => event.type === "complete"), false);
+});
+
+test("reports relistings progress and a partial snapshot via onEvent in refreshLiveHistoryDerivedData", async () => {
+  const events = [];
+  const durableConfig = loadEbayConfig({
+    EBAY_ENVIRONMENT: "sandbox",
+    EBAY_SANDBOX_CLIENT_ID: "relistings-progress-client-id",
+    EBAY_SANDBOX_CLIENT_SECRET: "client-secret",
+    EBAY_SANDBOX_REDIRECT_URI: "runame-value",
+    EBAY_SANDBOX_OAUTH_SCOPES: "scope-one"
+  });
+  const history = {
+    source: "live",
+    counts: {
+      lost: 1,
+      won: 0,
+      eventuallyWon: 0,
+      neverWon: 1,
+      watchlist: 1,
+      watchlistRelistings: 0,
+      needsAction: 0,
+      relistings: 0
+    },
+    lostItems: [{
+      itemId: "persisted-lost-001",
+      title: "Persisted Japanese jazz record BNJ-71001",
+      list: "LostList",
+      relistingGroupId: "criteria:BNJ71001"
+    }],
+    wonItems: [],
+    watchlistItems: [{
+      itemId: "watch-bnj",
+      title: "Blue Note BNJ71001 watch copy",
+      watchlistPosition: 1,
+      currentPrice: { value: 40, currency: "GBP" }
+    }],
+    endedWatchlistItems: [],
+    relistingCandidates: [],
+    homeFeed: {
+      rows: [],
+      ebayRows: [],
+      relistingRows: [],
+      counts: {
+        watchlist: 1,
+        watchlistRelistings: 0,
+        needsAction: 0,
+        relistings: 0,
+        won: 0,
+        neverWon: 1,
+        resolved: 0
+      }
+    }
+  };
+
+  const refreshed = await refreshLiveHistoryDerivedData(
+    durableConfig,
+    history,
+    { exactTitleMatch: false, criteriaText: String.raw`\b[A-Z]{1,5}-?\d{1,6}\b` },
+    {
+      fetch: async (url, init) => {
+        const urlText = String(url);
+        if (urlText.includes("/identity/v1/oauth2/token")) {
+          return Response.json({ access_token: "app-access-token", expires_in: 7200, token_type: "Bearer" });
+        }
+
+        return Response.json({
+          total: 1,
+          itemSummaries: [{
+            itemId: "live-bnj-progress",
+            title: "Blue Note BNJ71001 live auction",
+            price: { value: "48.00", currency: "GBP" },
+            itemWebUrl: "https://www.ebay.co.uk/itm/live-bnj-progress",
+            categories: [{ categoryId: "176985", categoryName: "Records" }],
+            buyingOptions: ["AUCTION"]
+          }]
+        });
+      }
+    },
+    (event) => events.push(event)
+  );
+
+  const progressEvents = events.filter((event) => event.type === "progress");
+  assert.ok(progressEvents.length > 0, "expected at least one progress event");
+  assert.equal(progressEvents.every((event) => event.stage === "relistings"), true);
+  assert.deepEqual(progressEvents.map((event) => event.completed), [1]);
+  assert.deepEqual(progressEvents.map((event) => event.total), [1]);
+
+  const partialEvents = events.filter((event) => event.type === "partial");
+  assert.equal(partialEvents.length, 1);
+  assert.equal(partialEvents[0].history.relistingCandidates[0]?.itemId, "live-bnj-progress");
+  assert.equal(refreshed.relistingCandidates[0].itemId, "live-bnj-progress");
+});
+
 function isWatchlistPriceLookupRequest(urlText) {
   return urlText.includes("/identity/v1/oauth2/token") || urlText.includes("/buy/browse/v1/item/get_item_by_legacy_id");
 }

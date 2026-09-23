@@ -195,6 +195,25 @@ type HistoryState =
   | { status: "ready"; history: BuyingHistory }
   | { status: "sign_in_required" | "reauth_required" | "live_not_implemented" | "unavailable"; message: string };
 
+type HistoryStreamStage = "native_prices" | "relistings";
+
+type HistoryStreamProgress = { stage: HistoryStreamStage; completed: number; total: number };
+
+type HistoryStreamEvent =
+  | ({ type: "progress" } & HistoryStreamProgress)
+  | { type: "partial"; history: BuyingHistory }
+  | { type: "complete"; history: BuyingHistory }
+  | { type: "error"; error: string };
+
+function historyStreamStageLabel(stage: HistoryStreamStage): string {
+  switch (stage) {
+    case "native_prices":
+      return "matching prices";
+    case "relistings":
+      return "matching relistings";
+  }
+}
+
 type HomeSearchState =
   | { status: "idle" }
   | { status: "loading"; query: string }
@@ -240,6 +259,7 @@ export default function Home() {
   const [ebayStartReady, setEbayStartReady] = useState(false);
   const [accountMessage, setAccountMessage] = useState("");
   const [historyState, setHistoryState] = useState<HistoryState>({ status: "idle" });
+  const [streamProgress, setStreamProgress] = useState<HistoryStreamProgress | undefined>();
   const [matchingPreferences, setMatchingPreferences] = useState<MatchingPreferences>(DEFAULT_MATCHING_PREFERENCES);
   const [searchDraft, setSearchDraft] = useState("");
   const [homeSearchQuery, setHomeSearchQuery] = useState("");
@@ -311,10 +331,11 @@ export default function Home() {
   async function refreshBuyingHistory() {
     const previousHistory = historyState.status === "ready" ? historyState.history : undefined;
     setHistoryState({ status: "loading" });
+    setStreamProgress(undefined);
 
     let response: Response;
     try {
-      response = await fetch("/api/ebay/buying-history", {
+      response = await fetch("/api/ebay/buying-history/stream", {
         body: JSON.stringify(matchingPreferences),
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
@@ -332,44 +353,102 @@ export default function Home() {
       return;
     }
 
-    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
 
-    if (response.ok) {
-      setHistoryState({ status: "ready", history: body as BuyingHistory });
-      return;
-    }
+      if (response.status === 409) {
+        setHistoryState({
+          status: "reauth_required",
+          message: "Connect eBay from the account button to view buying history"
+        });
+        await refreshEbaySessionState();
+        return;
+      }
 
-    if (response.status === 409) {
-      setHistoryState({
-        status: "reauth_required",
-        message: "Connect eBay from the account button to view buying history"
-      });
-      await refreshEbaySessionState();
-      return;
-    }
+      if (response.status === 501) {
+        if (previousHistory) {
+          setHistoryState({ status: "ready", history: previousHistory });
+          return;
+        }
 
-    if (response.status === 501) {
-      if (previousHistory) {
+        setHistoryState({
+          status: "live_not_implemented",
+          message: "Live history import is not implemented yet"
+        });
+        return;
+      }
+
+      if (previousHistory && response.status >= 500) {
         setHistoryState({ status: "ready", history: previousHistory });
         return;
       }
 
       setHistoryState({
-        status: "live_not_implemented",
-        message: "Live history import is not implemented yet"
+        status: "unavailable",
+        message: body.error ? `History unavailable: ${body.error}` : "History is unavailable"
       });
       return;
     }
 
-    if (previousHistory && response.status >= 500) {
-      setHistoryState({ status: "ready", history: previousHistory });
+    if (!response.body) {
+      setHistoryState({ status: "unavailable", message: "History is unavailable" });
       return;
     }
 
-    setHistoryState({
-      status: "unavailable",
-      message: body.error ? `History unavailable: ${body.error}` : "History is unavailable"
-    });
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let receivedAnyHistory = false;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.trim()) {
+            continue;
+          }
+
+          const event = JSON.parse(line) as HistoryStreamEvent;
+          if (event.type === "progress") {
+            setStreamProgress({ stage: event.stage, completed: event.completed, total: event.total });
+          } else if (event.type === "partial") {
+            receivedAnyHistory = true;
+            setHistoryState({ status: "ready", history: event.history });
+          } else if (event.type === "complete") {
+            receivedAnyHistory = true;
+            setHistoryState({ status: "ready", history: event.history });
+            setStreamProgress(undefined);
+          } else if (event.type === "error") {
+            setStreamProgress(undefined);
+            if (previousHistory) {
+              setHistoryState({ status: "ready", history: previousHistory });
+            } else {
+              setHistoryState({ status: "unavailable", message: "History is unavailable" });
+            }
+          }
+        }
+      }
+    } catch {
+      setStreamProgress(undefined);
+      if (!receivedAnyHistory) {
+        if (previousHistory) {
+          setHistoryState({ status: "ready", history: previousHistory });
+        } else {
+          setHistoryState({
+            status: "unavailable",
+            message: "Could not reach the server. Check your connection and try again."
+          });
+        }
+      }
+    }
   }
 
   useEffect(() => {
@@ -557,15 +636,19 @@ export default function Home() {
               setHomeSearchState({ status: "idle" });
             }}
             refreshBuyingHistory={refreshBuyingHistory}
+            streamProgress={streamProgress}
           />
         )}
-        {activeTab === "tracking" && <Tracking historyState={historyState} refreshBuyingHistory={refreshBuyingHistory} />}
+        {activeTab === "tracking" && (
+          <Tracking historyState={historyState} refreshBuyingHistory={refreshBuyingHistory} streamProgress={streamProgress} />
+        )}
         {activeTab === "won" && (
           <Won
             historyState={historyState}
             matchingPreferences={matchingPreferences}
             refreshBuyingHistory={refreshBuyingHistory}
             onViewPriceHistory={viewPriceHistory}
+            streamProgress={streamProgress}
           />
         )}
         {activeTab === "analytics" && (
@@ -579,6 +662,7 @@ export default function Home() {
             onClearGroupFilter={() => setAnalyticsGroupFilter(undefined)}
             onItemsCaptured={markItemsCaptured}
             onItemsRemoved={removeHistoryItems}
+            streamProgress={streamProgress}
           />
         )}
         {activeTab === "account" && (
@@ -619,7 +703,8 @@ function Dashboard({
   matchingPreferences,
   searchQuery,
   searchState,
-  refreshBuyingHistory
+  refreshBuyingHistory,
+  streamProgress
 }: {
   clearSearch: () => void;
   historyState: HistoryState;
@@ -627,6 +712,7 @@ function Dashboard({
   searchQuery: string;
   searchState: HomeSearchState;
   refreshBuyingHistory: () => Promise<void>;
+  streamProgress?: HistoryStreamProgress;
 }) {
   const [filter, setFilter] = useState<HomeFeedFilter>("onWatchlist");
   const [relistingFormatFilter, setRelistingFormatFilter] = useState<RelistingFormatFilter>("both");
@@ -780,6 +866,12 @@ function Dashboard({
         </div>
       )}
 
+      {streamProgress && (
+        <p className="form-message">
+          Still loading — {historyStreamStageLabel(streamProgress.stage)} ({streamProgress.completed} of {streamProgress.total})…
+        </p>
+      )}
+
       {historyState.status === "ready" ? (
         <>
           <div className="summary-grid">
@@ -913,7 +1005,7 @@ function Dashboard({
           )}
         </>
       ) : (
-        <HistoryEmptyState state={historyState} />
+        <HistoryEmptyState progress={streamProgress} state={historyState} />
       )}
     </section>
   );
@@ -1016,10 +1108,12 @@ function HomeFeedCard({ row, onAddToWatchlist }: { row: HomeFeedRow; onAddToWatc
 
 function Tracking({
   historyState,
-  refreshBuyingHistory
+  refreshBuyingHistory,
+  streamProgress
 }: {
   historyState: HistoryState;
   refreshBuyingHistory: () => Promise<void>;
+  streamProgress?: HistoryStreamProgress;
 }) {
   const [filter, setFilter] = useState<LostFilter>("all");
   const filteredItems = useMemo(() => {
@@ -1089,7 +1183,7 @@ function Tracking({
           </div>
         </>
       ) : (
-        <HistoryEmptyState state={historyState} />
+        <HistoryEmptyState progress={streamProgress} state={historyState} />
       )}
     </section>
   );
@@ -1099,12 +1193,14 @@ function Won({
   historyState,
   matchingPreferences,
   refreshBuyingHistory,
-  onViewPriceHistory
+  onViewPriceHistory,
+  streamProgress
 }: {
   historyState: HistoryState;
   matchingPreferences: MatchingPreferences;
   refreshBuyingHistory: () => Promise<void>;
   onViewPriceHistory: (itemId: string, relistingGroupId: string | undefined) => void;
+  streamProgress?: HistoryStreamProgress;
 }) {
   const [selectedItemId, setSelectedItemId] = useState<string | undefined>();
   const [searchQuery, setSearchQuery] = useState("");
@@ -1238,7 +1334,7 @@ function Won({
           )}
         </>
       ) : (
-        <HistoryEmptyState state={historyState} />
+        <HistoryEmptyState progress={streamProgress} state={historyState} />
       )}
     </section>
   );
@@ -1481,7 +1577,8 @@ function Analytics({
   groupFilter,
   onClearGroupFilter,
   onItemsCaptured,
-  onItemsRemoved
+  onItemsRemoved,
+  streamProgress
 }: {
   historyState: HistoryState;
   matchingPreferences: MatchingPreferences;
@@ -1492,6 +1589,7 @@ function Analytics({
   onClearGroupFilter: () => void;
   onItemsCaptured: (itemIds: string[]) => void;
   onItemsRemoved: (itemIds: string[]) => void;
+  streamProgress?: HistoryStreamProgress;
 }) {
   const [filter, setFilter] = useState<CaptureFilter>("all");
   const [winFilter, setWinFilter] = useState<WinStatusFilter>("all");
@@ -2079,7 +2177,7 @@ function Analytics({
           )}
         </>
       ) : (
-        <HistoryEmptyState state={historyState} />
+        <HistoryEmptyState progress={streamProgress} state={historyState} />
       )}
     </section>
   );
@@ -2431,8 +2529,8 @@ function SellerLink({ inline = false, sellerUserId }: { inline?: boolean; seller
   return inline ? <>{content}</> : <span>{content}</span>;
 }
 
-function HistoryEmptyState({ state }: { state: HistoryState }) {
-  const message = getHistoryMessage(state);
+function HistoryEmptyState({ state, progress }: { state: HistoryState; progress?: HistoryStreamProgress }) {
+  const message = getHistoryMessage(state, progress);
 
   return (
     <div className="empty-panel">
@@ -2443,11 +2541,13 @@ function HistoryEmptyState({ state }: { state: HistoryState }) {
   );
 }
 
-function getHistoryMessage(state: HistoryState): string {
+function getHistoryMessage(state: HistoryState, progress?: HistoryStreamProgress): string {
   switch (state.status) {
     case "idle":
     case "loading":
-      return "Loading buying history";
+      return progress
+        ? `Loading buying history — ${historyStreamStageLabel(progress.stage)} (${progress.completed} of ${progress.total})…`
+        : "Loading buying history";
     case "ready":
       return "";
     case "sign_in_required":

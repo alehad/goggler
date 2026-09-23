@@ -28,55 +28,60 @@ export async function fetchLiveRelistingCandidates(
     fetch?: typeof fetch;
     maxSearches?: number;
     limitPerSearch?: number;
+    onSearchDone?: (candidatesSoFar: HomeFeedRelistingCandidate[], completed: number, total: number) => void;
   } = {}
 ): Promise<HomeFeedRelistingCandidate[]> {
   const requests = liveRelistingSearchRequests(input, options.maxSearches ?? DEFAULT_MAX_RELISTING_SEARCHES);
-  const responses: Array<{
-    request: LiveRelistingSearchRequest;
-    response: Awaited<ReturnType<typeof fetchEbayBrowseSearchResponse>>;
-  }> = [];
+  const candidates: HomeFeedRelistingCandidate[] = [];
+  let completed = 0;
+
   for (const request of requests) {
-    responses.push({
-      request,
-      response: await fetchEbayBrowseSearchResponse(config, appAccessToken, request.query, {
-        fetch: options.fetch,
-        categoryIds: request.lostItem.categoryId ? [request.lostItem.categoryId] : undefined,
-        limit: options.limitPerSearch ?? DEFAULT_RELISTING_SEARCH_LIMIT,
-        matchingPreferences: input.matchingPreferences
-      })
+    const response = await fetchEbayBrowseSearchResponse(config, appAccessToken, request.query, {
+      fetch: options.fetch,
+      categoryIds: request.lostItem.categoryId ? [request.lostItem.categoryId] : undefined,
+      limit: options.limitPerSearch ?? DEFAULT_RELISTING_SEARCH_LIMIT,
+      matchingPreferences: input.matchingPreferences
     });
+    candidates.push(...candidatesForResponse(request, response));
+    completed += 1;
+    options.onSearchDone?.(candidates, completed, requests.length);
   }
 
-  return responses.flatMap(({ request, response }) =>
-    response.rows.flatMap((row): HomeFeedRelistingCandidate[] => {
-      if (row.relistingGroupId !== request.relistingGroupId || !row.currentPrice || !row.sourceItemId) {
-        return [];
-      }
+  return candidates;
+}
 
-      if (!sameCategory(request.lostItem, row)) {
-        return [];
-      }
+function candidatesForResponse(
+  request: LiveRelistingSearchRequest,
+  response: Awaited<ReturnType<typeof fetchEbayBrowseSearchResponse>>
+): HomeFeedRelistingCandidate[] {
+  return response.rows.flatMap((row): HomeFeedRelistingCandidate[] => {
+    if (row.relistingGroupId !== request.relistingGroupId || !row.currentPrice || !row.sourceItemId) {
+      return [];
+    }
 
-      return [
-        {
-          candidateId: `${request.query}-${row.sourceItemId}`,
-          itemId: row.sourceItemId,
-          title: row.title,
-          currentPrice: row.currentPrice,
-          endsAt: row.endsAt,
-          sellerUserId: row.sellerUserId,
-          conditionDisplayName: row.conditionDisplayName,
-          categoryId: row.categoryId,
-          categoryName: row.categoryName,
-          imageUrl: row.imageUrl,
-          itemWebUrl: row.itemWebUrl,
-          relistingGroupId: request.relistingGroupId,
-          matchConfidence: 95,
-          matchSignals: [`record id ${request.query}`, "live eBay search", ...row.matchSignals]
-        }
-      ];
-    })
-  );
+    if (!sameCategory(request.lostItem, row)) {
+      return [];
+    }
+
+    return [
+      {
+        candidateId: `${request.query}-${row.sourceItemId}`,
+        itemId: row.sourceItemId,
+        title: row.title,
+        currentPrice: row.currentPrice,
+        endsAt: row.endsAt,
+        sellerUserId: row.sellerUserId,
+        conditionDisplayName: row.conditionDisplayName,
+        categoryId: row.categoryId,
+        categoryName: row.categoryName,
+        imageUrl: row.imageUrl,
+        itemWebUrl: row.itemWebUrl,
+        relistingGroupId: request.relistingGroupId,
+        matchConfidence: 95,
+        matchSignals: [`record id ${request.query}`, "live eBay search", ...row.matchSignals]
+      }
+    ];
+  });
 }
 
 export function liveRelistingSearchRequests(

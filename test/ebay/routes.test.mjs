@@ -8,6 +8,7 @@ import { GET as handleEbayCallback } from "../../app/api/auth/ebay/callback/rout
 import { GET as getEbaySession } from "../../app/api/auth/ebay/session/route.ts";
 import { POST as disconnectEbay } from "../../app/api/auth/ebay/disconnect/route.ts";
 import { GET as getBuyingHistory, POST as postBuyingHistory } from "../../app/api/ebay/buying-history/route.ts";
+import { POST as postBuyingHistoryStream } from "../../app/api/ebay/buying-history/stream/route.ts";
 import { POST as postEbaySearch } from "../../app/api/ebay/search/route.ts";
 import { POST as postMarketHistory } from "../../app/api/ebay/market-history/route.ts";
 import { readSessionToken } from "../../src/auth/session-cookie.ts";
@@ -792,6 +793,142 @@ test("eBay buying history route hides upstream live eBay failure details", async
   }
 });
 
+test("eBay buying history stream route rejects requests from invalid origins", async () => {
+  process.env.GOGGLER_EBAY_HISTORY_SOURCE = "fixture";
+  const response = await postBuyingHistoryStream(
+    new NextRequest("http://localhost:3000/api/ebay/buying-history/stream", {
+      body: JSON.stringify({}),
+      headers: { "Content-Type": "application/json" },
+      method: "POST"
+    })
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 403);
+  assert.equal(body.error, "invalid_origin");
+});
+
+test("eBay buying history stream route requires current-session eBay auth", async () => {
+  process.env.GOGGLER_EBAY_HISTORY_SOURCE = "fixture";
+  const cookie = await signInCookie();
+  const response = await postBuyingHistoryStream(
+    new NextRequest("http://localhost:3000/api/ebay/buying-history/stream", {
+      body: JSON.stringify({}),
+      headers: { "Content-Type": "application/json", cookie, origin: "http://localhost:3000" },
+      method: "POST"
+    })
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 409);
+  assert.equal(body.error, "ebay_reauth_required");
+});
+
+test("eBay buying history stream route streams fixture history as a single complete event", async () => {
+  process.env.GOGGLER_EBAY_HISTORY_SOURCE = "fixture";
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  authorizeEbaySession(session.session.id);
+
+  const response = await postBuyingHistoryStream(
+    new NextRequest("http://localhost:3000/api/ebay/buying-history/stream", {
+      body: JSON.stringify({}),
+      headers: { "Content-Type": "application/json", cookie, origin: "http://localhost:3000" },
+      method: "POST"
+    })
+  );
+  assert.equal(response.status, 200);
+  const events = await readNdjsonEvents(response);
+
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, "complete");
+  assert.equal(events[0].history.source, "fixture");
+  assert.equal(events[0].history.lostItems.length, 10);
+});
+
+test("eBay buying history stream route streams progress and partial events before a final complete event matching the non-streaming route", async () => {
+  setEbayEnv();
+  process.env.GOGGLER_EBAY_HISTORY_SOURCE = "live";
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  authorizeEbaySession(session.session.id);
+  const originalFetch = globalThis.fetch;
+  const mockFetch = async (_url, init) => {
+    if (init.headers["X-EBAY-API-CALL-NAME"] === "GetOrders") {
+      return new Response(liveOrdersResponseXml(), { headers: { "Content-Type": "text/xml" } });
+    }
+
+    const list = String(init.body).match(/<(WatchList|LostList|WonList)>/)?.[1];
+    return new Response(liveResponseXml(list), { headers: { "Content-Type": "text/xml" } });
+  };
+
+  try {
+    globalThis.fetch = mockFetch;
+    const streamResponse = await postBuyingHistoryStream(
+      new NextRequest("http://localhost:3000/api/ebay/buying-history/stream", {
+        body: JSON.stringify({}),
+        headers: { "Content-Type": "application/json", cookie, origin: "http://localhost:3000" },
+        method: "POST"
+      })
+    );
+    assert.equal(streamResponse.status, 200);
+    const events = await readNdjsonEvents(streamResponse);
+
+    assert.ok(events.some((event) => event.type === "progress"), "expected at least one progress event");
+    const completeEvents = events.filter((event) => event.type === "complete");
+    assert.equal(completeEvents.length, 1);
+    assert.equal(events[events.length - 1].type, "complete", "complete must be the final event");
+    assert.equal(events.some((event) => event.type === "error"), false);
+
+    globalThis.fetch = mockFetch;
+    const nonStreamingResponse = await postBuyingHistory(
+      new NextRequest("http://localhost:3000/api/ebay/buying-history", {
+        body: JSON.stringify({}),
+        headers: { "Content-Type": "application/json", cookie, origin: "http://localhost:3000" },
+        method: "POST"
+      })
+    );
+    const nonStreamingBody = await nonStreamingResponse.json();
+
+    assert.deepEqual(completeEvents[0].history, nonStreamingBody);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("eBay buying history stream route surfaces a failure after streaming has started as an in-band error event", async () => {
+  setEbayEnv();
+  process.env.GOGGLER_EBAY_HISTORY_SOURCE = "live";
+  const cookie = await signInCookie();
+  const session = currentSessionFromCookie(cookie);
+  authorizeEbaySession(session.session.id);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () =>
+    new Response("<GetMyeBayBuyingResponse><Ack>Failure</Ack></GetMyeBayBuyingResponse>", { status: 200 });
+
+  try {
+    const response = await postBuyingHistoryStream(
+      new NextRequest("http://localhost:3000/api/ebay/buying-history/stream", {
+        body: JSON.stringify({}),
+        headers: { "Content-Type": "application/json", cookie, origin: "http://localhost:3000" },
+        method: "POST"
+      })
+    );
+    // The failure happens after the 200 response has already started streaming,
+    // so it can't be reported as an HTTP error status — only as an in-band event.
+    assert.equal(response.status, 200);
+    const events = await readNdjsonEvents(response);
+    const serialized = JSON.stringify(events);
+
+    assert.equal(events.length, 1);
+    assert.equal(events[0].type, "error");
+    assert.equal(serialized.includes("Failure"), false);
+    assert.equal(serialized.includes("access-token"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("eBay market history route rejects invalid origins", async () => {
   const response = await postMarketHistory(
     new NextRequest("http://localhost:3000/api/ebay/market-history", {
@@ -1068,6 +1205,14 @@ function clearEbayEnv() {
   ]) {
     delete process.env[key];
   }
+}
+
+async function readNdjsonEvents(response) {
+  const text = await response.text();
+  return text
+    .split("\n")
+    .filter((line) => line.trim().length > 0)
+    .map((line) => JSON.parse(line));
 }
 
 function jsonResponse(body) {
