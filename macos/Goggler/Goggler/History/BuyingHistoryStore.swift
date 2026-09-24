@@ -106,7 +106,7 @@ final class BuyingHistoryStore {
             let raw = try await client.request(
                 "/api/ebay/buying-history",
                 method: "POST",
-                jsonBody: ["exactTitleMatch": true, "criteriaText": #"\b[A-Z]{1,5}-?\d{1,6}\b"#]
+                jsonBody: DefaultMatchingPreferences.requestBody
             )
             AppLog.network.debug("buying-history: statusCode=\(raw.statusCode, privacy: .public)")
 
