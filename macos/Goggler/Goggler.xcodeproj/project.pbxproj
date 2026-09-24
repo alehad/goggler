@@ -16,6 +16,7 @@
 		33B1B04875602F6EBBA0033C /* EbayAuthServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A3E81C41309B90AE029B8D5 /* EbayAuthServiceTests.swift */; };
 		456EA8E01CD36EF65E44D8AF /* EbayAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7351FB2E708D7C9B470EDF57 /* EbayAuthService.swift */; };
 		49A41487B519818EEAB472E8 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E94B49448B845CEC8C134C52 /* HomeView.swift */; };
+		544F8BCC2935B2128765E808 /* VoiceInputService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6E1D2A85EE12EA1409A09D2 /* VoiceInputService.swift */; };
 		56F1544FB3933716B55D52BE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18BC7B7CFDC67EC4840C3894 /* SettingsView.swift */; };
 		5B8DCEC78BCAE5BB60CA2083 /* BuyingHistoryStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C4EE374CEF95B8D3D242E21 /* BuyingHistoryStoreTests.swift */; };
 		5BEEC5A23EECE0956B00A895 /* GogglerModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D36B4554FFF125BA6F273C2 /* GogglerModels.swift */; };
@@ -65,6 +66,7 @@
 		A02077193843DAE8B546C410 /* StartupGateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupGateView.swift; sourceTree = "<group>"; };
 		B6CF8BC32BFF74AE18AB53F9 /* Logging.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logging.swift; sourceTree = "<group>"; };
 		C1DE6D115021310A2A60BB3A /* BuyingHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuyingHistoryStore.swift; sourceTree = "<group>"; };
+		C6E1D2A85EE12EA1409A09D2 /* VoiceInputService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceInputService.swift; sourceTree = "<group>"; };
 		CEC02C6744BC91C2D0CAF4DA /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		DCDF796127BFBC265BC075DF /* SafeExternalURL.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeExternalURL.swift; sourceTree = "<group>"; };
 		E94B49448B845CEC8C134C52 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
@@ -161,6 +163,7 @@
 				F55A4A4612ADE84E5D938924 /* Sidebar */,
 				383E6229E21BECA47982FFF7 /* Startup */,
 				804DD9CD3A1795D35129B488 /* Tabs */,
+				F9B50C187E78264E2E758A9F /* Voice */,
 			);
 			path = Goggler;
 			sourceTree = "<group>";
@@ -182,6 +185,14 @@
 				33BF77981399A54BB83AF659 /* SidebarItem.swift */,
 			);
 			path = Sidebar;
+			sourceTree = "<group>";
+		};
+		F9B50C187E78264E2E758A9F /* Voice */ = {
+			isa = PBXGroup;
+			children = (
+				C6E1D2A85EE12EA1409A09D2 /* VoiceInputService.swift */,
+			);
+			path = Voice;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -290,6 +301,7 @@
 				56F1544FB3933716B55D52BE /* SettingsView.swift in Sources */,
 				8002E3A21B405ABA6BE15D8D /* SidebarItem.swift in Sources */,
 				2B5497A14C2015EDAD4EC9E2 /* StartupGateView.swift in Sources */,
+				544F8BCC2935B2128765E808 /* VoiceInputService.swift in Sources */,
 				2ED773C62FBA0BB30C1C085C /* WatchlistView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
