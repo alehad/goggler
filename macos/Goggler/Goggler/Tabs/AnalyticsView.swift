@@ -48,6 +48,9 @@ struct AnalyticsView: View {
     @State private var aiError: String?
     @State private var aiAnswer: String?
     @State private var aiFilterItemIds: [String]?
+    @State private var voiceService = VoiceInputService()
+    @State private var voiceListening = false
+    @State private var voiceTask: Task<Void, Never>?
 
     var body: some View {
         ScrollView {
@@ -79,6 +82,21 @@ struct AnalyticsView: View {
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .onDisappear {
+            // Switching to another tab mid-listen would otherwise leave
+            // AVAudioEngine capturing the microphone with no visible mic
+            // button left on screen to stop it from — SwiftUI deallocating
+            // this view's @State isn't a substitute for an explicit stop.
+            // Cancelling `voiceTask` additionally covers the case where
+            // this fires while `voiceService.start()` is still suspended
+            // in its authorization await (before there's anything for
+            // `stop()` itself to clean up yet) — `start()` checks
+            // `Task.isCancelled` right after that await and bails out
+            // before ever touching the microphone.
+            voiceTask?.cancel()
+            voiceService.stop()
+            voiceListening = false
         }
         .confirmationDialog(
             itemPendingDeleteConfirmation.map { "Remove \"\($0.item.title)\" from price history? This can't be undone." } ?? "",
@@ -134,6 +152,14 @@ struct AnalyticsView: View {
                 TextField("Ask about your items, e.g. \"what is the highest paid item?\"", text: $aiQuestion)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { Task { await askAssistant() } }
+                if VoiceInputService.isSupported {
+                    Button {
+                        toggleVoiceInput()
+                    } label: {
+                        Image(systemName: voiceListening ? "mic.slash" : "mic")
+                    }
+                    .accessibilityLabel(voiceListening ? "Stop listening" : "Ask by voice")
+                }
                 Button {
                     Task { await askAssistant() }
                 } label: {
@@ -282,6 +308,43 @@ struct AnalyticsView: View {
         aiFilterItemIds = nil
         aiAnswer = nil
         aiError = nil
+    }
+
+    private func toggleVoiceInput() {
+        if voiceListening {
+            // Cancels the same `voiceTask` `.onDisappear` cancels — without
+            // this, tapping the mic button again while `start()` is still
+            // suspended awaiting authorization (e.g. the permission dialog
+            // sitting open) would flip the UI back to "not listening" but
+            // leave the original Task alive; it would resume once
+            // authorization eventually resolves and start capturing with
+            // no visible way left to stop it, the exact same race
+            // `.onDisappear`'s cancellation closes for the tab-switch case.
+            voiceTask?.cancel()
+            voiceService.stop()
+            voiceListening = false
+            return
+        }
+
+        voiceListening = true
+        aiError = nil
+        // Held so `.onDisappear` can cancel it — without this, switching
+        // tabs while this task is still suspended in
+        // `voiceService.start()`'s authorization await would leave it to
+        // resume after the view (and its mic-stop button) is already gone,
+        // installing the audio tap and starting capture with nothing left
+        // on screen able to stop it.
+        voiceTask = Task {
+            await voiceService.start(
+                onTranscript: { text in aiQuestion = text },
+                onFinish: { error in
+                    voiceListening = false
+                    if let error {
+                        aiError = error.message
+                    }
+                }
+            )
+        }
     }
 
     @ViewBuilder

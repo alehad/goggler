@@ -33,5 +33,9 @@
 	<string>1</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.shopping</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>goggler uses your microphone so you can ask the price-history assistant a question by voice instead of typing.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>goggler uses on-device (or Apple's) speech recognition to turn what you say into a question for the price-history assistant.</string>
 </dict>
 </plist>

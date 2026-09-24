@@ -32,6 +32,8 @@ targets:
       path: Generated-Info.plist
       properties:
         LSApplicationCategoryType: public.app-category.shopping
+        NSMicrophoneUsageDescription: "goggler uses your microphone so you can ask the price-history assistant a question by voice instead of typing."
+        NSSpeechRecognitionUsageDescription: "goggler uses on-device (or Apple's) speech recognition to turn what you say into a question for the price-history assistant."
         CFBundleURLTypes:
           - CFBundleTypeRole: Editor
             CFBundleURLName: com.goggler.Goggler.oauth

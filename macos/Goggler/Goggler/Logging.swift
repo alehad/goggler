@@ -6,4 +6,5 @@ import os
 enum AppLog {
     static let startup = Logger(subsystem: "com.goggler.Goggler", category: "startup")
     static let network = Logger(subsystem: "com.goggler.Goggler", category: "network")
+    static let voice = Logger(subsystem: "com.goggler.Goggler", category: "voice")
 }
