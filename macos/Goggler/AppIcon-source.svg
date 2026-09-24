@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <clipPath id="lensLeft">
+      <circle cx="150" cy="228" r="85"/>
+    </clipPath>
+    <clipPath id="lensRight">
+      <circle cx="362" cy="228" r="85"/>
+    </clipPath>
+  </defs>
+
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="#1B1B1F"/>
+  <rect x="5" y="5" width="502" height="502" rx="108" fill="none" stroke="#D9D9DC" stroke-width="10"/>
+
+  <text x="256" y="372" text-anchor="middle"
+        font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif"
+        font-weight="800" font-size="300" fill="#F5791E">g</text>
+
+  <g>
+    <circle cx="150" cy="228" r="85" fill="#0C0C0D"/>
+    <circle cx="362" cy="228" r="85" fill="#0C0C0D"/>
+    <g clip-path="url(#lensLeft)">
+      <circle cx="150" cy="228" r="85" fill="#111111"/>
+      <circle cx="150" cy="228" r="72" fill="none" stroke="#2B2B2B" stroke-width="2"/>
+      <circle cx="150" cy="228" r="58" fill="none" stroke="#2B2B2B" stroke-width="2"/>
+      <circle cx="150" cy="228" r="44" fill="none" stroke="#2B2B2B" stroke-width="2"/>
+      <circle cx="150" cy="228" r="30" fill="none" stroke="#2B2B2B" stroke-width="2"/>
+      <circle cx="150" cy="228" r="17" fill="#F5791E"/>
+      <circle cx="150" cy="228" r="4" fill="#0C0C0D"/>
+    </g>
+    <g clip-path="url(#lensRight)">
+      <circle cx="362" cy="228" r="85" fill="#111111"/>
+      <circle cx="362" cy="228" r="72" fill="none" stroke="#2B2B2B" stroke-width="2"/>
+      <circle cx="362" cy="228" r="58" fill="none" stroke="#2B2B2B" stroke-width="2"/>
+      <circle cx="362" cy="228" r="44" fill="none" stroke="#2B2B2B" stroke-width="2"/>
+      <circle cx="362" cy="228" r="30" fill="none" stroke="#2B2B2B" stroke-width="2"/>
+      <circle cx="362" cy="228" r="17" fill="#F5791E"/>
+      <circle cx="362" cy="228" r="4" fill="#0C0C0D"/>
+    </g>
+
+    <rect x="120" y="290" width="60" height="66" rx="18" fill="#F5791E"/>
+    <rect x="332" y="290" width="60" height="66" rx="18" fill="#F5791E"/>
+
+    <rect x="214" y="210" width="84" height="38" rx="13" fill="#F5791E"/>
+
+    <circle cx="150" cy="228" r="85" fill="none" stroke="#F5791E" stroke-width="14"/>
+    <circle cx="362" cy="228" r="85" fill="none" stroke="#F5791E" stroke-width="14"/>
+  </g>
+</svg>
