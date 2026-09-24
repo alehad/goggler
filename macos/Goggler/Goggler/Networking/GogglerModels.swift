@@ -102,3 +102,9 @@ struct CaptureResult: Decodable, Sendable {
 struct DeleteResult: Decodable, Sendable {
     let deletedCount: Int
 }
+
+/// Response of `POST /api/market-insights/chat`.
+struct ChatAnswer: Decodable, Sendable {
+    let answer: String
+    let itemIds: [String]
+}

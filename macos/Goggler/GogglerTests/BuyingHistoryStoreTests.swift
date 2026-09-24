@@ -276,3 +276,124 @@ struct AnalyticsItemComputationTests {
         #expect(result[0].captured == false)
     }
 }
+
+struct ChatAnswerDecodingTests {
+    @Test("Decodes a POST /api/market-insights/chat response")
+    func decodesChatAnswer() throws {
+        let json = #"{"answer":"You paid £62.50 for it.","itemIds":["ended-001","ended-002"]}"#
+        let result = try JSONDecoder().decode(ChatAnswer.self, from: Data(json.utf8))
+
+        #expect(result.answer == "You paid £62.50 for it.")
+        #expect(result.itemIds == ["ended-001", "ended-002"])
+    }
+
+    @Test("Decodes an empty itemIds array")
+    func decodesEmptyItemIds() throws {
+        let json = #"{"answer":"I couldn't find a match.","itemIds":[]}"#
+        let result = try JSONDecoder().decode(ChatAnswer.self, from: Data(json.utf8))
+
+        #expect(result.itemIds.isEmpty)
+    }
+}
+
+struct AnalyticsAssistantMarkdownTests {
+    @Test("Strips link-ness from a Markdown link so item titles can't become tappable phishing links")
+    func stripsLinks() throws {
+        let attributed = try #require(analyticsAssistantMarkdown("Your item [Free gift — claim now](https://evil.example/phish) sold for £62.50."))
+
+        #expect(attributed.runs.allSatisfy { $0.link == nil })
+        #expect(String(attributed.characters).contains("Free gift — claim now"))
+    }
+
+    @Test("Strips link-ness from a Markdown autolink too, not just [text](url) syntax")
+    func stripsAutolinks() throws {
+        let attributed = try #require(analyticsAssistantMarkdown("See <https://evil.example/phish> for details."))
+
+        #expect(attributed.runs.allSatisfy { $0.link == nil })
+    }
+
+    @Test("Plain bold text still renders as an AttributedString")
+    func rendersPlainFormatting() throws {
+        let attributed = try #require(analyticsAssistantMarkdown("Your **highest paid** item was £62.50."))
+
+        #expect(String(attributed.characters).contains("highest paid"))
+    }
+}
+
+struct FilterAnalyticsItemsTests {
+    private func analyticsItem(_ id: String, captured: Bool = false, won: Bool = false, eventuallyWon: Bool = false, title: String = "", sellerUserId: String? = nil) -> AnalyticsItem {
+        AnalyticsItem(
+            item: HistoryItem(
+                itemId: id,
+                title: title.isEmpty ? "Item \(id)" : title,
+                list: "WatchList",
+                currentPrice: nil,
+                maxBid: nil,
+                endTime: nil,
+                sellerUserId: sellerUserId,
+                conditionDisplayName: nil,
+                imageUrl: nil,
+                itemWebUrl: nil,
+                relistingGroupId: nil,
+                captured: captured
+            ),
+            won: won,
+            eventuallyWon: eventuallyWon
+        )
+    }
+
+    @Test("An AI filter returns exactly the referenced items, in that order, overriding the other filters")
+    func aiFilterOverridesOtherFilters() {
+        let items = [
+            analyticsItem("a", captured: true),
+            analyticsItem("b", captured: false),
+            analyticsItem("c", captured: true)
+        ]
+
+        // captureFilter/winFilter/searchQuery would normally exclude "b" and
+        // reorder the rest — the AI filter must ignore all of that.
+        let result = filterAnalyticsItems(
+            items,
+            aiFilterItemIds: ["c", "b"],
+            captureFilter: .captured,
+            winFilter: .all,
+            searchQuery: "nonexistent-term"
+        )
+
+        #expect(result.map(\.id) == ["c", "b"])
+    }
+
+    @Test("An AI-referenced id with no matching item is silently skipped")
+    func aiFilterSkipsUnmatchedIds() {
+        let items = [analyticsItem("a")]
+
+        let result = filterAnalyticsItems(
+            items,
+            aiFilterItemIds: ["missing", "a"],
+            captureFilter: .all,
+            winFilter: .all,
+            searchQuery: ""
+        )
+
+        #expect(result.map(\.id) == ["a"])
+    }
+
+    @Test("With no AI filter, capture/win/search filters apply as before")
+    func nilAiFilterFallsThroughToExistingFilters() {
+        let items = [
+            analyticsItem("a", captured: true, title: "Blue Note LP"),
+            analyticsItem("b", captured: false, title: "Blue Note LP"),
+            analyticsItem("c", captured: true, title: "Unrelated record")
+        ]
+
+        let result = filterAnalyticsItems(
+            items,
+            aiFilterItemIds: nil,
+            captureFilter: .captured,
+            winFilter: .all,
+            searchQuery: "blue note"
+        )
+
+        #expect(result.map(\.id) == ["a"])
+    }
+}

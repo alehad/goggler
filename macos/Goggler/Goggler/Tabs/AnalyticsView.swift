@@ -7,7 +7,7 @@ import SwiftUI
 /// voice) and the matched-sales price chart are deferred — see
 /// macos-analytics-tab/proposal.md.
 struct AnalyticsView: View {
-    private enum CaptureFilter: String, CaseIterable, Identifiable {
+    enum CaptureFilter: String, CaseIterable, Identifiable {
         case all, captured, notCaptured
         var id: Self { self }
         var label: String {
@@ -19,7 +19,7 @@ struct AnalyticsView: View {
         }
     }
 
-    private enum WinFilter: String, CaseIterable, Identifiable {
+    enum WinFilter: String, CaseIterable, Identifiable {
         case all, won, eventuallyWon, neverWon
         var id: Self { self }
         var label: String {
@@ -43,6 +43,11 @@ struct AnalyticsView: View {
     @State private var bulkDeleting = false
     @State private var itemPendingDeleteConfirmation: AnalyticsItem?
     @State private var isBulkDeleteConfirmationPresented = false
+    @State private var aiQuestion = ""
+    @State private var aiLoading = false
+    @State private var aiError: String?
+    @State private var aiAnswer: String?
+    @State private var aiFilterItemIds: [String]?
 
     var body: some View {
         ScrollView {
@@ -122,6 +127,36 @@ struct AnalyticsView: View {
             metric("Items", String(items.count))
             metric("Captured", String(capturedCount))
             metric("Not captured", String(items.count - capturedCount))
+        }
+
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                TextField("Ask about your items, e.g. \"what is the highest paid item?\"", text: $aiQuestion)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit { Task { await askAssistant() } }
+                Button {
+                    Task { await askAssistant() }
+                } label: {
+                    Text(aiLoading ? "Thinking…" : "Ask")
+                }
+                .disabled(aiLoading || aiQuestion.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+
+            if let aiError {
+                Text(aiError).font(.callout).foregroundStyle(.secondary)
+            }
+
+            if let aiAnswer {
+                VStack(alignment: .leading, spacing: 8) {
+                    markdownText(aiAnswer)
+                    if aiFilterItemIds != nil {
+                        Button("Clear") { clearAiFilter() }
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+            }
         }
 
         TextField("Search by title or seller", text: $searchQuery)
@@ -208,26 +243,53 @@ struct AnalyticsView: View {
     }
 
     private func filter(_ items: [AnalyticsItem]) -> [AnalyticsItem] {
-        let captureFiltered: [AnalyticsItem]
-        switch captureFilter {
-        case .all: captureFiltered = items
-        case .captured: captureFiltered = items.filter(\.captured)
-        case .notCaptured: captureFiltered = items.filter { !$0.captured }
-        }
+        filterAnalyticsItems(
+            items,
+            aiFilterItemIds: aiFilterItemIds,
+            captureFilter: captureFilter,
+            winFilter: winFilter,
+            searchQuery: searchQuery
+        )
+    }
 
-        let winFiltered: [AnalyticsItem]
-        switch winFilter {
-        case .all: winFiltered = captureFiltered
-        case .won: winFiltered = captureFiltered.filter(\.won)
-        case .eventuallyWon: winFiltered = captureFiltered.filter(\.eventuallyWon)
-        case .neverWon: winFiltered = captureFiltered.filter { !$0.won && !$0.eventuallyWon }
-        }
+    private func askAssistant() async {
+        let question = aiQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !question.isEmpty, !aiLoading, let client = appSettings.apiClient else { return }
 
-        let term = searchQuery.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !term.isEmpty else { return winFiltered }
-        return winFiltered.filter { analyticsItem in
-            analyticsItem.item.title.lowercased().contains(term)
-                || (analyticsItem.item.sellerUserId?.lowercased().contains(term) ?? false)
+        aiLoading = true
+        aiError = nil
+        defer { aiLoading = false }
+
+        do {
+            var body = DefaultMatchingPreferences.requestBody
+            body["question"] = question
+            let raw = try await client.request("/api/market-insights/chat", method: "POST", jsonBody: body)
+            guard (200..<300).contains(raw.statusCode) else {
+                AppLog.network.error("askAssistant: statusCode=\(raw.statusCode, privacy: .public)")
+                aiError = "Could not answer that question right now."
+                return
+            }
+            let result = try JSONDecoder().decode(ChatAnswer.self, from: raw.data)
+            aiAnswer = result.answer
+            aiFilterItemIds = result.itemIds
+        } catch {
+            AppLog.network.error("askAssistant: request failed — \(String(describing: error), privacy: .public)")
+            aiError = "Could not answer that question right now."
+        }
+    }
+
+    private func clearAiFilter() {
+        aiFilterItemIds = nil
+        aiAnswer = nil
+        aiError = nil
+    }
+
+    @ViewBuilder
+    private func markdownText(_ raw: String) -> some View {
+        if let attributed = analyticsAssistantMarkdown(raw) {
+            Text(attributed)
+        } else {
+            Text(raw)
         }
     }
 
@@ -321,6 +383,67 @@ func computeAnalyticsItems(endedWatchlistItems: [HistoryItem], wonItems: [Histor
 private func analyticsItemEndTimestamp(_ value: String?) -> Date {
     guard let value, let date = ISO8601DateFormatter().date(from: value) else { return .distantPast }
     return date
+}
+
+/// The AI assistant's answer echoes item titles verbatim from the user's own
+/// eBay history — seller-controlled, untrusted text (see the system prompt
+/// in `src/market-insights/chat.ts`). `AttributedString`'s Markdown parser
+/// turns `[text](url)` syntax into a live, tappable link with no
+/// host/scheme validation — unlike `safeEbayImageURL`'s precedent for
+/// images — which a crafted listing title could abuse as a phishing vector
+/// inside what looks like trusted in-app UI. Free function (also dodges the
+/// Swift 6 `@MainActor`-inference issue documented below) so the
+/// link-stripping is directly testable rather than only verifiable by eye
+/// in a running app.
+func analyticsAssistantMarkdown(_ raw: String) -> AttributedString? {
+    guard var attributed = try? AttributedString(markdown: raw, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) else {
+        return nil
+    }
+    for run in attributed.runs where run.link != nil {
+        attributed[run.range].link = nil
+    }
+    return attributed
+}
+
+/// Free function for the same Swift 6 `@MainActor`-inference reason
+/// `computeAnalyticsItems` above already is one — see its doc comment.
+/// When `aiFilterItemIds` is set, it SHALL completely override the
+/// capture/win-status/search filters (not layer on top of them), showing
+/// exactly those items in that order — mirroring `app/page.tsx`'s
+/// `filteredItems` `useMemo`, which short-circuits the same way.
+func filterAnalyticsItems(
+    _ items: [AnalyticsItem],
+    aiFilterItemIds: [String]?,
+    captureFilter: AnalyticsView.CaptureFilter,
+    winFilter: AnalyticsView.WinFilter,
+    searchQuery: String
+) -> [AnalyticsItem] {
+    if let aiFilterItemIds {
+        let byId = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        return aiFilterItemIds.compactMap { byId[$0] }
+    }
+
+    let captureFiltered: [AnalyticsItem]
+    switch captureFilter {
+    case .all: captureFiltered = items
+    case .captured: captureFiltered = items.filter(\.captured)
+    case .notCaptured: captureFiltered = items.filter { !$0.captured }
+    }
+
+    let winFiltered: [AnalyticsItem]
+    switch winFilter {
+    case .all: winFiltered = captureFiltered
+    case .won: winFiltered = captureFiltered.filter(\.won)
+    case .eventuallyWon: winFiltered = captureFiltered.filter(\.eventuallyWon)
+    case .neverWon: winFiltered = captureFiltered.filter { !$0.won && !$0.eventuallyWon }
+    }
+
+    let term = searchQuery.trimmingCharacters(in: .whitespaces).lowercased()
+    guard !term.isEmpty else { return winFiltered }
+    return winFiltered.filter { analyticsItem in
+        analyticsItem.item.title.lowercased().contains(term)
+            || (analyticsItem.item.sellerUserId?.lowercased().contains(term) ?? false)
+    }
 }
 
 /// `HistoryItem` plus the two flags Analytics derives from `wonItems` —
