@@ -88,15 +88,20 @@ struct AnalyticsView: View {
             // AVAudioEngine capturing the microphone with no visible mic
             // button left on screen to stop it from — SwiftUI deallocating
             // this view's @State isn't a substitute for an explicit stop.
-            // Cancelling `voiceTask` additionally covers the case where
-            // this fires while `voiceService.start()` is still suspended
-            // in its authorization await (before there's anything for
-            // `stop()` itself to clean up yet) — `start()` checks
-            // `Task.isCancelled` right after that await and bails out
-            // before ever touching the microphone.
-            voiceTask?.cancel()
-            voiceService.stop()
-            voiceListening = false
+            stopVoiceInput()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            // `@Environment(\.scenePhase)` was tried here first and doesn't
+            // work for this on macOS — confirmed live, mic stayed on in the
+            // menu bar after Cmd+Tab away. SwiftUI's scene phase tracks
+            // window visibility within this app, not whether the app
+            // itself still has focus; Cmd+Tab-ing to another app leaves
+            // this window fully visible (still `.active`) even though
+            // NSApplication is no longer the frontmost app. AppKit's own
+            // `didResignActiveNotification` is the actual signal for that
+            // — it fires exactly on Cmd+Tab away / clicking another app,
+            // independent of scene/window state.
+            stopVoiceInput()
         }
         .confirmationDialog(
             itemPendingDeleteConfirmation.map { "Remove \"\($0.item.title)\" from price history? This can't be undone." } ?? "",
@@ -310,30 +315,34 @@ struct AnalyticsView: View {
         aiError = nil
     }
 
+    /// Shared by every path that needs to stop voice input mid-listen —
+    /// tapping the mic button again, this view disappearing (tab switch),
+    /// and the app losing focus entirely. Cancelling `voiceTask` matters
+    /// even when nothing is listening yet: if `voiceService.start()` is
+    /// still suspended awaiting authorization (e.g. the permission dialog
+    /// sitting open, or a slow first-use prompt) and never got the chance
+    /// to actually start capturing, `voiceService.stop()` alone is a no-op
+    /// (it guards on `isListening`), but the suspended Task is still alive
+    /// and would otherwise resume once authorization resolves and start
+    /// capturing with no visible way left to stop it. `start()` checks
+    /// `Task.isCancelled` right after that await and bails out before
+    /// ever touching the microphone.
+    private func stopVoiceInput() {
+        voiceTask?.cancel()
+        voiceService.stop()
+        voiceListening = false
+    }
+
     private func toggleVoiceInput() {
         if voiceListening {
-            // Cancels the same `voiceTask` `.onDisappear` cancels — without
-            // this, tapping the mic button again while `start()` is still
-            // suspended awaiting authorization (e.g. the permission dialog
-            // sitting open) would flip the UI back to "not listening" but
-            // leave the original Task alive; it would resume once
-            // authorization eventually resolves and start capturing with
-            // no visible way left to stop it, the exact same race
-            // `.onDisappear`'s cancellation closes for the tab-switch case.
-            voiceTask?.cancel()
-            voiceService.stop()
-            voiceListening = false
+            stopVoiceInput()
             return
         }
 
         voiceListening = true
         aiError = nil
-        // Held so `.onDisappear` can cancel it — without this, switching
-        // tabs while this task is still suspended in
-        // `voiceService.start()`'s authorization await would leave it to
-        // resume after the view (and its mic-stop button) is already gone,
-        // installing the audio tap and starting capture with nothing left
-        // on screen able to stop it.
+        // Held so `stopVoiceInput()` can cancel it from any of its three
+        // call sites — see that function's doc comment.
         voiceTask = Task {
             await voiceService.start(
                 onTranscript: { text in aiQuestion = text },
