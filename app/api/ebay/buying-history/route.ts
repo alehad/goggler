@@ -96,7 +96,9 @@ async function handleBuyingHistoryRequest(request: NextRequest, matchingPreferen
       }
 
       console.warn("Live eBay history fetch failed", {
-        type: "unexpected_error"
+        type: "unexpected_error",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
       });
       return withInternalSessionCookie(
         NextResponse.json({ error: "live_history_error" }, { status: 502 }),
