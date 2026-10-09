@@ -10,6 +10,13 @@ Every implementation step must be preceded by an OpenSpec planning step. The pla
 
 goggler is a personal-first eBay UK auction tracker. It imports authenticated buying history, tracks items the user did not win, searches for likely exact relistings, and presents matches in an app dashboard.
 
+## Server-Side Business Logic Invariant
+
+- All business logic — matching/relisting rules, decisions about which records belong in a result set, and computed derived values (averages, won/eventually-won flags, price-history assembly) — MUST live in the server layer (`src/`, surfaced through `app/api/*`), never duplicated or independently reimplemented in a client.
+- A client (the web app or the macOS app) may only do final-mile work on a dataset the server already assembled in full: visual rendering, client-side filtering/search/sort of an already-complete result set, and display formatting (currency, dates). A client must never decide which items belong in the result, recompute a derived value the server already computed, or carry its own copy of matching/business rules.
+- Any user-adjustable setting that affects business logic (e.g. matching preferences) MUST be persisted server-side, per-user, and read by the server when assembling the dataset — never kept only in browser `localStorage`, `UserDefaults`, or a client-hardcoded default. A setting that changes what the *data* is, not just how it's displayed, is business logic, not UI state.
+- Rationale: both the web app and macOS app call the same backend but each maintains its own UI. Reimplementing business logic (or its configuration) on one client and not the other is exactly how "the same feature" silently shows different results across clients — confirmed in practice: matching preferences lived only in the web browser's `localStorage`, while the macOS app always used a hardcoded default, so the same item could resolve to different relisting matches on each. The fix is structural, not a one-off patch: push every such decision server-side so every client reading a result set is reading the *same* result set.
+
 ## Security And Persistence Invariants
 
 - eBay OAuth access tokens, refresh tokens, authorization codes, and other OAuth credential material must remain scoped to the active server-side session only.
