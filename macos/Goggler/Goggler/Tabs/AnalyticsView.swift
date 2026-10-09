@@ -1,12 +1,19 @@
 import SwiftUI
 
 /// Native port of the web app's "Price history capture" tab (`Analytics` in
-/// app/page.tsx), scoped to the list core plus capture/delete — unlike
-/// Watchlist/Purchases' read-only-first scoping, this tab's entire point is
-/// the capture action, so it's included here. The AI assistant (chat +
-/// voice) and the matched-sales price chart are deferred — see
-/// macos-analytics-tab/proposal.md.
+/// app/page.tsx), including the AI assistant (chat + voice, see
+/// macos-analytics-ai-assistant/macos-analytics-voice-input) and the
+/// matched-sales price chart (see macos-analytics-chart).
 struct AnalyticsView: View {
+    /// Mirrors app/page.tsx's `MatchedSalesState` union for the Analytics
+    /// chart's matched-sales fetch.
+    private enum MatchedSalesState {
+        case idle
+        case loading
+        case ready(sales: [MatchedSalePoint], summary: MatchedSalesSummary?)
+        case unavailable
+    }
+
     enum CaptureFilter: String, CaseIterable, Identifiable {
         case all, captured, notCaptured
         var id: Self { self }
@@ -51,37 +58,57 @@ struct AnalyticsView: View {
     @State private var voiceService = VoiceInputService()
     @State private var voiceListening = false
     @State private var voiceTask: Task<Void, Never>?
+    @State private var selectedItemId: String?
+    @State private var matchedSalesState: MatchedSalesState = .idle
+
+    /// Flat list of every item the Analytics tab shows, independent of the
+    /// current filter/search — the matched-sales `.task(id:)` fetch below
+    /// needs to resolve `selectedItemId` back to an item regardless of
+    /// whatever filter is currently narrowing `content(for:)`'s own list.
+    private var allItems: [AnalyticsItem] {
+        guard case .ready(let history) = store.buyingHistoryState else { return [] }
+        return computeAnalyticsItems(endedWatchlistItems: history.endedWatchlistItems, wonItems: history.wonItems)
+    }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    header
 
-                switch store.buyingHistoryState {
-                case .idle, .loading:
-                    ProgressView()
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, 40)
-                case .reauthRequired:
-                    ContentUnavailableView(
-                        "eBay not connected",
-                        systemImage: "link.circle",
-                        description: Text("Connect eBay to view price history.")
-                    )
-                case .unavailable(let message):
-                    ContentUnavailableView(
-                        "Buying history unavailable",
-                        systemImage: "exclamationmark.triangle",
-                        description: Text(message)
-                    )
-                case .ready(let history):
-                    content(for: history)
+                    switch store.buyingHistoryState {
+                    case .idle, .loading:
+                        ProgressView()
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.top, 40)
+                    case .reauthRequired:
+                        ContentUnavailableView(
+                            "eBay not connected",
+                            systemImage: "link.circle",
+                            description: Text("Connect eBay to view price history.")
+                        )
+                    case .unavailable(let message):
+                        ContentUnavailableView(
+                            "Buying history unavailable",
+                            systemImage: "exclamationmark.triangle",
+                            description: Text(message)
+                        )
+                    case .ready(let history):
+                        content(for: history)
+                    }
+
+                    Spacer()
                 }
-
-                Spacer()
+                .padding(24)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(24)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .onChange(of: selectedItemId) { _, newValue in
+                guard newValue != nil else { return }
+                withAnimation { scrollProxy.scrollTo("analyticsChartPanel", anchor: .top) }
+            }
+        }
+        .task(id: selectedItemId) {
+            await loadMatchedSales()
         }
         .onDisappear {
             // Switching to another tab mid-listen would otherwise leave
@@ -150,6 +177,27 @@ struct AnalyticsView: View {
             metric("Items", String(items.count))
             metric("Captured", String(capturedCount))
             metric("Not captured", String(items.count - capturedCount))
+        }
+
+        let selectedItem = items.first { $0.id == selectedItemId }
+
+        AnalyticsChart(
+            points: chartPoints,
+            selectedItemId: selectedItemId,
+            emptyLabel: chartEmptyLabel(selectedItem: selectedItem),
+            subtitle: selectedItem.map { "Matched sales for \"\($0.item.title)\"" },
+            onSelect: { itemId in selectedItemId = itemId }
+        )
+        .id("analyticsChartPanel")
+
+        if let summary = matchedSalesSummary, let selectedItem, summary.count > 0 {
+            HStack(spacing: 16) {
+                metric("Sales", String(summary.count))
+                metric("My price paid", myPricePaidLabel(selectedItem: selectedItem))
+                metric("Average", formatMoney(Money(value: summary.average, currency: selectedItem.item.currentPrice?.currency ?? "GBP")))
+                metric("Lowest", formatMoney(Money(value: summary.lowest.value, currency: selectedItem.item.currentPrice?.currency ?? "GBP")))
+                metric("Highest", formatMoney(Money(value: summary.highest.value, currency: selectedItem.item.currentPrice?.currency ?? "GBP")))
+            }
         }
 
         VStack(alignment: .leading, spacing: 8) {
@@ -262,8 +310,10 @@ struct AnalyticsView: View {
                         analyticsItem: analyticsItem,
                         capturing: pendingItemIds.contains(analyticsItem.id),
                         deleting: deletingItemIds.contains(analyticsItem.id),
+                        selected: analyticsItem.id == selectedItemId,
                         onCapture: { Task { await captureOne(analyticsItem) } },
-                        onDeleteRequested: { itemPendingDeleteConfirmation = analyticsItem }
+                        onDeleteRequested: { itemPendingDeleteConfirmation = analyticsItem },
+                        onSelect: { selectedItemId = analyticsItem.id }
                     )
                     if analyticsItem.id != filteredItems.last?.id {
                         Divider()
@@ -371,6 +421,82 @@ struct AnalyticsView: View {
             Text(label).font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func formatMoney(_ money: Money) -> String {
+        money.value.formatted(.currency(code: money.currency))
+    }
+
+    /// Sorted ascending by date, matching `PurchaseChart`'s own point
+    /// ordering in app/page.tsx (its x-axis assumes already-sorted input).
+    private var chartPoints: [MatchedSalePoint] {
+        guard case .ready(let sales, _) = matchedSalesState else { return [] }
+        return sales.sorted { analyticsChartPointDate($0) < analyticsChartPointDate($1) }
+    }
+
+    private var matchedSalesSummary: MatchedSalesSummary? {
+        guard case .ready(_, let summary) = matchedSalesState else { return nil }
+        return summary
+    }
+
+    /// Mirrors app/page.tsx's four `emptyLabel` branches for the Analytics
+    /// chart exactly.
+    private func chartEmptyLabel(selectedItem: AnalyticsItem?) -> String {
+        guard let selectedItem else {
+            return "Select an item below to see its price history"
+        }
+        if case .loading = matchedSalesState {
+            return "Loading matched sales..."
+        }
+        if selectedItem.item.relistingGroupId == nil || selectedItem.item.currentPrice == nil {
+            return "This item doesn't have enough data to match other sales"
+        }
+        return "No matched sales found yet"
+    }
+
+    /// Mirrors app/page.tsx's `myPricePaid` lookup: prefer the matched sale
+    /// that is this exact item (so the chart and the metric agree on the
+    /// same recorded sale), falling back to the selected row's own price if
+    /// that specific sale isn't present in the matched-sales result.
+    private func myPricePaidLabel(selectedItem: AnalyticsItem) -> String {
+        if let matchedSale = chartPoints.first(where: { $0.id == selectedItem.id }) {
+            return formatMoney(matchedSale.price)
+        }
+        return selectedItem.item.currentPrice.map { formatMoney($0) } ?? "-"
+    }
+
+    private func loadMatchedSales() async {
+        guard let selectedItemId, let selectedItem = allItems.first(where: { $0.id == selectedItemId }) else {
+            matchedSalesState = .idle
+            return
+        }
+        guard let relistingGroupId = selectedItem.item.relistingGroupId, let currency = selectedItem.item.currentPrice?.currency else {
+            matchedSalesState = .unavailable
+            return
+        }
+        guard let client = appSettings.apiClient else { return }
+
+        matchedSalesState = .loading
+        do {
+            let (response, _) = try await client.requestDecoded(
+                "/api/market-insights/matched-sales",
+                as: MatchedSalesResponse.self,
+                queryItems: [
+                    URLQueryItem(name: "relistingGroupId", value: relistingGroupId),
+                    URLQueryItem(name: "currency", value: currency),
+                    URLQueryItem(name: "exactTitleMatch", value: "true"),
+                    URLQueryItem(name: "criteriaText", value: #"\b[A-Z]{1,5}-?\d{1,6}\b"#)
+                ]
+            )
+            if !Task.isCancelled {
+                matchedSalesState = .ready(sales: response.sales, summary: response.summary)
+            }
+        } catch {
+            if !Task.isCancelled {
+                AppLog.network.error("loadMatchedSales: request failed — \(String(describing: error), privacy: .public)")
+                matchedSalesState = .unavailable
+            }
+        }
     }
 
     private func captureOne(_ analyticsItem: AnalyticsItem) async {
@@ -534,8 +660,10 @@ private struct AnalyticsRow: View {
     let analyticsItem: AnalyticsItem
     let capturing: Bool
     let deleting: Bool
+    let selected: Bool
     let onCapture: () -> Void
     let onDeleteRequested: () -> Void
+    let onSelect: () -> Void
 
     private var item: HistoryItem { analyticsItem.item }
     private var isWonOnly: Bool { item.list == "WonList" }
@@ -576,6 +704,10 @@ private struct AnalyticsRow: View {
             }
         }
         .padding(.vertical, 10)
+        .padding(.horizontal, 8)
+        .background(selected ? Color.accentColor.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+        .contentShape(Rectangle())
+        .onTapGesture { onSelect() }
     }
 
     private var subtitle: String {
