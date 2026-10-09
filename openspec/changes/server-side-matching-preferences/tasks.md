@@ -29,5 +29,5 @@
 ## Ship
 
 - [x] Manual functional testing pause. Before handing off, ran my own deterministic smoke test against the live backend through its real origin (`https://goggler.tailde35d2.ts.net`, the same path both real clients use): `PUT` with a distinguishing value, `GET` reflects it, restored the default afterward. Confirmed the full save/load round-trip works end-to-end. (Found along the way: directly `curl`-ing the standalone server on raw `localhost:3000` fails CSRF for *any* mutating route, old or new — reproduced identically on the pre-existing, untouched `chat` route, so it's not a regression from this change; the server's only supported access path is through its Tailscale-fronted origin, consistent with AGENTS.md.) The cross-client bidirectional check (change from web, confirm macOS reflects it without any macOS-side change, and vice versa) is left for the user, since that's the one part only a human comparing both live UIs can really confirm.
-- [ ] Run dual security review (security-review skill + Copilot CLI).
-- [ ] Ship via PR.
+- [x] Run dual security review (security-review skill + Copilot CLI). Both clean: no HIGH/MEDIUM findings. Net effect on attack surface is a reduction — 9 routes stop trusting a client-supplied value that affects query results.
+- [x] Ship via PR.
