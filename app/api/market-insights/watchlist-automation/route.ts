@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server.js";
 import { validateSameOriginRequest } from "../../../../src/auth/csrf.ts";
 import { getOrCreateCurrentUser } from "../../../../src/auth/current-user.ts";
 import { loadEbayConfig } from "../../../../src/ebay/config.ts";
-import { parseMatchingPreferences } from "../../../../src/ebay/matching-preferences.ts";
 import { requireSessionEbayAccessToken } from "../../../../src/ebay/session-access.ts";
 import { discoverAndWatchLiveAuctions, type WatchlistAutomationEvent } from "../../../../src/market-insights/watchlist-automation.ts";
+import { getMatchingPreferencesForUser } from "../../../../src/persistence/matching-preferences.ts";
 
 export async function POST(request: NextRequest) {
   const csrf = validateSameOriginRequest(request);
@@ -22,15 +22,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const body = (await request.json().catch(() => ({}))) as Partial<{
-    exactTitleMatch: boolean;
-    criteriaText: string;
-  }>;
-
-  const matchingPreferences = parseMatchingPreferences({
-    exactTitleMatch: body.exactTitleMatch,
-    criteriaText: body.criteriaText
-  });
+  const matchingPreferences = await getMatchingPreferencesForUser(currentUser.context.user.id);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({

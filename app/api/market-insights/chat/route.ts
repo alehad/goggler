@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server.js";
 import { validateSameOriginRequest } from "../../../../src/auth/csrf.ts";
 import { getOrCreateCurrentUser } from "../../../../src/auth/current-user.ts";
-import { parseMatchingPreferences } from "../../../../src/ebay/matching-preferences.ts";
 import { answerAnalyticsQuestion } from "../../../../src/market-insights/chat.ts";
+import { getMatchingPreferencesForUser } from "../../../../src/persistence/matching-preferences.ts";
 
 const MAX_QUESTION_LENGTH = 500;
 
@@ -16,8 +16,6 @@ export async function POST(request: NextRequest) {
 
   const body = (await request.json().catch(() => ({}))) as Partial<{
     question: unknown;
-    exactTitleMatch: boolean;
-    criteriaText: string;
   }>;
 
   const question = boundedQuestion(body.question);
@@ -28,10 +26,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const matchingPreferences = parseMatchingPreferences({
-    exactTitleMatch: body.exactTitleMatch,
-    criteriaText: body.criteriaText
-  });
+  const matchingPreferences = await getMatchingPreferencesForUser(currentUser.context.user.id);
 
   try {
     const result = await answerAnalyticsQuestion(currentUser.context.user.id, question, matchingPreferences);

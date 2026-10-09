@@ -277,6 +277,26 @@ struct AnalyticsItemComputationTests {
     }
 }
 
+struct MatchingPreferencesCodingTests {
+    @Test("Decodes a GET /api/matching-preferences response")
+    func decodesMatchingPreferences() throws {
+        let json = #"{"exactTitleMatch":false,"criteriaText":"TBM\\s*\\d{1,4}"}"#
+        let result = try JSONDecoder().decode(MatchingPreferences.self, from: Data(json.utf8))
+
+        #expect(result.exactTitleMatch == false)
+        #expect(result.criteriaText == #"TBM\s*\d{1,4}"#)
+    }
+
+    @Test("Round-trips through encode then decode, for the PUT request body")
+    func roundTrips() throws {
+        let original = MatchingPreferences(exactTitleMatch: true, criteriaText: #"\b[A-Z]{1,5}-?\d{1,6}\b"#)
+        let encoded = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(MatchingPreferences.self, from: encoded)
+
+        #expect(decoded == original)
+    }
+}
+
 struct ChatAnswerDecodingTests {
     @Test("Decodes a POST /api/market-insights/chat response")
     func decodesChatAnswer() throws {

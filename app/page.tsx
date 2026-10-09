@@ -25,11 +25,7 @@ import {
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import {
-  DEFAULT_MATCHING_PREFERENCES,
-  LEGACY_DEFAULT_MATCHING_CRITERIA_TEXTS,
-  type MatchingPreferences
-} from "../src/ebay/matching-preferences.ts";
+import type { MatchingPreferences } from "../src/ebay/matching-preferences.ts";
 import { buildPurchaseChartPoints, type PurchaseChartPoint } from "../src/ebay/purchase-analytics.ts";
 import { ebaySellerProfileUrl } from "../src/ebay/seller-profile.ts";
 import { safeEbayImageUrl, safeEbayItemUrl } from "../src/http/safe-external-url.ts";
@@ -42,7 +38,6 @@ type LostFilter = "all" | "neverWon" | "eventuallyWon";
 type CaptureFilter = "all" | "captured" | "notCaptured";
 type HomeFeedFilter = "search" | "all" | "onWatchlist" | "relistings" | "won" | "neverWon";
 type RelistingFormatFilter = "both" | "auction" | "buyNow";
-const MATCHING_PREFERENCES_STORAGE_KEY = "goggler.matchingPreferences";
 
 // The assistant's answer text can echo real eBay listing titles, which are third-party
 // content (any seller can title a listing however they like) flowing in unsanitized from
@@ -260,7 +255,6 @@ export default function Home() {
   const [accountMessage, setAccountMessage] = useState("");
   const [historyState, setHistoryState] = useState<HistoryState>({ status: "idle" });
   const [streamProgress, setStreamProgress] = useState<HistoryStreamProgress | undefined>();
-  const [matchingPreferences, setMatchingPreferences] = useState<MatchingPreferences>(DEFAULT_MATCHING_PREFERENCES);
   const [searchDraft, setSearchDraft] = useState("");
   const [homeSearchQuery, setHomeSearchQuery] = useState("");
   const [homeSearchState, setHomeSearchState] = useState<HomeSearchState>({ status: "idle" });
@@ -336,9 +330,7 @@ export default function Home() {
     let response: Response;
     try {
       response = await fetch("/api/ebay/buying-history/stream", {
-        body: JSON.stringify(matchingPreferences),
         cache: "no-store",
-        headers: { "Content-Type": "application/json" },
         method: "POST"
       });
     } catch {
@@ -452,30 +444,6 @@ export default function Home() {
   }
 
   useEffect(() => {
-    const storedPreferences = window.localStorage.getItem(MATCHING_PREFERENCES_STORAGE_KEY);
-    if (!storedPreferences) {
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(storedPreferences) as Partial<MatchingPreferences>;
-      setMatchingPreferences({
-        exactTitleMatch:
-          typeof parsed.exactTitleMatch === "boolean"
-            ? parsed.exactTitleMatch
-            : DEFAULT_MATCHING_PREFERENCES.exactTitleMatch,
-        criteriaText: storedCriteriaText(parsed.criteriaText)
-      });
-    } catch {
-      setMatchingPreferences(DEFAULT_MATCHING_PREFERENCES);
-    }
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(MATCHING_PREFERENCES_STORAGE_KEY, JSON.stringify(matchingPreferences));
-  }, [matchingPreferences]);
-
-  useEffect(() => {
     void refreshEbaySessionState();
   }, []);
 
@@ -547,11 +515,7 @@ export default function Home() {
       let response: Response;
       try {
         response = await fetch("/api/ebay/search", {
-          body: JSON.stringify({
-            query,
-            exactTitleMatch: matchingPreferences.exactTitleMatch,
-            criteriaText: matchingPreferences.criteriaText
-          }),
+          body: JSON.stringify({ query }),
           cache: "no-store",
           headers: { "Content-Type": "application/json" },
           method: "POST"
@@ -627,7 +591,6 @@ export default function Home() {
         {activeTab === "dashboard" && (
           <Dashboard
             historyState={historyState}
-            matchingPreferences={matchingPreferences}
             searchQuery={homeSearchQuery}
             searchState={homeSearchState}
             clearSearch={() => {
@@ -645,7 +608,6 @@ export default function Home() {
         {activeTab === "won" && (
           <Won
             historyState={historyState}
-            matchingPreferences={matchingPreferences}
             refreshBuyingHistory={refreshBuyingHistory}
             onViewPriceHistory={viewPriceHistory}
             streamProgress={streamProgress}
@@ -654,7 +616,6 @@ export default function Home() {
         {activeTab === "analytics" && (
           <Analytics
             historyState={historyState}
-            matchingPreferences={matchingPreferences}
             refreshBuyingHistory={refreshBuyingHistory}
             selectedItemId={analyticsSelectedItemId}
             onSelectItem={setAnalyticsSelectedItemId}
@@ -666,13 +627,7 @@ export default function Home() {
           />
         )}
         {activeTab === "account" && (
-          <Account
-            ebayConfig={ebayConfigStatus?.config}
-            ebayConnection={ebaySession?.connection}
-            matchingPreferences={matchingPreferences}
-            message={accountMessage}
-            setMatchingPreferences={setMatchingPreferences}
-          />
+          <Account ebayConfig={ebayConfigStatus?.config} ebayConnection={ebaySession?.connection} message={accountMessage} />
         )}
       </section>
 
@@ -700,7 +655,6 @@ export default function Home() {
 function Dashboard({
   clearSearch,
   historyState,
-  matchingPreferences,
   searchQuery,
   searchState,
   refreshBuyingHistory,
@@ -708,7 +662,6 @@ function Dashboard({
 }: {
   clearSearch: () => void;
   historyState: HistoryState;
-  matchingPreferences: MatchingPreferences;
   searchQuery: string;
   searchState: HomeSearchState;
   refreshBuyingHistory: () => Promise<void>;
@@ -751,9 +704,7 @@ function Dashboard({
     setFindingAuctions(true);
     try {
       const response = await fetch("/api/market-insights/watchlist-automation", {
-        body: JSON.stringify(matchingPreferences),
         cache: "no-store",
-        headers: { "Content-Type": "application/json" },
         method: "POST"
       });
 
@@ -1191,13 +1142,11 @@ function Tracking({
 
 function Won({
   historyState,
-  matchingPreferences,
   refreshBuyingHistory,
   onViewPriceHistory,
   streamProgress
 }: {
   historyState: HistoryState;
-  matchingPreferences: MatchingPreferences;
   refreshBuyingHistory: () => Promise<void>;
   onViewPriceHistory: (itemId: string, relistingGroupId: string | undefined) => void;
   streamProgress?: HistoryStreamProgress;
@@ -1257,7 +1206,7 @@ function Won({
     setSummariesState({ status: "loading" });
 
     fetch("/api/market-insights/matched-sales/summary", {
-      body: JSON.stringify({ groups: [...groups.values()], matchingPreferences }),
+      body: JSON.stringify({ groups: [...groups.values()] }),
       cache: "no-store",
       headers: { "Content-Type": "application/json" },
       method: "POST"
@@ -1277,7 +1226,7 @@ function Won({
     return () => {
       cancelled = true;
     };
-  }, [wonItems, matchingPreferences.criteriaText, matchingPreferences.exactTitleMatch]);
+  }, [wonItems]);
 
   const summaries = summariesState.status === "ready" ? summariesState.summaries : {};
 
@@ -1570,7 +1519,6 @@ function PurchaseCard({
 
 function Analytics({
   historyState,
-  matchingPreferences,
   refreshBuyingHistory,
   selectedItemId,
   onSelectItem,
@@ -1581,7 +1529,6 @@ function Analytics({
   streamProgress
 }: {
   historyState: HistoryState;
-  matchingPreferences: MatchingPreferences;
   refreshBuyingHistory: () => Promise<void>;
   selectedItemId: string | undefined;
   onSelectItem: (itemId: string | undefined) => void;
@@ -1710,12 +1657,7 @@ function Analytics({
     let cancelled = false;
     setMatchedSalesState({ status: "loading" });
 
-    const params = new URLSearchParams({
-      relistingGroupId,
-      currency,
-      exactTitleMatch: String(matchingPreferences.exactTitleMatch),
-      criteriaText: matchingPreferences.criteriaText
-    });
+    const params = new URLSearchParams({ relistingGroupId, currency });
 
     fetch(`/api/market-insights/matched-sales?${params.toString()}`, { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : Promise.reject(new Error("matched_sales_unavailable"))))
@@ -1733,7 +1675,7 @@ function Analytics({
     return () => {
       cancelled = true;
     };
-  }, [matchingPreferences.criteriaText, matchingPreferences.exactTitleMatch, selectedItem]);
+  }, [selectedItem]);
 
   const matchedSales = matchedSalesState.status === "ready" ? matchedSalesState.sales : [];
   const summary = matchedSalesState.status === "ready" ? matchedSalesState.summary : undefined;
@@ -1766,11 +1708,7 @@ function Analytics({
 
     try {
       const response = await fetch("/api/market-insights/chat", {
-        body: JSON.stringify({
-          question,
-          exactTitleMatch: matchingPreferences.exactTitleMatch,
-          criteriaText: matchingPreferences.criteriaText
-        }),
+        body: JSON.stringify({ question }),
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
         method: "POST"
@@ -2340,16 +2278,61 @@ function EbayAccountControl({
 function Account({
   ebayConfig,
   ebayConnection,
-  matchingPreferences,
-  message,
-  setMatchingPreferences
+  message
 }: {
   ebayConfig: EbayConfigStatus["config"] | undefined;
   ebayConnection: EbaySession["connection"] | undefined;
-  matchingPreferences: MatchingPreferences;
   message: string;
-  setMatchingPreferences: (preferences: MatchingPreferences) => void;
 }) {
+  const [savedPreferences, setSavedPreferences] = useState<MatchingPreferences | undefined>();
+  const [draft, setDraft] = useState<MatchingPreferences | undefined>();
+  const [saving, setSaving] = useState(false);
+  const [prefsMessage, setPrefsMessage] = useState("");
+
+  useEffect(() => {
+    fetch("/api/matching-preferences", { cache: "no-store" })
+      .then((response) => (response.ok ? (response.json() as Promise<MatchingPreferences>) : Promise.reject(new Error("unavailable"))))
+      .then((preferences) => {
+        setSavedPreferences(preferences);
+        setDraft(preferences);
+      })
+      .catch(() => setPrefsMessage("Could not load matching preferences"));
+  }, []);
+
+  async function saveMatchingPreferences() {
+    if (!draft || saving) {
+      return;
+    }
+
+    setSaving(true);
+    setPrefsMessage("");
+    try {
+      const response = await fetch("/api/matching-preferences", {
+        body: JSON.stringify(draft),
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        method: "PUT"
+      });
+      if (!response.ok) {
+        setPrefsMessage("Could not save matching preferences");
+        return;
+      }
+      const saved = (await response.json()) as MatchingPreferences;
+      setSavedPreferences(saved);
+      setDraft(saved);
+      setPrefsMessage("Matching preferences saved");
+    } catch {
+      setPrefsMessage("Could not save matching preferences");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const hasUnsavedChanges =
+    draft !== undefined &&
+    savedPreferences !== undefined &&
+    (draft.exactTitleMatch !== savedPreferences.exactTitleMatch || draft.criteriaText !== savedPreferences.criteriaText);
+
   return (
     <section className="content account-layout">
       <div className="section-heading">
@@ -2370,39 +2353,42 @@ function Account({
         <div className="setting-row">
           <div>
             <h2>Matching preferences</h2>
-            <p>Applies when buying history is refreshed</p>
+            <p>Applies when buying history is refreshed — shared across every client signed in to this account</p>
           </div>
-          <div className="matching-controls">
-            <label className="checkbox-control">
-              <input
-                checked={matchingPreferences.exactTitleMatch}
-                onChange={(event) =>
-                  setMatchingPreferences({
-                    ...matchingPreferences,
-                    exactTitleMatch: event.target.checked
-                  })
-                }
-                type="checkbox"
-              />
-              <span>Exact title match</span>
-            </label>
-            <label className="criteria-control">
-              <span>Criteria</span>
-              <textarea
-                onChange={(event) =>
-                  setMatchingPreferences({
-                    ...matchingPreferences,
-                    criteriaText: event.target.value
-                  })
-                }
-                rows={3}
-                spellCheck={false}
-                value={matchingPreferences.criteriaText}
-              />
-            </label>
-          </div>
+          {draft ? (
+            <div className="matching-controls">
+              <label className="checkbox-control">
+                <input
+                  checked={draft.exactTitleMatch}
+                  onChange={(event) => setDraft({ ...draft, exactTitleMatch: event.target.checked })}
+                  type="checkbox"
+                />
+                <span>Exact title match</span>
+              </label>
+              <label className="criteria-control">
+                <span>Criteria</span>
+                <textarea
+                  onChange={(event) => setDraft({ ...draft, criteriaText: event.target.value })}
+                  rows={3}
+                  spellCheck={false}
+                  value={draft.criteriaText}
+                />
+              </label>
+              <button
+                className="secondary-button compact"
+                disabled={!hasUnsavedChanges || saving}
+                onClick={() => void saveMatchingPreferences()}
+                type="button"
+              >
+                {saving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          ) : (
+            <p>Loading...</p>
+          )}
         </div>
       </div>
+      {prefsMessage && <p className="form-message">{prefsMessage}</p>}
       {message && <p className="form-message">{message}</p>}
     </section>
   );
@@ -2556,18 +2542,6 @@ function getHistoryMessage(state: HistoryState, progress?: HistoryStreamProgress
     case "unavailable":
       return state.message;
   }
-}
-
-function storedCriteriaText(value: unknown): string {
-  if (typeof value !== "string" || !value.trim()) {
-    return DEFAULT_MATCHING_PREFERENCES.criteriaText;
-  }
-
-  return LEGACY_DEFAULT_MATCHING_CRITERIA_TEXTS.includes(
-    value.trim() as (typeof LEGACY_DEFAULT_MATCHING_CRITERIA_TEXTS)[number]
-  )
-    ? DEFAULT_MATCHING_PREFERENCES.criteriaText
-    : value;
 }
 
 function filterHomeRows(

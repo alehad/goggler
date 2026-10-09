@@ -7,9 +7,10 @@ import {
   fetchEbayMarketHistory,
   EbayMarketplaceInsightsError
 } from "../../../../src/ebay/marketplace-insights-client.ts";
-import { catalogueIdForTitle, parseMatchingPreferences } from "../../../../src/ebay/matching-preferences.ts";
+import { catalogueIdForTitle, type MatchingPreferences } from "../../../../src/ebay/matching-preferences.ts";
 import { getEbayApplicationAccessToken, EbayOAuthError } from "../../../../src/ebay/oauth-client.ts";
 import { requireSessionEbayAccessToken } from "../../../../src/ebay/session-access.ts";
+import { getMatchingPreferencesForUser } from "../../../../src/persistence/matching-preferences.ts";
 
 export async function POST(request: NextRequest) {
   const csrf = validateSameOriginRequest(request);
@@ -28,11 +29,10 @@ export async function POST(request: NextRequest) {
 
   const body = (await request.json().catch(() => ({}))) as Partial<{
     title: string;
-    criteriaText: string;
-    exactTitleMatch: boolean;
   }>;
   const title = typeof body.title === "string" ? body.title : "";
-  const queryDetails = marketHistoryQueryForTitle(title, body);
+  const matchingPreferences = await getMatchingPreferencesForUser(currentUser.context.user.id);
+  const queryDetails = marketHistoryQueryForTitle(title, matchingPreferences);
   const query = boundedMarketQuery(queryDetails.query);
   if (!query) {
     return withInternalSessionCookie(
@@ -77,9 +77,8 @@ export async function POST(request: NextRequest) {
 
 function marketHistoryQueryForTitle(
   title: string,
-  input: { exactTitleMatch?: string | boolean | null; criteriaText?: string | null }
+  preferences: MatchingPreferences
 ): { query: string; source: "catalogue_id" | "title" } {
-  const preferences = parseMatchingPreferences(input);
   const catalogueId = catalogueIdForTitle(title, preferences.criteriaText);
   return catalogueId ? { query: catalogueId, source: "catalogue_id" } : { query: title, source: "title" };
 }
