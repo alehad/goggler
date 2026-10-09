@@ -342,9 +342,7 @@ struct AnalyticsView: View {
         defer { aiLoading = false }
 
         do {
-            var body = DefaultMatchingPreferences.requestBody
-            body["question"] = question
-            let raw = try await client.request("/api/market-insights/chat", method: "POST", jsonBody: body)
+            let raw = try await client.request("/api/market-insights/chat", method: "POST", jsonBody: ["question": question])
             guard (200..<300).contains(raw.statusCode) else {
                 AppLog.network.error("askAssistant: statusCode=\(raw.statusCode, privacy: .public)")
                 aiError = "Could not answer that question right now."
@@ -483,9 +481,7 @@ struct AnalyticsView: View {
                 as: MatchedSalesResponse.self,
                 queryItems: [
                     URLQueryItem(name: "relistingGroupId", value: relistingGroupId),
-                    URLQueryItem(name: "currency", value: currency),
-                    URLQueryItem(name: "exactTitleMatch", value: "true"),
-                    URLQueryItem(name: "criteriaText", value: #"\b[A-Z]{1,5}-?\d{1,6}\b"#)
+                    URLQueryItem(name: "currency", value: currency)
                 ]
             )
             if !Task.isCancelled {

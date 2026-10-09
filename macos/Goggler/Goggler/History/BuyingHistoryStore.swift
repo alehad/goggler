@@ -103,11 +103,7 @@ final class BuyingHistoryStore {
 
     private func loadBuyingHistory(using client: GogglerAPIClient) async {
         do {
-            let raw = try await client.request(
-                "/api/ebay/buying-history",
-                method: "POST",
-                jsonBody: DefaultMatchingPreferences.requestBody
-            )
+            let raw = try await client.request("/api/ebay/buying-history", method: "POST")
             AppLog.network.debug("buying-history: statusCode=\(raw.statusCode, privacy: .public)")
 
             switch raw.statusCode {

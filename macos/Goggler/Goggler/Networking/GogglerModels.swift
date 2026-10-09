@@ -138,3 +138,13 @@ struct MatchedSalesResponse: Decodable, Sendable {
     let sales: [MatchedSalePoint]
     let summary: MatchedSalesSummary?
 }
+
+/// Mirrors `MatchingPreferences` in src/ebay/matching-preferences.ts — body
+/// of `GET`/`PUT /api/matching-preferences`. `Codable` (not just
+/// `Decodable`): this is the first macOS model that needs to be sent, not
+/// just received. `Equatable` so the Settings UI can disable Save when the
+/// draft matches what's already persisted.
+struct MatchingPreferences: Codable, Equatable, Sendable {
+    var exactTitleMatch: Bool
+    var criteriaText: String
+}
