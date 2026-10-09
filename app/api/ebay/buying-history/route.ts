@@ -5,16 +5,16 @@ import { loadEbayConfig } from "../../../../src/ebay/config.ts";
 import { getFixtureHistoryResponse } from "../../../../src/ebay/fixture-history-source.ts";
 import { getEbayHistorySourceStatus } from "../../../../src/ebay/history-source.ts";
 import { fetchLiveEbayHistoryResponse, refreshLiveHistoryDerivedData } from "../../../../src/ebay/live-history-source.ts";
-import { parseMatchingPreferences } from "../../../../src/ebay/matching-preferences.ts";
 import { requireSessionEbayAccessToken } from "../../../../src/ebay/session-access.ts";
 import { EbayTradingApiError } from "../../../../src/ebay/trading-client.ts";
 import type { EbayHistoryResponse } from "../../../../src/ebay/history-response.ts";
 import { listCaptureCandidates } from "../../../../src/market-insights/price-history.ts";
+import { getMatchingPreferencesForUser } from "../../../../src/persistence/matching-preferences.ts";
 import { persistLostItemsAndMerge } from "../../../../src/persistence/lost-items.ts";
 import { persistWonItemsAndMerge } from "../../../../src/persistence/won-items.ts";
 
 export async function GET(request: NextRequest) {
-  return handleBuyingHistoryRequest(request, parseMatchingPreferences({}));
+  return handleBuyingHistoryRequest(request);
 }
 
 export async function POST(request: NextRequest) {
@@ -23,22 +23,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "invalid_origin" }, { status: 403 });
   }
 
-  const body = (await request.json().catch(() => ({}))) as Partial<{
-    exactTitleMatch: boolean;
-    criteriaText: string;
-  }>;
-
-  return handleBuyingHistoryRequest(
-    request,
-    parseMatchingPreferences({
-      exactTitleMatch: body.exactTitleMatch,
-      criteriaText: body.criteriaText
-    })
-  );
+  return handleBuyingHistoryRequest(request);
 }
 
-async function handleBuyingHistoryRequest(request: NextRequest, matchingPreferences = parseMatchingPreferences({})) {
+async function handleBuyingHistoryRequest(request: NextRequest) {
   const currentUser = getOrCreateCurrentUser(request);
+  const matchingPreferences = await getMatchingPreferencesForUser(currentUser.context.user.id);
 
   const sourceStatus = getEbayHistorySourceStatus();
   if (!sourceStatus.ok) {

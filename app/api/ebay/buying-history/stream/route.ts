@@ -6,10 +6,10 @@ import { getFixtureHistoryResponse } from "../../../../../src/ebay/fixture-histo
 import { getEbayHistorySourceStatus } from "../../../../../src/ebay/history-source.ts";
 import type { BuyingHistoryStreamEvent } from "../../../../../src/ebay/history-stream.ts";
 import { fetchLiveEbayHistoryResponse, refreshLiveHistoryDerivedData } from "../../../../../src/ebay/live-history-source.ts";
-import { parseMatchingPreferences } from "../../../../../src/ebay/matching-preferences.ts";
 import { requireSessionEbayAccessToken } from "../../../../../src/ebay/session-access.ts";
 import type { EbayHistoryResponse } from "../../../../../src/ebay/history-response.ts";
 import { listCaptureCandidates } from "../../../../../src/market-insights/price-history.ts";
+import { getMatchingPreferencesForUser } from "../../../../../src/persistence/matching-preferences.ts";
 import { persistLostItemsAndMerge } from "../../../../../src/persistence/lost-items.ts";
 import { persistWonItemsAndMerge } from "../../../../../src/persistence/won-items.ts";
 
@@ -31,14 +31,7 @@ export async function POST(request: NextRequest) {
     return jsonError({ error: "ebay_reauth_required" }, 409, currentUser.setCookie);
   }
 
-  const body = (await request.json().catch(() => ({}))) as Partial<{
-    exactTitleMatch: boolean;
-    criteriaText: string;
-  }>;
-  const matchingPreferences = parseMatchingPreferences({
-    exactTitleMatch: body.exactTitleMatch,
-    criteriaText: body.criteriaText
-  });
+  const matchingPreferences = await getMatchingPreferencesForUser(currentUser.context.user.id);
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({

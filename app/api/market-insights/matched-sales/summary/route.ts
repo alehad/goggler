@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server.js";
 import { validateSameOriginRequest } from "../../../../../src/auth/csrf.ts";
 import { getOrCreateCurrentUser } from "../../../../../src/auth/current-user.ts";
-import { parseMatchingPreferences } from "../../../../../src/ebay/matching-preferences.ts";
 import {
   listMatchedSalesSummaries,
   type MatchedSalesGroupKey
 } from "../../../../../src/market-insights/price-history.ts";
+import { getMatchingPreferencesForUser } from "../../../../../src/persistence/matching-preferences.ts";
 
 const MAX_GROUPS = 500;
 
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const matchingPreferences = parseMatchingPreferences(parseMatchingPreferencesInput(body));
+  const matchingPreferences = await getMatchingPreferencesForUser(currentUser.context.user.id);
 
   try {
     const summaries = await listMatchedSalesSummaries(currentUser.context.user.id, groups, matchingPreferences);
@@ -47,27 +47,6 @@ export async function POST(request: NextRequest) {
       currentUser.setCookie
     );
   }
-}
-
-function parseMatchingPreferencesInput(body: unknown): { exactTitleMatch?: string | boolean | null; criteriaText?: string | null } {
-  if (typeof body !== "object" || body === null || !("matchingPreferences" in body)) {
-    return {};
-  }
-
-  const matchingPreferences = (body as { matchingPreferences?: unknown }).matchingPreferences;
-  if (typeof matchingPreferences !== "object" || matchingPreferences === null) {
-    return {};
-  }
-
-  const { exactTitleMatch, criteriaText } = matchingPreferences as {
-    exactTitleMatch?: unknown;
-    criteriaText?: unknown;
-  };
-
-  return {
-    exactTitleMatch: typeof exactTitleMatch === "boolean" || typeof exactTitleMatch === "string" ? exactTitleMatch : undefined,
-    criteriaText: typeof criteriaText === "string" ? criteriaText : undefined
-  };
 }
 
 function parseGroups(body: unknown): MatchedSalesGroupKey[] | undefined {

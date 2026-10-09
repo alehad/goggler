@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server.js";
 import { getOrCreateCurrentUser } from "../../../../src/auth/current-user.ts";
-import { parseMatchingPreferences } from "../../../../src/ebay/matching-preferences.ts";
 import { listMatchedSales, summarizeMatchedSales } from "../../../../src/market-insights/price-history.ts";
+import { getMatchingPreferencesForUser } from "../../../../src/persistence/matching-preferences.ts";
 
 export async function GET(request: NextRequest) {
   const currentUser = getOrCreateCurrentUser(request);
@@ -16,10 +16,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const matchingPreferences = parseMatchingPreferences({
-    exactTitleMatch: searchParams.get("exactTitleMatch") ?? undefined,
-    criteriaText: searchParams.get("criteriaText") ?? undefined
-  });
+  const matchingPreferences = await getMatchingPreferencesForUser(currentUser.context.user.id);
 
   try {
     const sales = await listMatchedSales(currentUser.context.user.id, relistingGroupId, currency, matchingPreferences);

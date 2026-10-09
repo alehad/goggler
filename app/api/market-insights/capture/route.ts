@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server.js";
 import { validateSameOriginRequest } from "../../../../src/auth/csrf.ts";
 import { getOrCreateCurrentUser } from "../../../../src/auth/current-user.ts";
 import { loadEbayConfig } from "../../../../src/ebay/config.ts";
-import { parseMatchingPreferences } from "../../../../src/ebay/matching-preferences.ts";
 import type { EbayBuyingHistoryItem, EbayBuyingListKind } from "../../../../src/ebay/trading-client.ts";
 import { captureItems } from "../../../../src/market-insights/price-history.ts";
+import { getMatchingPreferencesForUser } from "../../../../src/persistence/matching-preferences.ts";
 
 const MAX_CAPTURE_ITEMS = 200;
 const MAX_STRING_LENGTH = 500;
@@ -20,8 +20,6 @@ export async function POST(request: NextRequest) {
 
   const body = (await request.json().catch(() => ({}))) as Partial<{
     items: unknown;
-    exactTitleMatch: boolean;
-    criteriaText: string;
   }>;
 
   const items = parseItems(body.items);
@@ -32,10 +30,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const matchingPreferences = parseMatchingPreferences({
-    exactTitleMatch: body.exactTitleMatch,
-    criteriaText: body.criteriaText
-  });
+  const matchingPreferences = await getMatchingPreferencesForUser(currentUser.context.user.id);
 
   try {
     const config = loadEbayConfig();

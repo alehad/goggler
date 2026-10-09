@@ -3,9 +3,9 @@ import { validateSameOriginRequest } from "../../../../src/auth/csrf.ts";
 import { getOrCreateCurrentUser } from "../../../../src/auth/current-user.ts";
 import { fetchEbayBrowseSearchResponse, EbayBrowseApiError, boundedBrowseQuery } from "../../../../src/ebay/browse-client.ts";
 import { loadEbayConfig } from "../../../../src/ebay/config.ts";
-import { parseMatchingPreferences } from "../../../../src/ebay/matching-preferences.ts";
 import { EBAY_BROWSE_SCOPE, EbayOAuthError, getEbayApplicationAccessToken } from "../../../../src/ebay/oauth-client.ts";
 import { requireSessionEbayAccessToken } from "../../../../src/ebay/session-access.ts";
+import { getMatchingPreferencesForUser } from "../../../../src/persistence/matching-preferences.ts";
 
 export async function POST(request: NextRequest) {
   const csrf = validateSameOriginRequest(request);
@@ -24,8 +24,6 @@ export async function POST(request: NextRequest) {
 
   const body = (await request.json().catch(() => ({}))) as Partial<{
     query: string;
-    exactTitleMatch: boolean;
-    criteriaText: string;
   }>;
   const query = boundedBrowseQuery(typeof body.query === "string" ? body.query : "");
   if (!query) {
@@ -38,15 +36,9 @@ export async function POST(request: NextRequest) {
   try {
     const config = loadEbayConfig();
     const appToken = await getEbayApplicationAccessToken(config, { scope: EBAY_BROWSE_SCOPE });
+    const matchingPreferences = await getMatchingPreferencesForUser(currentUser.context.user.id);
     return withInternalSessionCookie(
-      NextResponse.json(
-        await fetchEbayBrowseSearchResponse(config, appToken.accessToken, query, {
-          matchingPreferences: parseMatchingPreferences({
-            exactTitleMatch: body.exactTitleMatch,
-            criteriaText: body.criteriaText
-          })
-        })
-      ),
+      NextResponse.json(await fetchEbayBrowseSearchResponse(config, appToken.accessToken, query, { matchingPreferences })),
       currentUser.setCookie
     );
   } catch (error) {

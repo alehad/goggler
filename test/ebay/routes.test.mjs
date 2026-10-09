@@ -11,6 +11,7 @@ import { GET as getBuyingHistory, POST as postBuyingHistory } from "../../app/ap
 import { POST as postBuyingHistoryStream } from "../../app/api/ebay/buying-history/stream/route.ts";
 import { POST as postEbaySearch } from "../../app/api/ebay/search/route.ts";
 import { POST as postMarketHistory } from "../../app/api/ebay/market-history/route.ts";
+import { GET as getMatchingPreferences, PUT as putMatchingPreferences } from "../../app/api/matching-preferences/route.ts";
 import { readSessionToken } from "../../src/auth/session-cookie.ts";
 import { sessionStore } from "../../src/auth/local-auth.ts";
 import { getEbayOAuthStateStore } from "../../src/ebay/oauth-state.ts";
@@ -658,12 +659,10 @@ test("eBay buying history route serves fixture history after eBay connection", a
   assert.equal(JSON.stringify(body).includes("access-token"), false);
 });
 
-test("eBay buying history route rejects matching preference updates from invalid origins", async () => {
+test("eBay buying history POST rejects requests from invalid origins", async () => {
   process.env.GOGGLER_EBAY_HISTORY_SOURCE = "fixture";
   const response = await postBuyingHistory(
     new NextRequest("http://localhost:3000/api/ebay/buying-history", {
-      body: JSON.stringify({ exactTitleMatch: false, criteriaText: String.raw`TBM\s*\d{1,4}` }),
-      headers: { "Content-Type": "application/json" },
       method: "POST"
     })
   );
@@ -673,7 +672,7 @@ test("eBay buying history route rejects matching preference updates from invalid
   assert.equal(body.error, "invalid_origin");
 });
 
-test("eBay buying history route accepts matching preferences from same origin", async () => {
+test("eBay buying history POST succeeds from same origin", async () => {
   process.env.GOGGLER_EBAY_HISTORY_SOURCE = "fixture";
   const cookie = await signInCookie();
   const session = currentSessionFromCookie(cookie);
@@ -681,12 +680,7 @@ test("eBay buying history route accepts matching preferences from same origin", 
 
   const response = await postBuyingHistory(
     new NextRequest("http://localhost:3000/api/ebay/buying-history", {
-      body: JSON.stringify({
-        exactTitleMatch: false,
-        criteriaText: String.raw`TBM\s*\d{1,4}; PAP\s*\d{1,4}`
-      }),
       headers: {
-        "Content-Type": "application/json",
         cookie,
         origin: "http://localhost:3000"
       },
@@ -997,10 +991,7 @@ test("eBay market history route fetches marketplace insights with an app token",
   try {
     const response = await postMarketHistory(
       new NextRequest("http://localhost:3000/api/ebay/market-history", {
-        body: JSON.stringify({
-          title: "The record title BNJ71001 promo",
-          criteriaText: String.raw`\b[A-Z]{1,5}\d{1,6}\b`
-        }),
+        body: JSON.stringify({ title: "The record title BNJ71001 promo" }),
         headers: {
           "Content-Type": "application/json",
           cookie,
@@ -1035,10 +1026,7 @@ test("eBay market history route reports the catalogue-id query when upstream acc
   try {
     const response = await postMarketHistory(
       new NextRequest("http://localhost:3000/api/ebay/market-history", {
-        body: JSON.stringify({
-          title: "JAPANESE JAZZ QUARTET EXAMPLE LABEL BNJ71001 Japan VINYL LP",
-          criteriaText: String.raw`\b[A-Z]{1,5}\d{1,6}\b`
-        }),
+        body: JSON.stringify({ title: "JAPANESE JAZZ QUARTET EXAMPLE LABEL BNJ71001 Japan VINYL LP" }),
         headers: {
           "Content-Type": "application/json",
           cookie,
@@ -1132,10 +1120,7 @@ test("eBay live search route fetches Browse results with an app token", async ()
   try {
     const response = await postEbaySearch(
       new NextRequest("http://localhost:3000/api/ebay/search", {
-        body: JSON.stringify({
-          query: "KENNY BURRELL",
-          criteriaText: String.raw`\b[A-Z]{1,5}\d{1,6}\b`
-        }),
+        body: JSON.stringify({ query: "KENNY BURRELL" }),
         headers: {
           "Content-Type": "application/json",
           cookie,
@@ -1156,6 +1141,49 @@ test("eBay live search route fetches Browse results with an app token", async ()
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("matching preferences GET returns the default when none have been saved", async () => {
+  const response = await getMatchingPreferences(new NextRequest("http://localhost:3000/api/matching-preferences"));
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.exactTitleMatch, true);
+  assert.equal(body.criteriaText, String.raw`\b[A-Z]{1,5}-?\d{1,6}\b`);
+});
+
+test("matching preferences PUT rejects requests from invalid origins", async () => {
+  const response = await putMatchingPreferences(
+    new NextRequest("http://localhost:3000/api/matching-preferences", {
+      body: JSON.stringify({ exactTitleMatch: false, criteriaText: String.raw`TBM\s*\d{1,4}` }),
+      headers: { "Content-Type": "application/json" },
+      method: "PUT"
+    })
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 403);
+  assert.equal(body.error, "invalid_origin");
+});
+
+test("matching preferences PUT from same origin returns the validated, bounded value", async () => {
+  const cookie = await signInCookie();
+  const response = await putMatchingPreferences(
+    new NextRequest("http://localhost:3000/api/matching-preferences", {
+      body: JSON.stringify({ exactTitleMatch: false, criteriaText: String.raw`TBM\s*\d{1,4}; PAP\s*\d{1,4}` }),
+      headers: {
+        "Content-Type": "application/json",
+        cookie,
+        origin: "http://localhost:3000"
+      },
+      method: "PUT"
+    })
+  );
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.exactTitleMatch, false);
+  assert.equal(body.criteriaText, String.raw`TBM\s*\d{1,4}; PAP\s*\d{1,4}`);
 });
 
 async function signInCookie() {

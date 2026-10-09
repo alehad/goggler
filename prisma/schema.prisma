@@ -126,3 +126,14 @@ model MarketPriceRecord {
   @@index([userId, relistingGroupId])
   @@index([userId, endedAt])
 }
+
+/// One row per user — a genuine singleton, unlike the list-shaped models
+/// above, so userId is the primary key directly rather than a surrogate
+/// uuid. No real multi-user User table exists; userId is the same plain
+/// string convention (currently the fixed "local-saja" id) those models use.
+model MatchingPreferences {
+  userId          String   @id
+  exactTitleMatch Boolean  @default(true)
+  criteriaText    String
+  updatedAt       DateTime @updatedAt
+}
