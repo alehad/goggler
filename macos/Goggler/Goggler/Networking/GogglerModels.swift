@@ -108,3 +108,33 @@ struct ChatAnswer: Decodable, Sendable {
     let answer: String
     let itemIds: [String]
 }
+
+/// Mirrors `MatchedSalePoint` in src/market-insights/price-history.ts.
+struct MatchedSalePoint: Decodable, Sendable, Identifiable {
+    var id: String { venueItemId }
+
+    let venueItemId: String
+    let title: String
+    let price: Money
+    let endedAt: String?
+    let won: Bool
+}
+
+/// Mirrors `MatchedSalesSummary` in src/market-insights/price-history.ts.
+struct MatchedSalesSummary: Decodable, Sendable {
+    struct Bound: Decodable, Sendable {
+        let value: Double
+        let endedAt: String?
+    }
+
+    let count: Int
+    let average: Double
+    let lowest: Bound
+    let highest: Bound
+}
+
+/// Response of `GET /api/market-insights/matched-sales`.
+struct MatchedSalesResponse: Decodable, Sendable {
+    let sales: [MatchedSalePoint]
+    let summary: MatchedSalesSummary?
+}

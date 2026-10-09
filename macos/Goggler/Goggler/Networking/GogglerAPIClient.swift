@@ -59,8 +59,26 @@ struct GogglerAPIClient: Sendable {
     /// the caller inspects `statusCode` first, matching the pattern every
     /// fetch call in app/page.tsx already uses (check response.ok/status
     /// before deciding how to parse the body).
-    func request(_ path: String, method: String = "GET", jsonBody: [String: Sendable]? = nil) async throws -> GogglerRawResponse {
-        var urlRequest = URLRequest(url: baseURL.appendingPathComponent(path))
+    func request(
+        _ path: String,
+        method: String = "GET",
+        queryItems: [URLQueryItem]? = nil,
+        jsonBody: [String: Sendable]? = nil
+    ) async throws -> GogglerRawResponse {
+        var url = baseURL.appendingPathComponent(path)
+        // appendingPathComponent treats `path` as a single literal component
+        // and percent-encodes it, which would mangle a `?`/`&` query string —
+        // every pre-existing call site passes a plain path with no query
+        // string, so queryItems is built separately via URLComponents
+        // (which percent-encodes each value correctly, same guarantee
+        // URLSearchParams gives the web app) rather than appended to `path`.
+        if let queryItems, var components = URLComponents(url: url, resolvingAgainstBaseURL: true) {
+            components.queryItems = queryItems
+            if let composed = components.url {
+                url = composed
+            }
+        }
+        var urlRequest = URLRequest(url: url)
         urlRequest.httpMethod = method
         // The backend's CSRF check (validateSameOriginRequest) requires an Origin
         // or Referer header matching a trusted origin. Browsers set this
@@ -91,8 +109,14 @@ struct GogglerAPIClient: Sendable {
     /// Convenience for the common case: decode the body as `T` regardless of
     /// status code, letting JSONDecoder fail naturally if the shape doesn't
     /// match (e.g. an error body on a non-2xx response).
-    func requestDecoded<T: Decodable>(_ path: String, as type: T.Type, method: String = "GET", jsonBody: [String: Sendable]? = nil) async throws -> (value: T, statusCode: Int) {
-        let raw = try await request(path, method: method, jsonBody: jsonBody)
+    func requestDecoded<T: Decodable>(
+        _ path: String,
+        as type: T.Type,
+        method: String = "GET",
+        queryItems: [URLQueryItem]? = nil,
+        jsonBody: [String: Sendable]? = nil
+    ) async throws -> (value: T, statusCode: Int) {
+        let raw = try await request(path, method: method, queryItems: queryItems, jsonBody: jsonBody)
         do {
             let decoded = try JSONDecoder().decode(T.self, from: raw.data)
             return (decoded, raw.statusCode)
