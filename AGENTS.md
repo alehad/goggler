@@ -78,7 +78,7 @@ goggler also runs as a Docker image, on-demand rather than always-on — start i
 
 - Do development work on short-lived branches using the `codex/` prefix by default.
 - Open pull requests from feature branches into `main`.
-- Merge to `main` only after the user has confirmed the PR should be merged, except under the Claude Code Autonomous PR Workflow below, where merge is pre-approved.
+- Merge to `main` only after the user has confirmed the PR should be merged, or under the applicable Codex or Claude Code Autonomous PR Workflow below, where merge is pre-approved once its gates are satisfied.
 - Prefer GitHub CLI (`gh`) for PR creation and merge/cleanup when it is authenticated and available.
 - When the user explicitly asks to create a PR, prefer `gh pr create` over raw GitHub API calls.
 - When the user explicitly asks to merge an approved PR, prefer `gh pr merge --squash --delete-branch`, then synchronize local `main` and delete the local branch.
@@ -101,6 +101,20 @@ copilot -p "Review the current uncommitted git diff for security issues. Do not 
 
 - If no Copilot/VS Code review command is available in the Codex environment, say so and continue with normal verification plus any security review feedback the user provides manually.
 - Treat advisory AI review as supplemental. Do not replace deterministic checks such as unit tests, production build, and direct code inspection.
+
+## Codex Autonomous PR Workflow
+
+The user authorizes Codex to complete the branch-to-PR lifecycle without a separate merge confirmation once the following gates are satisfied:
+
+1. **Plan and approve behavior changes.** Create or update the OpenSpec proposal, design, tasks, and spec deltas before implementation, and wait for explicit user design approval.
+2. **Implement and verify.** Work on a short-lived `codex/` branch. Run the checks relevant to the change and fix failures before handoff. For persistence changes, include the credential-exclusion checks required above.
+3. **Obtain functional sign-off.** For behavior changes, pause for the user's manual testing and explicit confirmation that the feature works. Use the default Tailscale testing arrangement above unless instructed otherwise. Do not skip this gate autonomously.
+4. **Review.** Inspect the complete diff and follow the Review Workflow above, including advisory Copilot review for security-sensitive changes when available. Codex must not claim to have run Claude Code's built-in security-review skill. Resolve blocking findings before shipping; seek user direction if a blocking finding cannot be resolved within the approved scope.
+5. **Ship and clean up.** Commit, push, create the PR with `gh pr create`, inspect available PR checks and resolve failures, then merge with `gh pr merge --squash --delete-branch`. Synchronize local `main` and delete the feature branch locally and on GitHub. No additional commit, push, PR, merge, or cleanup confirmation is required after the applicable gates pass. A request to commit an approved change includes completing this lifecycle unless the user explicitly asks for a local commit only or to leave the PR open.
+
+Documentation-only changes that do not alter application behavior do not require an OpenSpec behavior proposal or Production eBay functional testing. User approval of the documentation change, direct diff review, and appropriate documentation checks satisfy those gates. This exception does not cover code, dependency, runtime configuration, or persistence behavior changes.
+
+This authorization does not cover direct commits to `main` (except the existing session-notes exception), force-pushes, history rewrites, release tags, Docker publication, or deployment. Releases and deployments still require explicit user approval. Runtime tool approval prompts still apply.
 
 ## Claude Code Autonomous PR Workflow
 

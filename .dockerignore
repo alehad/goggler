@@ -5,3 +5,6 @@ node_modules
 .env.*
 *.log
 openspec
+
+# Private local eBay OAuth and tunnel runbook
+/ebay.oauth.readme

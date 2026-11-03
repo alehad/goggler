@@ -29,3 +29,6 @@ pnpm-debug.log*
 .claude/settings.local.json
 
 /src/generated/prisma
+
+# Private local eBay OAuth and tunnel runbook
+/ebay.oauth.readme
