@@ -73,6 +73,6 @@ Persistence tests require a configured, separate PostgreSQL test database. Persi
 
 Known housekeeping: `npm run lint` still invokes deprecated `next lint` and needs migration to the ESLint CLI. OpenSpec change records live under `openspec/changes/`; accepted specifications have not yet been consolidated into `openspec/specs/`. Some historical task checklists and [session notes](docs/session-notes.md) are stale and should be checked against current code.
 
-The autonomous shipping lifecycle in AGENTS.md is explicitly scoped to Claude Code. For Codex, the general workflow requires user confirmation before merging a PR. Publishing a new Docker version also requires user approval.
+AGENTS.md defines autonomous shipping workflows for Codex and Claude Code. Once the applicable planning, user sign-off, verification, and review gates pass, the agent may commit, push, open and merge the PR, and clean up the branch without another confirmation. Documentation-only changes use documentation review and checks instead of application functional testing. Release tags, Docker publication, and deployments still require explicit user approval.
 
 The original dependency-free UI prototype remains in `prototype/` as a historical design reference; the implemented web application is under `app/`.
