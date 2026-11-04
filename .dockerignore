@@ -8,3 +8,6 @@ openspec
 
 # Private local eBay OAuth and tunnel runbook
 /ebay.oauth.readme
+
+# Private local database recovery copies
+/.local/db-backups/

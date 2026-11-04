@@ -19,6 +19,7 @@ before(async () => {
 });
 
 beforeEach(async () => {
+  await prisma.lostItem.deleteMany();
   await prisma.marketPriceRecord.deleteMany();
   await prisma.wonItem.deleteMany();
 });
@@ -125,7 +126,7 @@ test("captureItems only persists items whose price can be independently verified
       { itemId: "not-really-ended", title: "Cannot be verified", list: "WatchList" }
     ],
     DEFAULT_MATCHING_PREFERENCES,
-    { fetch: mockEbayFetch({ "watch-ended": { value: "88.00", currency: "GBP" } }) }
+    { accessToken: "session-token", fetch: mockEbayFetch({ "watch-ended": { value: "88.00", currency: "GBP" } }) }
   );
 
   assert.deepEqual(result.captured, ["watch-ended"]);
@@ -134,6 +135,8 @@ test("captureItems only persists items whose price can be independently verified
     where: { userId: "local-saja", venueItemId: "watch-ended" }
   });
   assert.equal(stored.soldPriceAmount.toNumber(), 88);
+  assert.equal(stored.title, "Server record TBM59");
+  assert.equal(stored.endedAt.toISOString(), "2024-01-01T00:00:00.000Z");
 });
 
 test("captureItems persists the Browse-resolved native price, not eBay's marketplace-converted price, and ignores any client-supplied price", async () => {
@@ -159,6 +162,7 @@ test("captureItems persists the Browse-resolved native price, not eBay's marketp
     ],
     DEFAULT_MATCHING_PREFERENCES,
     {
+      accessToken: "session-token",
       fetch: mockEbayFetch({
         "watch-ended": { value: "117.86", currency: "USD" }
       })
@@ -419,7 +423,10 @@ test("computeGroupDeals and computeGroupTrends count a listing that was both cap
 });
 
 function mockEbayFetch(nativePricesByItemId = {}) {
-  return async (url) => {
+  return async (url, init) => {
+    if (init?.headers?.["X-EBAY-API-CALL-NAME"] === "GetMyeBayBuying") {
+      return new Response('<GetMyeBayBuyingResponse><Ack>Success</Ack><WatchList><ItemArray><Item><ItemID>watch-ended</ItemID><Title>Server record TBM59</Title><ListingDetails><EndTime>2024-01-01T00:00:00.000Z</EndTime></ListingDetails></Item><Item><ItemID>still-live</ItemID><Title>Live item</Title><ListingDetails><EndTime>2099-01-01T00:00:00Z</EndTime></ListingDetails></Item></ItemArray></WatchList></GetMyeBayBuyingResponse>');
+    }
     const urlText = String(url);
     if (urlText.includes("/identity/v1/oauth2/token")) {
       return Response.json({ access_token: "app-access-token", expires_in: 7200, token_type: "Bearer" });
@@ -439,3 +446,14 @@ function mockEbayFetch(nativePricesByItemId = {}) {
     return new Response("not found", { status: 404 });
   };
 }
+
+test("capture rejects unknown and still-active IDs despite forged ended metadata and another user's stored facts", async()=>{
+ const freshConfig=loadEbayConfig({EBAY_ENVIRONMENT:'sandbox',EBAY_SANDBOX_CLIENT_ID:'eligibility-client',EBAY_SANDBOX_CLIENT_SECRET:'secret',EBAY_SANDBOX_REDIRECT_URI:'runame',EBAY_SANDBOX_OAUTH_SCOPES:'scope'});
+ await prisma.wonItem.create({data:{userId:'other-user',venueItemId:'unknown',title:'Other user purchase',itemPriceAmount:25,currency:'USD'}});
+ const result=await captureItems(freshConfig,'local-saja',[
+  {itemId:'unknown',title:'Forged TBM59',list:'WonList',endTime:'2020-01-01T00:00:00Z'},
+  {itemId:'still-live',title:'Forged ended listing',list:'WatchList',endTime:'2020-01-01T00:00:00Z'}
+ ],DEFAULT_MATCHING_PREFERENCES,{accessToken:'active-session-token',fetch:mockEbayFetch({unknown:{value:'25',currency:'USD'},'still-live':{value:'25',currency:'USD'}})});
+ assert.deepEqual(result.captured,[]);assert.deepEqual(result.skipped,['unknown','still-live']);
+ assert.equal(await prisma.marketPriceRecord.count(),0);
+});

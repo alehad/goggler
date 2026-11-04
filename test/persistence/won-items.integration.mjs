@@ -53,7 +53,7 @@ test("persists won items idempotently and preserves older rows outside later liv
   assert.equal(await prisma.wonItemImportRun.count({ where: { status: "succeeded" } }), 2);
 });
 
-test("updates existing records without erasing stored optional values", async () => {
+test("updates metadata without erasing optional fields or applying unreviewed purchase-price corrections", async () => {
   await persistWonItemsAndMerge(
     liveHistory([
       wonItem("won-001", "Original title", 35, {
@@ -68,7 +68,7 @@ test("updates existing records without erasing stored optional values", async ()
 
   await persistWonItemsAndMerge(
     liveHistory([
-      wonItem("won-001", "Updated title", 37)
+      wonItem("won-001", "Updated title", 37, { endTime: "2026-05-04T00:00:00Z" })
     ]),
     "local-saja",
     DEFAULT_MATCHING_PREFERENCES,
@@ -77,7 +77,8 @@ test("updates existing records without erasing stored optional values", async ()
 
   const stored = await prisma.wonItem.findFirstOrThrow({ where: { userId: "local-saja", venueItemId: "won-001" } });
   assert.equal(stored.title, "Updated title");
-  assert.equal(stored.itemPriceAmount.toNumber(), 37);
+  assert.equal(stored.itemPriceAmount.toNumber(), 35);
+  assert.equal(stored.purchasedAt.toISOString(), "2026-05-03T02:21:00.000Z");
   assert.equal(stored.imageUrl, "https://i.ebayimg.com/images/g/first/s-l64.jpg");
   assert.equal(stored.sellerUserId, "record-seller");
   assert.equal(await prisma.wonItem.count(), 1);
@@ -181,3 +182,16 @@ function liveHistory(wonItems) {
     }
   };
 }
+
+
+test("runtime import never writes OAuth material or raw upstream fields from an extended item", async () => {
+  const sentinel = "oauth-material-must-never-be-persisted";
+  await persistWonItemsAndMerge(liveHistory([wonItem("safe-only", "Safe title", 25, {
+    accessToken: sentinel, refreshToken: sentinel, authorizationCode: sentinel,
+    rawPayload: { secret: sentinel }, purchasePriceSource: "transaction"
+  })]), "local-saja", DEFAULT_MATCHING_PREFERENCES, prisma);
+  const rows = await prisma.wonItem.findMany();
+  const runs = await prisma.wonItemImportRun.findMany();
+  assert.equal(JSON.stringify({ rows, runs }).includes(sentinel), false);
+  assert.equal(rows[0].itemPriceAmount.toNumber(), 25);
+});

@@ -67,7 +67,7 @@ struct AnalyticsView: View {
     /// whatever filter is currently narrowing `content(for:)`'s own list.
     private var allItems: [AnalyticsItem] {
         guard case .ready(let history) = store.buyingHistoryState else { return [] }
-        return computeAnalyticsItems(endedWatchlistItems: history.endedWatchlistItems, wonItems: history.wonItems)
+        return (history.analyticsItems ?? []).map { AnalyticsItem(item: $0.item, won: $0.won, eventuallyWon: $0.eventuallyWon) }
     }
 
     var body: some View {
@@ -169,7 +169,7 @@ struct AnalyticsView: View {
 
     @ViewBuilder
     private func content(for history: BuyingHistory) -> some View {
-        let items = computeAnalyticsItems(endedWatchlistItems: history.endedWatchlistItems, wonItems: history.wonItems)
+        let items = (history.analyticsItems ?? []).map { AnalyticsItem(item: $0.item, won: $0.won, eventuallyWon: $0.eventuallyWon) }
         let capturedCount = items.filter(\.captured).count
         let filteredItems = filter(items)
 
@@ -536,47 +536,6 @@ struct AnalyticsView: View {
         await store.deleteItems(deletable, using: client)
     }
 
-}
-
-/// Mirrors `app/page.tsx`'s `items` useMemo exactly: ended watchlist items
-/// plus any won items not already among them (won-only rows), with
-/// `won`/`eventuallyWon` derived from `wonItems`, sorted by `endTime`
-/// descending. Deliberately a free function, not a method on `AnalyticsView`
-/// — a type conforming to `View` gets its `body` requirement's `@MainActor`
-/// isolation implicitly inferred onto the *whole type*, including unrelated
-/// static methods, under Swift 6. Confirmed via an actual crash report: this
-/// pure, synchronous, UI-independent computation trapped
-/// (`EXC_BREAKPOINT`/`dispatch_assert_queue_fail`) the moment a unit test
-/// called it from a background test-execution thread, the same class of
-/// erroneous-isolation-inference bug already hit and documented for
-/// `EbayAuthService`'s completion handler. Free functions aren't affected
-/// by a type's protocol conformance, so this has no isolation requirement
-/// at all — directly callable from anywhere, including tests.
-func computeAnalyticsItems(endedWatchlistItems: [HistoryItem], wonItems: [HistoryItem]) -> [AnalyticsItem] {
-    let wonItemIds = Set(wonItems.map(\.itemId))
-    let wonGroupIds = Set(wonItems.compactMap(\.relistingGroupId))
-
-    let watchlistRows = endedWatchlistItems.map { item -> AnalyticsItem in
-        let won = wonItemIds.contains(item.itemId)
-        let eventuallyWon = !won && (item.relistingGroupId.map(wonGroupIds.contains) ?? false)
-        return AnalyticsItem(item: item, won: won, eventuallyWon: eventuallyWon)
-    }
-
-    let watchlistIds = Set(watchlistRows.map(\.item.itemId))
-    let wonOnlyRows = wonItems
-        .filter { !watchlistIds.contains($0.itemId) }
-        .map { won -> AnalyticsItem in
-            var item = won
-            item.captured = false
-            return AnalyticsItem(item: item, won: true, eventuallyWon: false)
-        }
-
-    return (watchlistRows + wonOnlyRows).sorted { analyticsItemEndTimestamp($0.item.endTime) > analyticsItemEndTimestamp($1.item.endTime) }
-}
-
-private func analyticsItemEndTimestamp(_ value: String?) -> Date {
-    guard let value, let date = ISO8601DateFormatter().date(from: value) else { return .distantPast }
-    return date
 }
 
 /// The AI assistant's answer echoes item titles verbatim from the user's own

@@ -12,6 +12,8 @@ export type EbayBuyingHistoryItem = {
   title: string;
   list: EbayBuyingListKind;
   currentPrice?: EbayMoney;
+  purchasePriceSource?: "transaction" | "listing";
+  purchasePriceConflict?: boolean;
   maxBid?: EbayMoney;
   endTime?: string;
   sellerUserId?: string;
@@ -387,7 +389,18 @@ export function parseGetMyeBayBuyingResponse(xml: string, list: EbayBuyingListKi
     pageNumber: parsePositiveInteger(firstText(listXml, "PageNumber"), 1),
     totalPages: parsePositiveInteger(firstText(listXml, "TotalNumberOfPages"), 1),
     totalEntries: parsePositiveInteger(firstText(listXml, "TotalNumberOfEntries"), 0),
-    items: blocks(listXml, "Item").map((itemXml) => parseItem(itemXml, list))
+    items: list === "WonList" && blocks(listXml, "Transaction").length > 0
+      ? blocks(listXml, "Transaction").flatMap(transactionXml => {
+          const itemXml = firstBlock(transactionXml, "Item");
+          if (!itemXml) return [];
+          const item = parseItem(itemXml, list);
+          return [{ ...item,
+            currentPrice: parseMoney(transactionXml, "TransactionPrice") ?? positiveMoney(item.currentPrice),
+            purchasePriceSource: parseMoney(transactionXml, "TransactionPrice") ? "transaction" as const : "listing" as const,
+            endTime: firstText(transactionXml, "CreatedDate") ?? item.endTime
+          }];
+        })
+      : blocks(listXml, "Item").map((itemXml) => parseItem(itemXml, list))
   };
 }
 
@@ -423,7 +436,8 @@ function parseItem(xml: string, list: EbayBuyingListKind): EbayBuyingHistoryItem
     itemId,
     title,
     list,
-    currentPrice: parseCurrentPrice(xml),
+    currentPrice: list === "WonList" ? positiveMoney(parseCurrentPrice(xml)) : parseCurrentPrice(xml),
+    ...(list === "WonList" ? { purchasePriceSource: "listing" as const } : {}),
     maxBid: list === "LostList" ? parseMoney(xml, "MaxBid") : undefined,
     endTime: firstText(firstBlock(xml, "ListingDetails") ?? "", "EndTime"),
     sellerUserId: firstText(firstBlock(xml, "Seller") ?? "", "UserID"),
@@ -456,7 +470,8 @@ function parseOrderItems(orderXml: string): EbayBuyingHistoryItem[] {
       itemId,
       title,
       list: "WonList",
-      currentPrice: parseMoney(transactionXml, "TransactionPrice") ?? parseMoney(itemXml, "CurrentPrice"),
+      currentPrice: parseMoney(transactionXml, "TransactionPrice") ?? positiveMoney(parseMoney(itemXml, "CurrentPrice")),
+      purchasePriceSource: parseMoney(transactionXml, "TransactionPrice") ? "transaction" : "listing",
       endTime: firstText(transactionXml, "CreatedDate") ?? paidTime ?? orderCreatedTime,
       sellerUserId: firstText(firstBlock(itemXml, "Seller") ?? "", "UserID") ?? orderSellerUserId,
       conditionDisplayName: firstText(itemXml, "ConditionDisplayName"),
@@ -535,6 +550,10 @@ function isLocalOrPrivateHost(hostname: string): boolean {
   );
 }
 
+function positiveMoney(price: EbayMoney | undefined): EbayMoney | undefined {
+  return price && price.value > 0 ? price : undefined;
+}
+
 function parseCurrentPrice(xml: string): EbayMoney | undefined {
   return parseMoney(xml, "CurrentPrice");
 }
@@ -546,7 +565,9 @@ function parseMoney(xml: string, tag: string): EbayMoney | undefined {
     return undefined;
   }
 
-  const value = Number(stripTags(match[1]));
+  const text = stripTags(match[1]).trim();
+  if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(text)) return undefined;
+  const value = Number(text);
   const currency = attributeValue(match[0], "currencyID");
   if (!Number.isFinite(value) || !currency) {
     return undefined;

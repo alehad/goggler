@@ -12,7 +12,7 @@ goggler is a personal-first eBay UK auction tracker. It imports authenticated bu
 
 ## Server-Side Business Logic Invariant
 
-- All business logic — matching/relisting rules, decisions about which records belong in a result set, and computed derived values (averages, won/eventually-won flags, price-history assembly) — MUST live in the server layer (`src/`, surfaced through `app/api/*`), never duplicated or independently reimplemented in a client.
+- All business logic — matching/relisting rules, business search criteria and source precedence (Won > Lost > Watched for the same listing), purchase-price resolution, decisions about which records belong in a result set, and computed derived values (averages, won/eventually-won flags, price-history assembly) — MUST live in the server layer (`src/`, surfaced through `app/api/*`), never duplicated or independently reimplemented in a client.
 - A client (the web app or the macOS app) may only do final-mile work on a dataset the server already assembled in full: visual rendering, client-side filtering/search/sort of an already-complete result set, and display formatting (currency, dates). A client must never decide which items belong in the result, recompute a derived value the server already computed, or carry its own copy of matching/business rules.
 - Any user-adjustable setting that affects business logic (e.g. matching preferences) MUST be persisted server-side, per-user, and read by the server when assembling the dataset — never kept only in browser `localStorage`, `UserDefaults`, or a client-hardcoded default. A setting that changes what the *data* is, not just how it's displayed, is business logic, not UI state.
 - Rationale: both the web app and macOS app call the same backend but each maintains its own UI. Reimplementing business logic (or its configuration) on one client and not the other is exactly how "the same feature" silently shows different results across clients — confirmed in practice: matching preferences lived only in the web browser's `localStorage`, while the macOS app always used a hardcoded default, so the same item could resolve to different relisting matches on each. The fix is structural, not a one-off patch: push every such decision server-side so every client reading a result set is reading the *same* result set.
@@ -25,6 +25,15 @@ goggler is a personal-first eBay UK auction tracker. It imports authenticated bu
 - Persistent eBay-related storage may contain only explicitly approved non-secret data, such as normalized won-item records and sanitized import-run metadata.
 - Any change that introduces or modifies persistence must include deterministic checks proving that eBay OAuth credential material is not represented in the persistent schema and is not written during runtime behavior.
 - If a proposed feature appears to require persisted eBay OAuth credential material, stop and redesign it around fresh user authentication or active-session credentials instead.
+
+## Database Safety Copies
+
+- Before any operation that changes existing database records, database design, or structure, take a consistent, restorable local copy of the target database's schema **and contents**. This includes migrations, backfills, repairs, bulk edits/deletions, and the first run of changed application code that can rewrite existing records. Normal use of already-verified application behavior is not a new change operation.
+- Keep copies under `.local/db-backups/` in this checkout (excluded from Git and Docker), with owner-only directory/file permissions. Never commit, force-add, upload, or include them in images, CI artifacts, or logs. Do not include credentials, connection strings, environment files, or in-memory OAuth/session data; the OAuth persistence prohibition still applies to backup contents.
+- Record a non-secret manifest identifying the target, UTC capture time, relevant code revision/migration, schema/data coverage, checksum, and restore procedure. Confirm backup completion and integrity, and prove restorability in a separate disposable database before modifying the target. If a usable copy cannot be made or verified, stop before mutation and explain the blocker.
+- Take the copy before the first potentially mutating validation, application refresh, or deployment of the change. Ensure the snapshot remains an appropriate recovery point if concurrent writes occur; coordinate a quiet window or take another copy as needed.
+- Retain the copy until deterministic checks and the user's functional verification of the change pass. Do not automatically delete it on merge or overwrite an earlier recovery copy. Ask before removing retained copies or restoring over a live database; rollback can discard subsequent valid writes.
+- Include the backup location and verification/rollback status in the change's tasks and handoff. A backup does not itself authorize a migration, data repair, deployment, or other database mutation.
 
 ## Manual Testing Against Production eBay
 
@@ -50,6 +59,28 @@ Only the eBay OAuth callback path is ever reachable from outside the tailnet. Th
 - If ngrok reports an invalid OAuth state, reset it: `https://unrigged-fifth-nastily.ngrok-free.dev/ngrok/logout?auth_id=goggler-dev`.
 - If the full edge gate ever breaks eBay's OAuth callback (`code`/`state` round-trip), `ngrok/oauth-callback-fallback.yml` is the documented fallback policy — it exempts only `/api/auth/ebay/callback`, relying on the app's own signed-state protection there.
 - `EBAY_PRODUCTION_REDIRECT_URI` in `.env.local` must match the ngrok callback URL (`https://unrigged-fifth-nastily.ngrok-free.dev/api/auth/ebay/callback`). If the reserved domain ever changes, the eBay Developer Portal's accepted/declined RuName URLs must be updated to match, along with `GOGGLER_NGROK_HOSTNAME`.
+
+## Starting and Stopping a Work Session
+
+The user authorizes these routines as standing actions: “stop for the day”, “pause for the day”, or an agreed end-of-day pause means shut down the entire local service stack; “let's start” or resuming app testing means bring the stack back up. Do not ask for separate confirmation for these routine actions, except required runtime tool approvals. Follow explicit user instructions to leave a particular service running instead of these defaults.
+
+### Stop for the day
+
+1. Disable the public eBay callback Funnel (`tailscale funnel --https=8443 off`).
+2. Disable the private app Serve mapping (`tailscale serve --https=443 off`).
+3. Disconnect Tailscale (`tailscale down`).
+4. Stop the backend by unloading its LaunchAgent (`launchctl bootout gui/$(id -u)/com.goggler.server`). Killing the process alone is insufficient because KeepAlive restarts it. Do not change persistent login settings or disable the agent merely to stop the current session.
+5. Verify Funnel/Serve configuration has no remaining app mappings or enabled public Funnel entries, Tailscale reports stopped, the backend LaunchAgent is unloaded, and nothing is listening on app port 3000. Report failures; do not claim shutdown succeeded without verification.
+6. Save current work state, blockers, approval boundaries, and next priority in the current OpenSpec tasks or other authorized handoff documentation. Do not commit, merge, release, or discard work merely because the day is ending.
+
+### Start a session
+
+1. Inspect service status and use the existing backend production artifact. Bootstrap the existing LaunchAgent if unloaded, or kickstart it if loaded but stopped; verify the backend responds locally. Do not rebuild or deploy unreviewed code as part of startup. A backend restart loses in-memory eBay sessions, so fresh eBay authentication may be needed.
+2. Reconnect Tailscale (`tailscale up`). If interactive login is required, hand that step to the user.
+3. Restore the private app Serve mapping and the public callback-only Funnel using the exact commands under Manual Testing Against Production eBay or in the local `ebay.oauth.readme` runbook.
+4. Verify the app is reachable through its private HTTPS origin and Funnel is enabled only for the callback port/path, never the main app port. Open the requested client for functional testing.
+
+Use the installed Tailscale executable's full path if it is not on PATH. These explicit session routines supersede earlier guidance to keep Tailscale or the backend running between work sessions. The LaunchAgent's existing login behavior is unchanged; inspect actual service state each time.
 
 ## Deployment
 

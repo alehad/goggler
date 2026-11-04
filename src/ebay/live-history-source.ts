@@ -1,3 +1,4 @@
+import { assembleListings } from "./listing-assembly.ts";
 import { fetchEbayItemNativePrice } from "./browse-client.ts";
 import type { EbayConfig } from "./config.ts";
 import { buildHomeFeed, type HomeFeedWatchlistItem } from "./home-feed.ts";
@@ -50,8 +51,8 @@ export async function fetchLiveEbayHistoryResponse(
 ): Promise<EbayHistoryResponse> {
   const entriesPerPage = options.entriesPerPage ?? 200;
   const maxPages = options.maxPagesPerList ?? 10;
-  const getOrdersWindowDays = options.getOrdersWindowDays ?? 30;
-  const getOrdersWindowEndDaysAgo = options.getOrdersWindowEndDaysAgo ?? 60;
+  const getOrdersWindowDays = options.getOrdersWindowDays ?? 90;
+  const getOrdersWindowEndDaysAgo = options.getOrdersWindowEndDaysAgo ?? 0;
   const matchingPreferences = options.matchingPreferences ?? DEFAULT_MATCHING_PREFERENCES;
   const now = options.now ?? new Date();
   const fetchOptions = { fetch: options.fetch };
@@ -89,12 +90,14 @@ export async function fetchLiveEbayHistoryResponse(
     warnings
   );
   const mergedWon = mergeWonPurchases(wonList.items, ordersSupplement?.items ?? []);
-  const lostItems = withRelistingGroups(lostList.items, matchingPreferences);
-  const wonItems = withRelistingGroups(mergedWon.items, matchingPreferences);
+  const canonical = assembleListings([...mergedWon.items, ...lostList.items, ...watchList.items]);
+  const lostItems = withRelistingGroups(canonical.filter(item => item.list === "LostList"), matchingPreferences);
+  const wonItems = withRelistingGroups(canonical.filter(item => item.list === "WonList"), matchingPreferences);
+  const canonicalWatch = canonical.filter(item => item.list === "WatchList");
   const lostGroups = new Set(lostItems.map((item) => item.relistingGroupId).filter((value): value is string => Boolean(value)));
-  const activeWatchListItems = watchList.items.filter((item) => isActiveListing(item, now));
+  const activeWatchListItems = canonicalWatch.filter((item) => isActiveListing(item, now));
   const endedWatchlistItemsBeforeNativePrices = withRelistingGroups(
-    watchList.items.filter((item) => !isActiveListing(item, now)),
+    canonicalWatch.filter((item) => !isActiveListing(item, now)),
     matchingPreferences
   );
 
@@ -237,6 +240,7 @@ export async function refreshLiveHistoryDerivedData(
     return history;
   }
 
+  history = rebuildHistoryResponse(history, {});
   const warnings = [...(history.warnings ?? [])];
   const lostGroups = new Set(
     history.lostItems.map((item) => item.relistingGroupId).filter((value): value is string => Boolean(value))
@@ -338,11 +342,16 @@ function mergeWonPurchases(
 
     if (existing) {
       overlapCount += 1;
+      const conflict = existing.purchasePriceSource === "transaction" && item.purchasePriceSource === "transaction" &&
+        existing.currentPrice && item.currentPrice && (existing.currentPrice.value !== item.currentPrice.value || existing.currentPrice.currency !== item.currentPrice.currency);
+      const preferred = item.purchasePriceSource === "transaction" ? item : existing.purchasePriceSource === "transaction" ? existing : item.currentPrice ? item : existing;
       byKey.set(key, {
         ...item,
         ...existing,
-        currentPrice: existing.currentPrice ?? item.currentPrice,
-        endTime: existing.endTime ?? item.endTime,
+        currentPrice: conflict ? undefined : preferred.currentPrice,
+        purchasePriceSource: conflict ? undefined : preferred.purchasePriceSource,
+        purchasePriceConflict: Boolean(conflict),
+        endTime: item.endTime ?? existing.endTime,
         sellerUserId: existing.sellerUserId ?? item.sellerUserId,
         conditionDisplayName: existing.conditionDisplayName ?? item.conditionDisplayName,
         categoryId: existing.categoryId ?? item.categoryId,

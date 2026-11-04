@@ -1,15 +1,16 @@
+import { fetchGetMyeBayBuyingPages } from "../ebay/trading-client.ts";
+import { getMatchingPreferencesForUser } from "../persistence/matching-preferences.ts";
+import { buildPurchaseChartPoints } from "../ebay/purchase-analytics.ts";
+import { assembleAnalyticsHistory, listAssembledStoredHistory } from "./assembled-history.ts";
 import type { EbayConfig } from "../ebay/config.ts";
 import type { EbayHistoryResponse } from "../ebay/history-response.ts";
 import { fetchNativeWatchlistPrices } from "../ebay/live-history-source.ts";
-import { catalogueIdForTitle, relistingGroupForTitle, type MatchingPreferences } from "../ebay/matching-preferences.ts";
+import { type MatchingPreferences } from "../ebay/matching-preferences.ts";
 import type { EbayBuyingHistoryItem, EbayMoney } from "../ebay/trading-client.ts";
 import {
   captureMarketPriceRecords,
   listAllMarketPriceRecords,
-  listCapturedVenueItemIds,
-  listMarketPriceRecordsByGroup
 } from "../persistence/market-price-records.ts";
-import { listAllWonItems, listWonItemsForGroup } from "../persistence/won-items.ts";
 
 export type PriceHistoryCandidate = EbayBuyingHistoryItem & { captured: boolean };
 
@@ -38,49 +39,22 @@ export type MatchedSalesGroupKey = {
   currency: string;
 };
 
-/**
- * The only place that knows historical price candidates currently come from
- * ended eBay watchlist items. Callers (API routes, UI data fetching) only
- * ever see this module's exports, so the underlying source can change later
- * (e.g. a commercial Marketplace Insights integration) without touching them.
- *
- * Returns the union of eBay's live watchlist fetch (ended items) and every
- * MarketPriceRecord already captured for this user — the same
- * "persisted history outlives what eBay's live fetch currently returns"
- * pattern already used for WonItem, so a captured item stays visible even
- * after it drops out of eBay's live watchlist.
- */
+/** Complete ended history, reconciled by listing authority before matching. */
 export async function listCaptureCandidates(
   history: EbayHistoryResponse,
   userId: string
 ): Promise<PriceHistoryCandidate[]> {
-  const liveEndedItems = history.endedWatchlistItems;
-  const liveIds = new Set(liveEndedItems.map((item) => item.itemId));
+  const captured = await listAllMarketPriceRecords(userId);
+  const preferences = await getMatchingPreferencesForUser(userId);
+  return assembleAnalyticsHistory([
+    ...(history.wonItems ?? []), ...(history.lostItems ?? []), ...history.endedWatchlistItems, ...captured
+  ], new Set(captured.map(item => item.itemId)), preferences);
 
-  const [capturedIds, allCaptured] = await Promise.all([
-    listCapturedVenueItemIds(
-      userId,
-      liveEndedItems.map((item) => item.itemId)
-    ),
-    listAllMarketPriceRecords(userId)
-  ]);
-
-  const liveCandidates: PriceHistoryCandidate[] = liveEndedItems.map((item) => ({
-    ...item,
-    captured: capturedIds.has(item.itemId)
-  }));
-
-  const historicalOnlyCandidates: PriceHistoryCandidate[] = allCaptured
-    .filter((record) => !liveIds.has(record.itemId))
-    .map((record) => ({ ...record, captured: true }));
-
-  return [...liveCandidates, ...historicalOnlyCandidates];
 }
 
 /**
- * A "matched sale" can come from either the captured price-history table or
- * the user's own Won purchases (even ones never watched, so never captured).
- * This is the only place that merges those two sources.
+ * Matched observations use the shared Won > Lost > Watched assembly.
+ * Identity reconciliation precedes group/currency filtering, including missing prices.
  */
 export async function listMatchedSales(
   userId: string,
@@ -88,22 +62,12 @@ export async function listMatchedSales(
   currency: string,
   matchingPreferences: MatchingPreferences
 ): Promise<MatchedSalePoint[]> {
-  const [captured, wonItems] = await Promise.all([
-    listMarketPriceRecordsByGroup(userId, relistingGroupId, currency),
-    listWonItemsForGroup(userId, relistingGroupId, currency, matchingPreferences)
-  ]);
-
-  const wonVenueItemIds = new Set(wonItems.map((won) => won.venueItemId));
-  const capturedVenueItemIds = new Set(captured.map((record) => record.venueItemId));
-
-  const points: MatchedSalePoint[] = [
-    ...captured.map((record) => ({ ...record, won: wonVenueItemIds.has(record.venueItemId) })),
-    ...wonItems
-      .filter((won) => !capturedVenueItemIds.has(won.venueItemId))
-      .map((won) => ({ ...won, won: true }))
-  ];
-
-  return points.sort((a, b) => Date.parse(a.endedAt ?? "") - Date.parse(b.endedAt ?? ""));
+  const items = await listAssembledStoredHistory(userId, matchingPreferences);
+  return items.flatMap((item): MatchedSalePoint[] => {
+    if (item.relistingGroupId !== relistingGroupId || item.currentPrice?.currency !== currency) return [];
+    return [{ venueItemId: item.itemId, title: item.title, price: item.currentPrice,
+      endedAt: item.endTime, won: item.won }];
+  }).sort((a, b) => Date.parse(a.endedAt ?? "") - Date.parse(b.endedAt ?? ""));
 }
 
 /**
@@ -138,16 +102,30 @@ export async function listMatchedSalesSummaries(
   groups: MatchedSalesGroupKey[],
   matchingPreferences: MatchingPreferences
 ): Promise<Record<string, MatchedSalesSummary | undefined>> {
-  const uniqueGroups = new Map(groups.map((group) => [matchedSalesSummaryKey(group), group]));
+  return (await listMatchedSalesOverview(userId, groups, matchingPreferences)).summaries;
+}
 
-  const entries = await Promise.all(
-    [...uniqueGroups.entries()].map(async ([key, group]) => {
-      const sales = await listMatchedSales(userId, group.relistingGroupId, group.currency, matchingPreferences);
-      return [key, summarizeMatchedSales(sales)] as const;
-    })
-  );
+export type PurchasePriceComparison = { differenceValue: number; differencePercent?: number };
 
-  return Object.fromEntries(entries);
+export async function listMatchedSalesOverview(userId: string, groups: MatchedSalesGroupKey[], matchingPreferences: MatchingPreferences) {
+  const uniqueGroups = new Map(groups.map(group => [matchedSalesSummaryKey(group), group]));
+  const items = await listAssembledStoredHistory(userId, matchingPreferences);
+  const summaries: Record<string, MatchedSalesSummary | undefined> = Object.fromEntries([...uniqueGroups].map(([key, group]) => {
+    const sales = items.flatMap((item): MatchedSalePoint[] =>
+      item.relistingGroupId === group.relistingGroupId && item.currentPrice?.currency === group.currency
+        ? [{ venueItemId: item.itemId, title: item.title, price: item.currentPrice, endedAt: item.endTime, won: item.won }]
+        : []);
+    return [key, summarizeMatchedSales(sales)];
+  }));
+  const comparisons: Record<string, PurchasePriceComparison> = {};
+  for (const item of items) {
+    if (!item.won || !item.currentPrice || !item.relistingGroupId) continue;
+    const summary = summaries[matchedSalesSummaryKey({ relistingGroupId: item.relistingGroupId, currency: item.currentPrice.currency })];
+    if (!summary || summary.count <= 1) continue;
+    const differenceValue = item.currentPrice.value - summary.average;
+    comparisons[item.itemId] = { differenceValue, differencePercent: summary.average !== 0 ? differenceValue / summary.average * 100 : undefined };
+  }
+  return { summaries, comparisons };
 }
 
 export function matchedSalesSummaryKey(group: MatchedSalesGroupKey): string {
@@ -202,35 +180,14 @@ async function groupSalesByRelistingGroup(
   userId: string,
   matchingPreferences: MatchingPreferences
 ): Promise<Map<string, RelistingGroupPoint[]>> {
-  const [wonItems, capturedItems] = await Promise.all([
-    listAllWonItems(userId),
-    listAllMarketPriceRecords(userId)
-  ]);
-
-  const wonItemIds = new Set(wonItems.map((item) => item.itemId));
-  // A listing that was captured and later won carries the same venueItemId in both tables —
-  // without this filter it would be counted as two separate sale points (inflating saleCount,
-  // skewing averageValue, and producing duplicate rows), when it's really one real-world sale.
-  // The WonItem copy is kept since it's the authoritative purchase record.
-  const capturedItemsExcludingWon = capturedItems.filter((item) => !wonItemIds.has(item.itemId));
+  const items = await listAssembledStoredHistory(userId, matchingPreferences);
   const grouped = new Map<string, RelistingGroupPoint[]>();
-
-  for (const item of [...wonItems, ...capturedItemsExcludingWon]) {
-    const groupId = groupForHistoryTitle(item.title, matchingPreferences);
-    if (!groupId || !item.currentPrice || !item.endTime) {
-      continue;
-    }
-
-    const key = `${groupId}::${item.currentPrice.currency}`;
+  for (const item of items) {
+    if (!item.relistingGroupId || !item.currentPrice || !item.endTime) continue;
+    const key = `${item.relistingGroupId}::${item.currentPrice.currency}`;
     const points = grouped.get(key) ?? [];
-    points.push({
-      value: item.currentPrice.value,
-      currency: item.currentPrice.currency,
-      endedAt: item.endTime,
-      title: item.title,
-      itemId: item.itemId,
-      won: wonItemIds.has(item.itemId)
-    });
+    points.push({ value: item.currentPrice.value, currency: item.currentPrice.currency,
+      endedAt: item.endTime, title: item.title, itemId: item.itemId, won: item.won });
     grouped.set(key, points);
   }
 
@@ -333,40 +290,57 @@ export async function computeGroupDeals(
   return deals;
 }
 
-function groupForHistoryTitle(title: string, matchingPreferences: MatchingPreferences): string | undefined {
-  const catalogueId = catalogueIdForTitle(title, matchingPreferences.criteriaText);
-  return catalogueId ? `criteria:${catalogueId}` : relistingGroupForTitle(title, matchingPreferences);
-}
-
-/**
- * Persists price-history records for items the client already has displayed
- * (title, seller, condition, end time, etc. — all sourced from an
- * authenticated eBay fetch when the page loaded). The one field never
- * trusted from the client is price: each item's current native price is
- * independently resolved from eBay by item id at capture time, and an item
- * whose price can't be resolved is skipped rather than persisted with an
- * unverified value.
- */
+/** Client input is selection only. Eligibility, metadata, outcome and prices
+ * are resolved from server-owned per-user facts and authenticated eBay data. */
 export async function captureItems(
   config: EbayConfig,
   userId: string,
-  items: EbayBuyingHistoryItem[],
+  items: Pick<EbayBuyingHistoryItem, "itemId">[],
   matchingPreferences: MatchingPreferences,
-  options: { fetch?: typeof fetch } = {}
+  options: { fetch?: typeof fetch; accessToken?: string } = {}
 ): Promise<CaptureResult> {
   if (items.length === 0) {
     return { captured: [], skipped: [] };
   }
 
-  const nativePrices = await fetchNativeWatchlistPrices(config, items, { fetch: options.fetch });
-  const verifiedItems = items.flatMap((item) => {
-    const price = nativePrices.get(item.itemId);
-    return price ? [{ ...item, currentPrice: price }] : [];
+  const stored = await listAssembledStoredHistory(userId, matchingPreferences);
+  const capturedIdsBefore = new Set(stored.filter(item => item.captured).map(item => item.itemId));
+  const authoritative = new Map(stored.filter(item => item.list !== "WatchList").map(item => [item.itemId, item]));
+  const unknownSelections = items.filter(item => !authoritative.has(item.itemId) && !capturedIdsBefore.has(item.itemId));
+  let eligibleWatched: EbayBuyingHistoryItem[] = [];
+  if (unknownSelections.length > 0) {
+    if (!options.accessToken) throw new Error("Capture requires active-session eBay authorization");
+    const watched = await fetchGetMyeBayBuyingPages(config, options.accessToken, { list: "WatchList", entriesPerPage: 200, maxPages: 10 }, { fetch: options.fetch });
+    const selectedIds = new Set(unknownSelections.map(item => item.itemId));
+    const now = Date.now();
+    eligibleWatched = watched.items.filter(item => selectedIds.has(item.itemId) && item.endTime && Number.isFinite(Date.parse(item.endTime)) && Date.parse(item.endTime) <= now);
+  }
+  const nativePrices = await fetchNativeWatchlistPrices(config, eligibleWatched, { fetch: options.fetch });
+  const watchedById = new Map(eligibleWatched.map(item => [item.itemId, item]));
+  const verifiedItems = items.flatMap((selection): EbayBuyingHistoryItem[] => {
+    const fact = authoritative.get(selection.itemId);
+    if (fact) return fact.currentPrice && fact.currentPrice.value > 0 ? [fact] : [];
+    const watched = watchedById.get(selection.itemId);
+    const price = nativePrices.get(selection.itemId);
+    return watched && price ? [{ ...watched, currentPrice: price }] : [];
   });
 
-  const { captured } = await captureMarketPriceRecords(verifiedItems, userId, matchingPreferences);
+  const { captured: newlyCaptured } = await captureMarketPriceRecords(verifiedItems.filter(item => !capturedIdsBefore.has(item.itemId)), userId, matchingPreferences);
+  const captured = [...items.filter(item => capturedIdsBefore.has(item.itemId)).map(item => item.itemId), ...newlyCaptured];
   const capturedIds = new Set(captured);
   const skipped = items.map((item) => item.itemId).filter((itemId) => !capturedIds.has(itemId));
 
   return { captured, skipped };
+}
+
+export async function assembleHistoryAnalytics(history: EbayHistoryResponse, userId: string, preferences: MatchingPreferences) {
+  const captured = await listAllMarketPriceRecords(userId);
+  const capturedIds = new Set(captured.map(item => item.itemId));
+  const analyticsItems = assembleAnalyticsHistory([
+    ...history.wonItems, ...history.lostItems, ...history.endedWatchlistItems, ...captured
+  ], capturedIds, preferences);
+  return { ...history, analyticsItems, endedWatchlistItems: analyticsItems,
+    purchaseChartPoints: buildPurchaseChartPoints(history.wonItems),
+    lostItems: history.lostItems.map(item => ({ ...item, eventuallyWon: analyticsItems.find(row => row.itemId === item.itemId)?.eventuallyWon ?? false }))
+  };
 }

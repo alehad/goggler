@@ -1,3 +1,4 @@
+import { assembleListings } from "./listing-assembly.ts";
 import { buildHomeFeed } from "./home-feed.ts";
 import type { EbayHistoryResponse } from "./history-response.ts";
 import type { EbayBuyingHistoryItem } from "./trading-client.ts";
@@ -12,11 +13,16 @@ export function rebuildHistoryResponse(
     relistingCandidates?: EbayHistoryResponse["relistingCandidates"];
   }
 ): EbayHistoryResponse {
-  const lostItems = input.lostItems ?? history.lostItems;
-  const wonItems = input.wonItems ?? history.wonItems;
-  const watchlistItems = input.watchlistItems ?? history.watchlistItems;
+  const rawLost = input.lostItems ?? history.lostItems;
+  const rawWon = input.wonItems ?? history.wonItems;
+  const rawWatchlist = input.watchlistItems ?? history.watchlistItems;
   const endedWatchlistItems = input.endedWatchlistItems ?? history.endedWatchlistItems;
-  const relistingCandidates = input.relistingCandidates ?? history.relistingCandidates;
+  const canonical = assembleListings([...rawWon, ...rawLost, ...rawWatchlist.map(item => ({ ...item, list: "WatchList" as const }))]);
+  const wonItems = canonical.filter(item => item.list === "WonList");
+  const lostItems = canonical.filter(item => item.list === "LostList");
+  const historyIds = new Set([...wonItems, ...lostItems].map(item => item.itemId));
+  const watchlistItems = rawWatchlist.filter(item => !historyIds.has(item.itemId));
+  const relistingCandidates = (input.relistingCandidates ?? history.relistingCandidates).filter(item => !historyIds.has(item.itemId));
   const homeFeed = buildHomeFeed({
     lostItems,
     wonItems,
@@ -30,6 +36,7 @@ export function rebuildHistoryResponse(
     counts: {
       ...history.counts,
       lost: lostItems.length,
+      watchlist: watchlistItems.length,
       won: wonItems.length,
       eventuallyWon: lostItems.filter((item) => item.relistingGroupId && wonGroups.has(item.relistingGroupId)).length,
       neverWon: lostItems.filter((item) => !item.relistingGroupId || !wonGroups.has(item.relistingGroupId)).length,

@@ -149,7 +149,7 @@ final class BuyingHistoryStore {
 
         do {
             let result = try JSONDecoder().decode(CaptureResult.self, from: raw.data)
-            markCaptured(result.captured)
+            await refresh(using: client)
             AppLog.network.debug("captureItems: captured=\(result.captured.count, privacy: .public), skipped=\(result.skipped.count, privacy: .public)")
             return result
         } catch {
@@ -172,31 +172,13 @@ final class BuyingHistoryStore {
                 AppLog.network.error("deleteItems: backend returned statusCode=\(raw.statusCode, privacy: .public)")
                 return false
             }
-            removeItems(itemIds)
+            await refresh(using: client)
             AppLog.network.debug("deleteItems: removed \(itemIds.count, privacy: .public) item(s)")
             return true
         } catch {
             AppLog.network.error("deleteItems: failed — \(Self.describe(error), privacy: .public)")
             return false
         }
-    }
-
-    private func markCaptured(_ itemIds: [String]) {
-        guard case .ready(var history) = buyingHistoryState else { return }
-        let idSet = Set(itemIds)
-        history.endedWatchlistItems = history.endedWatchlistItems.map { item in
-            var updated = item
-            if idSet.contains(item.itemId) { updated.captured = true }
-            return updated
-        }
-        buyingHistoryState = .ready(history)
-    }
-
-    private func removeItems(_ itemIds: [String]) {
-        guard case .ready(var history) = buyingHistoryState else { return }
-        let idSet = Set(itemIds)
-        history.endedWatchlistItems = history.endedWatchlistItems.filter { !idSet.contains($0.itemId) }
-        buyingHistoryState = .ready(history)
     }
 
     /// Matches the shape `toCaptureRequestItem` sends on the web — every
