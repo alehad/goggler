@@ -183,8 +183,10 @@ function toWonItemCreate(item: EbayBuyingHistoryItem, userId: string, now: Date)
 function toWonItemUpdate(item: EbayBuyingHistoryItem, now: Date) {
   return {
     title: item.title,
-    ...(item.currentPrice ? { itemPriceAmount: item.currentPrice.value, currency: item.currentPrice.currency } : {}),
-    ...(item.endTime ? { purchasedAt: parseDate(item.endTime) } : {}),
+    // Existing purchase amounts are immutable to the normal importer. New price
+    // resolution must be previewed and applied as a separately approved repair.
+    // In particular, never repair a legacy zero merely by refreshing either app.
+    // Purchase dates resolved by the new parser also require reviewed repair.
     ...(item.sellerUserId ? { sellerUserId: item.sellerUserId } : {}),
     ...(item.conditionDisplayName ? { conditionDisplayName: item.conditionDisplayName } : {}),
     ...(item.categoryId ? { categoryId: item.categoryId } : {}),

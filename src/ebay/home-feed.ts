@@ -7,6 +7,9 @@ export type HomeFeedWatchlistItem = {
   currentPrice?: { value: number; currency: string };
   endsAt?: string;
   sellerUserId?: string;
+  sellerUsername?: string;
+  sellerDisplayName?: string;
+  sellerProfileUrl?: string;
   conditionDisplayName?: string;
   categoryId?: string;
   categoryName?: string;
@@ -49,6 +52,9 @@ export type HomeFeedRow = {
   endsAt?: string;
   wonAt?: string;
   sellerUserId?: string;
+  sellerUsername?: string;
+  sellerDisplayName?: string;
+  sellerProfileUrl?: string;
   conditionDisplayName?: string;
   categoryId?: string;
   categoryName?: string;
@@ -83,6 +89,9 @@ export type HomeFeed = {
 type SearchableHomeFeedRow = {
   title: string;
   sellerUserId?: string;
+  sellerUsername?: string;
+  sellerDisplayName?: string;
+  sellerProfileUrl?: string;
   conditionDisplayName?: string;
   section: string;
   tags: readonly string[];
@@ -207,6 +216,7 @@ export function searchHomeFeedRows<Row extends SearchableHomeFeedRow>(rows: Row[
     const searchText = normalizedSearchText([
       row.title,
       row.sellerUserId,
+      row.sellerDisplayName,
       row.conditionDisplayName,
       row.tags.join(" "),
       row.matchSignals.join(" "),
@@ -234,6 +244,9 @@ function activeListingRow(input: {
     originalLostPrice: input.lostItem?.currentPrice,
     endsAt: input.item.endsAt,
     sellerUserId: input.item.sellerUserId,
+    sellerUsername: input.item.sellerUsername,
+    sellerDisplayName: input.item.sellerDisplayName,
+    sellerProfileUrl: input.item.sellerProfileUrl,
     conditionDisplayName: input.item.conditionDisplayName,
     categoryId: input.item.categoryId,
     categoryName: input.item.categoryName,
@@ -261,6 +274,9 @@ function historyRow(item: EbayBuyingHistoryItem, section: HomeFeedSection, tags:
     originalLostPrice: section === "won" ? undefined : item.currentPrice,
     wonAt: section === "won" ? item.endTime : undefined,
     sellerUserId: item.sellerUserId,
+    sellerUsername: item.sellerUsername,
+    sellerDisplayName: item.sellerDisplayName,
+    sellerProfileUrl: item.sellerProfileUrl,
     conditionDisplayName: item.conditionDisplayName,
     categoryId: item.categoryId,
     categoryName: item.categoryName,

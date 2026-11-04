@@ -19,6 +19,7 @@ before(async () => {
 });
 
 beforeEach(async () => {
+  await prisma.lostItem.deleteMany();
   await prisma.marketPriceRecord.deleteMany();
   await prisma.wonItem.deleteMany();
 });

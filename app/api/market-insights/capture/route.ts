@@ -1,14 +1,14 @@
+import { requireSessionEbayAccessToken } from "../../../../src/ebay/session-access.ts";
 import { NextRequest, NextResponse } from "next/server.js";
 import { validateSameOriginRequest } from "../../../../src/auth/csrf.ts";
 import { getOrCreateCurrentUser } from "../../../../src/auth/current-user.ts";
 import { loadEbayConfig } from "../../../../src/ebay/config.ts";
-import type { EbayBuyingHistoryItem, EbayBuyingListKind } from "../../../../src/ebay/trading-client.ts";
+import type { EbayBuyingHistoryItem } from "../../../../src/ebay/trading-client.ts";
 import { captureItems } from "../../../../src/market-insights/price-history.ts";
 import { getMatchingPreferencesForUser } from "../../../../src/persistence/matching-preferences.ts";
 
 const MAX_CAPTURE_ITEMS = 200;
 const MAX_STRING_LENGTH = 500;
-const BUYING_LIST_KINDS: readonly EbayBuyingListKind[] = ["LostList", "WatchList", "WonList"];
 
 export async function POST(request: NextRequest) {
   const csrf = validateSameOriginRequest(request);
@@ -30,11 +30,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const access = requireSessionEbayAccessToken(currentUser.context.session.id);
+  if (!access.ok) return withInternalSessionCookie(NextResponse.json({ error: "ebay_reauth_required" }, { status: 409 }), currentUser.setCookie);
   const matchingPreferences = await getMatchingPreferencesForUser(currentUser.context.user.id);
 
   try {
     const config = loadEbayConfig();
-    const result = await captureItems(config, currentUser.context.user.id, items, matchingPreferences);
+    const result = await captureItems(config, currentUser.context.user.id, items, matchingPreferences, { accessToken: access.accessToken });
 
     return withInternalSessionCookie(NextResponse.json(result), currentUser.setCookie);
   } catch (error) {
@@ -51,45 +53,15 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function parseItems(value: unknown): EbayBuyingHistoryItem[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const items: EbayBuyingHistoryItem[] = [];
+function parseItems(value: unknown): Pick<EbayBuyingHistoryItem, "itemId">[] {
+  if (!Array.isArray(value)) return [];
+  const ids = new Set<string>();
   for (const entry of value.slice(0, MAX_CAPTURE_ITEMS)) {
-    const item = parseItem(entry);
-    if (item) {
-      items.push(item);
-    }
+    if (typeof entry !== "object" || entry === null) continue;
+    const id = boundedString((entry as Record<string, unknown>).itemId);
+    if (id) ids.add(id);
   }
-  return items;
-}
-
-function parseItem(value: unknown): EbayBuyingHistoryItem | undefined {
-  if (typeof value !== "object" || value === null) {
-    return undefined;
-  }
-
-  const raw = value as Record<string, unknown>;
-  const itemId = boundedString(raw.itemId);
-  const title = boundedString(raw.title);
-  const list = typeof raw.list === "string" && BUYING_LIST_KINDS.includes(raw.list as EbayBuyingListKind) ? (raw.list as EbayBuyingListKind) : undefined;
-
-  if (!itemId || !title || !list) {
-    return undefined;
-  }
-
-  return {
-    itemId,
-    title,
-    list,
-    endTime: boundedString(raw.endTime),
-    sellerUserId: boundedString(raw.sellerUserId),
-    conditionDisplayName: boundedString(raw.conditionDisplayName),
-    imageUrl: boundedString(raw.imageUrl),
-    itemWebUrl: boundedString(raw.itemWebUrl)
-  };
+  return [...ids].map(itemId => ({ itemId }));
 }
 
 function boundedString(value: unknown): string | undefined {

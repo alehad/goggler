@@ -1,14 +1,14 @@
+import { getMatchingPreferencesForUser } from "../persistence/matching-preferences.ts";
+import { listAssembledStoredHistory } from "./assembled-history.ts";
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import type { MatchingPreferences } from "../ebay/matching-preferences.ts";
 import type { EbayBuyingHistoryItem } from "../ebay/trading-client.ts";
-import { listAllMarketPriceRecords } from "../persistence/market-price-records.ts";
-import { listAllWonItems } from "../persistence/won-items.ts";
 import { computeGroupDeals, computeGroupTrends, type GroupDeal, type GroupTrend } from "./price-history.ts";
 
 const ANALYTICS_ASSISTANT_SYSTEM_PROMPT =
-  "You answer questions about the signed-in user's own eBay price-history and purchase data, using only " +
+  "Use sellerDisplayName to name sellers; sellerUserId may be an opaque identity, not a username. You answer questions about the signed-in user's own eBay price-history and purchase data, using only " +
   "the results of the tools provided to you. Never guess, estimate, or use outside knowledge for a numeric " +
   "or factual claim — always call a tool first. If a tool returns no matching data, say so plainly instead " +
   "of speculating. Markdown is rendered, so use it for readability, but never invent structure the tool " +
@@ -94,28 +94,9 @@ export type RankDealsInput = {
   limit: number;
 };
 
-/**
- * Every tool reads from this same union of persisted WonItem + MarketPriceRecord
- * rows, mirroring exactly how the Analytics tab itself merges the two sources
- * (app/page.tsx's Analytics `items` memo) so the assistant's answers agree with
- * what the user sees on screen.
- */
-async function loadItems(userId: string): Promise<ToolItem[]> {
-  const [wonItems, capturedItems] = await Promise.all([listAllWonItems(userId), listAllMarketPriceRecords(userId)]);
-
-  const wonItemIds = new Set(wonItems.map((item) => item.itemId));
-  const capturedRows: ToolItem[] = capturedItems.map((item) => ({
-    ...item,
-    captured: true,
-    won: wonItemIds.has(item.itemId)
-  }));
-
-  const capturedIds = new Set(capturedItems.map((item) => item.itemId));
-  const wonOnlyRows: ToolItem[] = wonItems
-    .filter((item) => !capturedIds.has(item.itemId))
-    .map((item) => ({ ...item, captured: false, won: true }));
-
-  return [...capturedRows, ...wonOnlyRows];
+/** Shared server-assembled facts, never an independent watched-first union. */
+async function loadItems(userId: string, preferences: MatchingPreferences): Promise<ToolItem[]> {
+  return listAssembledStoredHistory(userId, preferences);
 }
 
 export type QueryItemsResult = {
@@ -132,7 +113,7 @@ export type QueryItemsResult = {
  * through its phrased answer) that the narrower search came back empty.
  */
 export async function queryItems(userId: string, input: QueryItemsInput): Promise<QueryItemsResult> {
-  const items = await loadItems(userId);
+  const items = await loadItems(userId, await getMatchingPreferencesForUser(userId));
   const filtered = filterItems(items, input);
 
   if (filtered.length > 0 || !input.searchText) {
@@ -148,7 +129,7 @@ export async function queryItems(userId: string, input: QueryItemsInput): Promis
 }
 
 export async function summarizeItems(userId: string, input: SummarizeItemsInput): Promise<ItemsSummary[]> {
-  const items = await loadItems(userId);
+  const items = await loadItems(userId, await getMatchingPreferencesForUser(userId));
   const filtered = filterItems(items, input);
   const priced = filtered.filter((item): item is ToolItem & { currentPrice: NonNullable<ToolItem["currentPrice"]> } =>
     Boolean(item.currentPrice)
@@ -245,7 +226,7 @@ function filterItems(
   }
   if (filter.sellerUserId) {
     const seller = filter.sellerUserId.toLocaleLowerCase("en-GB");
-    filtered = filtered.filter((item) => item.sellerUserId?.toLocaleLowerCase("en-GB") === seller);
+    filtered = filtered.filter((item) => (item.sellerUserId?.toLocaleLowerCase("en-GB") === seller || item.sellerUsername?.toLocaleLowerCase("en-GB") === seller));
   }
   if (filter.minPrice !== undefined) {
     const minPrice = filter.minPrice;
@@ -297,7 +278,8 @@ function toItemSummary(item: ToolItem) {
     price: item.currentPrice?.value,
     currency: item.currentPrice?.currency,
     endTime: item.endTime,
-    sellerUserId: item.sellerUserId
+    sellerUserId: item.sellerUserId,
+    sellerDisplayName: item.sellerDisplayName
   };
 }
 

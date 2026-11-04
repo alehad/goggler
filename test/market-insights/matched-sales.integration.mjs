@@ -18,6 +18,7 @@ before(async () => {
 });
 
 beforeEach(async () => {
+  await prisma.lostItem.deleteMany();
   await prisma.marketPriceRecord.deleteMany();
   await prisma.wonItem.deleteMany();
 });
@@ -135,4 +136,54 @@ test("listMatchedSalesSummaries computes a summary per requested group and dedup
   });
   assert.equal(summaries["criteria:BNJ99999::GBP"].count, 1);
   assert.equal(summaries["criteria:NEVER-CAPTURED::GBP"], undefined);
+});
+
+test("purchase price wins over a conflicting captured price and currency before group filtering", async () => {
+  await captureMarketPriceRecords([{itemId:'same',title:'Record TBM59',list:'WatchList',currentPrice:{value:99,currency:'GBP'},endTime:'2026-01-01T00:00:00Z'}],'local-saja',DEFAULT_MATCHING_PREFERENCES,prisma);
+  await prisma.wonItem.create({data:{userId:'local-saja',venueItemId:'same',title:'Record BNJ71001',itemPriceAmount:25,currency:'USD',purchasedAt:new Date('2026-01-02T00:00:00Z')}});
+  assert.equal((await listMatchedSales('local-saja','criteria:TBM59','GBP',DEFAULT_MATCHING_PREFERENCES)).length,0);
+  const sales=await listMatchedSales('local-saja','criteria:BNJ71001','USD',DEFAULT_MATCHING_PREFERENCES);
+  assert.equal(sales.length,1);assert.equal(sales[0].price.value,25);assert.equal(sales[0].won,true);assert.equal(sales[0].endedAt,'2026-01-02T00:00:00.000Z');
+});
+test("a purchase with missing price suppresses watched price, while lost facts dominate watched observations", async () => {
+  await captureMarketPriceRecords(['won','lost'].map(itemId=>({itemId,title:'Record BNJ71001',list:'WatchList',currentPrice:{value:99,currency:'GBP'}})),'local-saja',DEFAULT_MATCHING_PREFERENCES,prisma);
+  await prisma.wonItem.create({data:{userId:'local-saja',venueItemId:'won',title:'Record BNJ71001'}});
+  await prisma.lostItem.create({data:{userId:'local-saja',venueItemId:'lost',title:'Record BNJ71001',soldPriceAmount:40,soldPriceCurrency:'GBP',maxBidAmount:30,maxBidCurrency:'GBP'}});
+  const sales=await listMatchedSales('local-saja','criteria:BNJ71001','GBP',DEFAULT_MATCHING_PREFERENCES);
+  assert.equal(sales.length,1);assert.equal(sales[0].venueItemId,'lost');assert.equal(sales[0].price.value,40);assert.equal(sales[0].won,false);
+});
+
+test("paid-minus-average comparisons are computed on the server from authoritative same-currency prices",async()=>{
+ const {listMatchedSalesOverview}=await import('../../src/market-insights/price-history.ts');
+ await captureMarketPriceRecords([{itemId:'other',title:'Record BNJ71001',list:'WatchList',currentPrice:{value:75,currency:'USD'}}],'local-saja',DEFAULT_MATCHING_PREFERENCES,prisma);
+ await prisma.wonItem.create({data:{userId:'local-saja',venueItemId:'purchase',title:'Record BNJ71001',itemPriceAmount:25,currency:'USD'}});
+ const result=await listMatchedSalesOverview('local-saja',[{relistingGroupId:'criteria:BNJ71001',currency:'USD'}],DEFAULT_MATCHING_PREFERENCES);
+ assert.equal(result.summaries['criteria:BNJ71001::USD'].average,50);
+ assert.deepEqual(result.comparisons.purchase,{differenceValue:-25,differencePercent:-50});
+});
+
+test("seller display resolution stays server-side and per-user without rewriting immutable purchase identity",async()=>{
+ const {listAssembledStoredHistory}=await import('../../src/market-insights/assembled-history.ts');
+ await captureMarketPriceRecords([{itemId:'shared',title:'Record BNJ71001',list:'WatchList',sellerUserId:'facerecords',currentPrice:{value:99,currency:'USD'}}],'local-saja',DEFAULT_MATCHING_PREFERENCES,prisma);
+ await prisma.wonItem.createMany({data:[
+  {userId:'local-saja',venueItemId:'shared',title:'Record BNJ71001',sellerUserId:'201977996',itemPriceAmount:25,currency:'USD'},
+  {userId:'local-saja',venueItemId:'no-capture',title:'Other record',sellerUserId:'201977996',itemPriceAmount:7.5,currency:'USD'},
+  {userId:'another-user',venueItemId:'separate',title:'Other account',sellerUserId:'201977996',itemPriceAmount:10,currency:'GBP'}
+ ]});
+ const rows=await listAssembledStoredHistory('local-saja',DEFAULT_MATCHING_PREFERENCES);
+ assert.equal(rows.filter(r=>r.sellerDisplayName==='facerecords').length,2);
+ assert.equal(rows.find(r=>r.itemId==='shared').currentPrice.value,25);
+ const {assembleHistoryAnalytics}=await import('../../src/market-insights/price-history.ts');
+ const {listAllWonItems}=await import('../../src/persistence/won-items.ts');
+ const {buildHomeFeed}=await import('../../src/ebay/home-feed.ts');
+ const wonItems=await listAllWonItems('local-saja');
+ const input={wonItems,lostItems:[],watchlistItems:[],endedWatchlistItems:[],relistingCandidates:[]};
+ const response=await assembleHistoryAnalytics({...input,homeFeed:buildHomeFeed(input)},'local-saja',DEFAULT_MATCHING_PREFERENCES);
+ assert.ok(response.wonItems.every(item=>item.sellerDisplayName==='facerecords'));
+ assert.ok(response.analyticsItems.every(item=>item.sellerDisplayName==='facerecords'));
+ assert.ok(response.homeFeed.rows.every(item=>item.sellerDisplayName==='facerecords'));
+ const other=await listAssembledStoredHistory('another-user',DEFAULT_MATCHING_PREFERENCES);
+ assert.equal(other[0].sellerDisplayName,'Seller 201977996');assert.equal(other[0].sellerProfileUrl,undefined);
+ const persisted=await prisma.wonItem.findMany({where:{userId:'local-saja'}});
+ assert.ok(persisted.every(row=>row.sellerUserId==='201977996'));
 });

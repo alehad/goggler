@@ -70,12 +70,12 @@ test("fetches live watchlist, lost, and won lists into the Home feed contract", 
     overlapCount: 0,
     wonListTruncated: false,
     getOrdersTruncated: false,
-    getOrdersWindowDays: 30,
-    getOrdersWindowEndDaysAgo: 60
+    getOrdersWindowDays: 90,
+    getOrdersWindowEndDaysAgo: 0
   });
   const getOrdersCall = calls.find((call) => call.callName === "GetOrders");
   assert.match(getOrdersCall?.body ?? "", /<CreateTimeFrom>2026-02-12T12:00:00.000Z<\/CreateTimeFrom>/);
-  assert.match(getOrdersCall?.body ?? "", /<CreateTimeTo>2026-03-14T12:00:00.000Z<\/CreateTimeTo>/);
+  assert.match(getOrdersCall?.body ?? "", /<CreateTimeTo>2026-05-13T12:00:00.000Z<\/CreateTimeTo>/);
   assert.equal(response.homeFeed.rows[0].section, "watchlist");
   assert.equal(response.homeFeed.rows[0].watchlistPosition, 1);
   assert.equal(response.homeFeed.rows[0].imageUrl, "https://i.ebayimg.example/watch-001.jpg");

@@ -1,3 +1,4 @@
+import type { MatchingPreferences } from "../../../../../src/ebay/matching-preferences.ts";
 import { NextRequest } from "next/server.js";
 import { validateSameOriginRequest } from "../../../../../src/auth/csrf.ts";
 import { getOrCreateCurrentUser } from "../../../../../src/auth/current-user.ts";
@@ -8,7 +9,7 @@ import type { BuyingHistoryStreamEvent } from "../../../../../src/ebay/history-s
 import { fetchLiveEbayHistoryResponse, refreshLiveHistoryDerivedData } from "../../../../../src/ebay/live-history-source.ts";
 import { requireSessionEbayAccessToken } from "../../../../../src/ebay/session-access.ts";
 import type { EbayHistoryResponse } from "../../../../../src/ebay/history-response.ts";
-import { listCaptureCandidates } from "../../../../../src/market-insights/price-history.ts";
+import { assembleHistoryAnalytics } from "../../../../../src/market-insights/price-history.ts";
 import { getMatchingPreferencesForUser } from "../../../../../src/persistence/matching-preferences.ts";
 import { persistLostItemsAndMerge } from "../../../../../src/persistence/lost-items.ts";
 import { persistWonItemsAndMerge } from "../../../../../src/persistence/won-items.ts";
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
 
       try {
         if (sourceStatus.source !== "live") {
-          send({ type: "complete", history: await withCaptureStatus(getFixtureHistoryResponse(), currentUser.context.user.id) });
+          send({ type: "complete", history: await withCaptureStatus(getFixtureHistoryResponse(), currentUser.context.user.id, matchingPreferences) });
           return;
         }
 
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
           console.info("Live eBay purchase source diagnostics", history.diagnostics.purchases);
         }
 
-        send({ type: "complete", history: await withCaptureStatus(history, currentUser.context.user.id) });
+        send({ type: "complete", history: await withCaptureStatus(history, currentUser.context.user.id, matchingPreferences) });
       } catch (error) {
         console.warn("Streamed live eBay history fetch failed", {
           type: "unexpected_error",
@@ -80,11 +81,8 @@ export async function POST(request: NextRequest) {
   return new Response(stream, { headers });
 }
 
-async function withCaptureStatus(history: EbayHistoryResponse, userId: string) {
-  return {
-    ...history,
-    endedWatchlistItems: await listCaptureCandidates(history, userId)
-  };
+async function withCaptureStatus(history: EbayHistoryResponse, userId: string, preferences: MatchingPreferences) {
+  return assembleHistoryAnalytics(history, userId, preferences);
 }
 
 function jsonError(body: Record<string, unknown>, status: number, setCookie?: string) {

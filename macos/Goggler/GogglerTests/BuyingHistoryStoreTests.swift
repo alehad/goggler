@@ -122,11 +122,22 @@ struct BuyingHistoryStoreTests {
         #expect(store.connectivityIssue == .backendUnreachable)
     }
 
-    @Test("captureItems updates the matching item's captured flag in place, no refresh needed")
+    @Test("captureItems reloads authoritative server history after capture")
     func captureItemsUpdatesStateInPlace() async throws {
         let store = try await loadedStore(endedWatchlistItemsJSON: #"[{"itemId":"w1","title":"Lamp","list":"WatchList","captured":false}]"#)
 
-        MockURLProtocol.handler = { _ in (Data(#"{"captured":["w1"],"skipped":[]}"#.utf8), 200) }
+        MockURLProtocol.handler = { request in
+            if request.url?.path == "/api/market-insights/capture" {
+                return (Data(#"{"captured":["w1"],"skipped":[]}"#.utf8), 200)
+            }
+            if request.url?.path == "/api/ebay/buying-history" {
+                return (Data(#"{"source":"live","counts":{"lost":0,"won":0,"eventuallyWon":0,"neverWon":0,"watchlist":0,"watchlistRelistings":0,"needsAction":0,"relistings":0},"lostItems":[],"wonItems":[],"endedWatchlistItems":[{"itemId":"w1","title":"Server title","list":"WonList","captured":true}]}"#.utf8), 200)
+            }
+            if request.url?.path == "/api/auth/ebay/session" {
+                return (Data(#"{"connection":{"connected":true,"status":"connected_this_session","scopes":[]}}"#.utf8), 200)
+            }
+            return (Data(#"{"config":{"ready":true,"environment":"production","missing":[],"invalid":[],"marketplaceId":"EBAY_GB","tradingSiteId":"3","scopeCount":1}}"#.utf8), 200)
+        }
         let client = GogglerAPIClient(baseURL: URL(string: "https://goggler.tailde35d2.ts.net")!, protocolClasses: [MockURLProtocol.self])
 
         guard case .ready(let historyBefore) = store.buyingHistoryState else {
@@ -141,6 +152,7 @@ struct BuyingHistoryStoreTests {
             return
         }
         #expect(historyAfter.endedWatchlistItems[0].captured == true)
+        #expect(historyAfter.endedWatchlistItems[0].title == "Server title")
     }
 
     @Test("captureItems leaves state untouched on failure")
@@ -162,11 +174,22 @@ struct BuyingHistoryStoreTests {
         #expect(historyAfter.endedWatchlistItems[0].captured == false)
     }
 
-    @Test("deleteItems removes the matching item in place, no refresh needed")
+    @Test("deleteItems reloads authoritative server history after deletion")
     func deleteItemsRemovesInPlace() async throws {
         let store = try await loadedStore(endedWatchlistItemsJSON: #"[{"itemId":"w1","title":"Lamp","list":"WatchList","captured":true}]"#)
 
-        MockURLProtocol.handler = { _ in (Data(#"{"deletedCount":1}"#.utf8), 200) }
+        MockURLProtocol.handler = { request in
+            if request.url?.path == "/api/market-insights/history" {
+                return (Data(#"{"deletedCount":1}"#.utf8), 200)
+            }
+            if request.url?.path == "/api/ebay/buying-history" {
+                return (Data(#"{"source":"live","counts":{"lost":0,"won":0,"eventuallyWon":0,"neverWon":0,"watchlist":0,"watchlistRelistings":0,"needsAction":0,"relistings":0},"lostItems":[],"wonItems":[],"endedWatchlistItems":[]}"#.utf8), 200)
+            }
+            if request.url?.path == "/api/auth/ebay/session" {
+                return (Data(#"{"connection":{"connected":true,"status":"connected_this_session","scopes":[]}}"#.utf8), 200)
+            }
+            return (Data(#"{"config":{"ready":true,"environment":"production","missing":[],"invalid":[],"marketplaceId":"EBAY_GB","tradingSiteId":"3","scopeCount":1}}"#.utf8), 200)
+        }
         let client = GogglerAPIClient(baseURL: URL(string: "https://goggler.tailde35d2.ts.net")!, protocolClasses: [MockURLProtocol.self])
 
         let succeeded = await store.deleteItems(["w1"], using: client)
@@ -220,60 +243,16 @@ struct BuyingHistoryStoreTests {
     }
 }
 
-@Suite("AnalyticsView.computeAnalyticsItems")
-struct AnalyticsItemComputationTests {
-    private func item(_ id: String, list: String, endTime: String? = nil, relistingGroupId: String? = nil, captured: Bool? = nil) -> HistoryItem {
-        HistoryItem(
-            itemId: id,
-            title: "Item \(id)",
-            list: list,
-            currentPrice: nil,
-            maxBid: nil,
-            endTime: endTime,
-            sellerUserId: nil,
-            conditionDisplayName: nil,
-            imageUrl: nil,
-            itemWebUrl: nil,
-            relistingGroupId: relistingGroupId,
-            captured: captured
-        )
-    }
-
-    @Test("Derives won and eventuallyWon from wonItems, sorted by endTime descending")
-    func derivesFlagsAndSortsByEndTimeDescending() {
-        let endedWatchlistItems = [
-            item("w1", list: "WatchList", endTime: "2026-01-01T00:00:00Z", relistingGroupId: "group-a", captured: false),
-            item("w2", list: "WatchList", endTime: "2026-03-01T00:00:00Z", captured: true)
-        ]
-        let wonItems = [
-            item("won1", list: "WonList", endTime: "2026-02-01T00:00:00Z", relistingGroupId: "group-a")
-        ]
-
-        let result = computeAnalyticsItems(endedWatchlistItems: endedWatchlistItems, wonItems: wonItems)
-
-        #expect(result.map(\.id) == ["w2", "won1", "w1"])
-        #expect(result.first { $0.id == "w1" }?.eventuallyWon == true)
-        #expect(result.first { $0.id == "w1" }?.won == false)
-        #expect(result.first { $0.id == "won1" }?.won == true)
-    }
-
-    @Test("A won item already on the watchlist is not duplicated as a won-only row")
-    func doesNotDuplicateWonItemAlreadyOnWatchlist() {
-        let endedWatchlistItems = [item("shared1", list: "WatchList", captured: true)]
-        let wonItems = [item("shared1", list: "WonList")]
-
-        let result = computeAnalyticsItems(endedWatchlistItems: endedWatchlistItems, wonItems: wonItems)
-
-        #expect(result.count == 1)
-        #expect(result[0].won == true)
-        #expect(result[0].captured == true)
-    }
-
-    @Test("Won-only rows default to not captured")
-    func wonOnlyRowsDefaultToNotCaptured() {
-        let result = computeAnalyticsItems(endedWatchlistItems: [], wonItems: [item("won1", list: "WonList")])
-
-        #expect(result[0].captured == false)
+@Suite("Server analytics contract")
+struct AnalyticsItemDecodingTests {
+    @Test("Uses server outcomes even when client list text would suggest another outcome")
+    func decodesAuthoritativeFlags() throws {
+        let json = #"{"itemId":"same","title":"Record","list":"WatchList","currentPrice":{"value":25,"currency":"USD"},"captured":true,"won":true,"eventuallyWon":false}"#
+        let row = try JSONDecoder().decode(ServerAnalyticsItem.self, from: Data(json.utf8))
+        #expect(row.won == true)
+        #expect(row.eventuallyWon == false)
+        #expect(row.item.currentPrice?.value == 25)
+        #expect(row.item.captured == true)
     }
 }
 
@@ -415,5 +394,18 @@ struct FilterAnalyticsItemsTests {
         )
 
         #expect(result.map(\.id) == ["a"])
+    }
+}
+
+
+@Suite("Server seller display contract")
+struct SellerDisplayDecodingTests {
+    @Test("Preserves raw identity and decodes the separate server label and profile URL")
+    func decodesSellerDisplay() throws {
+        let json = #"{"itemId":"one","title":"Record","list":"WonList","sellerUserId":"201977996","sellerDisplayName":"facerecords","sellerUsername":"facerecords","sellerProfileUrl":"https://www.ebay.co.uk/usr/facerecords"}"#
+        let row = try JSONDecoder().decode(HistoryItem.self, from: Data(json.utf8))
+        #expect(row.sellerUserId == "201977996")
+        #expect(row.sellerDisplayName == "facerecords")
+        #expect(row.sellerProfileUrl == "https://www.ebay.co.uk/usr/facerecords")
     }
 }

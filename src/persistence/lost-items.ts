@@ -155,3 +155,17 @@ function parseDate(value: string | undefined): Date | undefined {
   const date = new Date(value);
   return Number.isFinite(date.getTime()) ? date : undefined;
 }
+
+/** Read-only lost observations, including history outside eBay's live window. */
+export async function listAllLostItems(userId: string, prisma: PrismaClient | undefined = getPrismaClient()): Promise<EbayBuyingHistoryItem[]> {
+  if (!prisma) return [];
+  const items = await prisma.lostItem.findMany({ where: { userId, venue: "ebay" } });
+  return items.map(item => ({
+    itemId: item.venueItemId, title: item.title, list: "LostList" as const,
+    currentPrice: item.soldPriceAmount !== null && item.soldPriceCurrency ? { value: item.soldPriceAmount.toNumber(), currency: item.soldPriceCurrency } : undefined,
+    maxBid: item.maxBidAmount !== null && item.maxBidCurrency ? { value: item.maxBidAmount.toNumber(), currency: item.maxBidCurrency } : undefined,
+    endTime: item.endedAt?.toISOString(), sellerUserId: item.sellerUserId ?? undefined,
+    conditionDisplayName: item.conditionDisplayName ?? undefined, categoryId: item.categoryId ?? undefined,
+    categoryName: item.categoryName ?? undefined, imageUrl: item.imageUrl ?? undefined, itemWebUrl: item.itemWebUrl ?? undefined
+  }));
+}

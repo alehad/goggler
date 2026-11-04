@@ -1,3 +1,4 @@
+import type { MatchingPreferences } from "../../../../src/ebay/matching-preferences.ts";
 import { NextRequest, NextResponse } from "next/server.js";
 import { validateSameOriginRequest } from "../../../../src/auth/csrf.ts";
 import { getOrCreateCurrentUser } from "../../../../src/auth/current-user.ts";
@@ -8,7 +9,7 @@ import { fetchLiveEbayHistoryResponse, refreshLiveHistoryDerivedData } from "../
 import { requireSessionEbayAccessToken } from "../../../../src/ebay/session-access.ts";
 import { EbayTradingApiError } from "../../../../src/ebay/trading-client.ts";
 import type { EbayHistoryResponse } from "../../../../src/ebay/history-response.ts";
-import { listCaptureCandidates } from "../../../../src/market-insights/price-history.ts";
+import { assembleHistoryAnalytics } from "../../../../src/market-insights/price-history.ts";
 import { getMatchingPreferencesForUser } from "../../../../src/persistence/matching-preferences.ts";
 import { persistLostItemsAndMerge } from "../../../../src/persistence/lost-items.ts";
 import { persistWonItemsAndMerge } from "../../../../src/persistence/won-items.ts";
@@ -69,7 +70,7 @@ async function handleBuyingHistoryRequest(request: NextRequest) {
       }
 
       return withInternalSessionCookie(
-        NextResponse.json(await withCaptureStatus(history, currentUser.context.user.id)),
+        NextResponse.json(await withCaptureStatus(history, currentUser.context.user.id, matchingPreferences)),
         currentUser.setCookie
       );
     } catch (error) {
@@ -98,16 +99,13 @@ async function handleBuyingHistoryRequest(request: NextRequest) {
   }
 
   return withInternalSessionCookie(
-    NextResponse.json(await withCaptureStatus(getFixtureHistoryResponse(), currentUser.context.user.id)),
+    NextResponse.json(await withCaptureStatus(getFixtureHistoryResponse(), currentUser.context.user.id, matchingPreferences)),
     currentUser.setCookie
   );
 }
 
-async function withCaptureStatus(history: EbayHistoryResponse, userId: string) {
-  return {
-    ...history,
-    endedWatchlistItems: await listCaptureCandidates(history, userId)
-  };
+async function withCaptureStatus(history: EbayHistoryResponse, userId: string, preferences: MatchingPreferences) {
+  return assembleHistoryAnalytics(history, userId, preferences);
 }
 
 function withInternalSessionCookie(response: NextResponse, setCookie: string | undefined): NextResponse {

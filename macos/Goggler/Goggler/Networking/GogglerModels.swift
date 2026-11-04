@@ -62,6 +62,9 @@ struct HistoryItem: Decodable, Sendable, Identifiable {
     var maxBid: Money?
     var endTime: String?
     var sellerUserId: String?
+    var sellerUsername: String? = nil
+    var sellerDisplayName: String? = nil
+    var sellerProfileUrl: String? = nil
     var conditionDisplayName: String?
     var imageUrl: String?
     var itemWebUrl: String?
@@ -90,6 +93,7 @@ struct BuyingHistory: Decodable, Sendable {
     let lostItems: [HistoryItem]
     let wonItems: [HistoryItem]
     var endedWatchlistItems: [HistoryItem]
+    var analyticsItems: [ServerAnalyticsItem]? = nil
 }
 
 /// Response of `POST /api/market-insights/capture`.
@@ -147,4 +151,18 @@ struct MatchedSalesResponse: Decodable, Sendable {
 struct MatchingPreferences: Codable, Equatable, Sendable {
     var exactTitleMatch: Bool
     var criteriaText: String
+}
+
+/// Complete server-assembled analytics rows; no client matching or outcome inference.
+struct ServerAnalyticsItem: Decodable, Sendable {
+    let item: HistoryItem
+    let won: Bool
+    let eventuallyWon: Bool
+    init(from decoder: Decoder) throws {
+        item = try HistoryItem(from: decoder)
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        won = try values.decode(Bool.self, forKey: .won)
+        eventuallyWon = try values.decode(Bool.self, forKey: .eventuallyWon)
+    }
+    private enum CodingKeys: String, CodingKey { case won, eventuallyWon }
 }

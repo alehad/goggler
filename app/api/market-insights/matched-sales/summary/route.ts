@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server.js";
 import { validateSameOriginRequest } from "../../../../../src/auth/csrf.ts";
 import { getOrCreateCurrentUser } from "../../../../../src/auth/current-user.ts";
 import {
-  listMatchedSalesSummaries,
+  listMatchedSalesOverview,
   type MatchedSalesGroupKey
 } from "../../../../../src/market-insights/price-history.ts";
 import { getMatchingPreferencesForUser } from "../../../../../src/persistence/matching-preferences.ts";
@@ -38,8 +38,8 @@ export async function POST(request: NextRequest) {
   const matchingPreferences = await getMatchingPreferencesForUser(currentUser.context.user.id);
 
   try {
-    const summaries = await listMatchedSalesSummaries(currentUser.context.user.id, groups, matchingPreferences);
-    return withInternalSessionCookie(NextResponse.json({ summaries }), currentUser.setCookie);
+    const overview = await listMatchedSalesOverview(currentUser.context.user.id, groups, matchingPreferences);
+    return withInternalSessionCookie(NextResponse.json(overview), currentUser.setCookie);
   } catch {
     console.warn("Market insights matched-sales summary lookup failed", { type: "unexpected_error" });
     return withInternalSessionCookie(

@@ -158,6 +158,7 @@ test("parses buyer GetOrders purchases into won history items", () => {
     itemId: "order-item-001",
     title: "Three Blind Mice TBM2541 Japan vinyl LP",
     list: "WonList",
+    purchasePriceSource: "transaction",
     currentPrice: { value: 64.99, currency: "USD" },
     endTime: "2026-02-12T10:15:00.000Z",
     sellerUserId: "order-seller",
@@ -479,3 +480,16 @@ function getOrdersResponseXml(options = {}) {
   </OrderArray>
 </GetOrdersResponse>`;
 }
+
+test('WonList uses transaction price and purchase time, not listing zero or end time',()=>{
+ const xml=`<GetMyeBayBuyingResponse><Ack>Success</Ack><WonList><OrderTransactionArray><OrderTransaction><Transaction><Item><ItemID>one</ItemID><Title>Record</Title><SellingStatus><CurrentPrice currencyID="USD">0.00</CurrentPrice></SellingStatus><ListingDetails><EndTime>2026-01-01T00:00:00Z</EndTime></ListingDetails></Item><TransactionPrice currencyID="USD">25.00</TransactionPrice><CreatedDate>2026-01-02T00:00:00Z</CreatedDate></Transaction></OrderTransaction></OrderTransactionArray></WonList></GetMyeBayBuyingResponse>`;
+ const [item]=parseGetMyeBayBuyingResponse(xml,'WonList').items;
+ assert.deepEqual(item.currentPrice,{value:25,currency:'USD'});assert.equal(item.endTime,'2026-01-02T00:00:00Z');
+ assert.equal(parseGetMyeBayBuyingResponse(xml.replace('>25.00<','>0.00<'),'WonList').items[0].currentPrice.value,0);
+});
+test('Empty, malformed and listing-only zero prices are unavailable rather than fabricated paid zero',()=>{
+ for(const amount of ['',' ','0','NaN','-1','12oops']){
+  const xml=`<GetMyeBayBuyingResponse><Ack>Success</Ack><WonList><Item><ItemID>one</ItemID><Title>Record</Title><CurrentPrice currencyID="USD">${amount}</CurrentPrice></Item></WonList></GetMyeBayBuyingResponse>`;
+  assert.equal(parseGetMyeBayBuyingResponse(xml,'WonList').items[0].currentPrice,undefined);
+ }
+});

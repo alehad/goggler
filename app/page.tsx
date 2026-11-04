@@ -26,8 +26,7 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { MatchingPreferences } from "../src/ebay/matching-preferences.ts";
-import { buildPurchaseChartPoints, type PurchaseChartPoint } from "../src/ebay/purchase-analytics.ts";
-import { ebaySellerProfileUrl } from "../src/ebay/seller-profile.ts";
+import { type PurchaseChartPoint } from "../src/ebay/purchase-analytics.ts";
 import { safeEbayImageUrl, safeEbayItemUrl } from "../src/http/safe-external-url.ts";
 import type { WatchlistAutomationCandidate, WatchlistAutomationEvent } from "../src/market-insights/watchlist-automation.ts";
 import { formatAbsoluteDate } from "../src/ui/date-format.ts";
@@ -116,10 +115,14 @@ type HistoryItem = {
   };
   endTime?: string;
   sellerUserId?: string;
+  sellerUsername?: string;
+  sellerDisplayName?: string;
+  sellerProfileUrl?: string;
   conditionDisplayName?: string;
   imageUrl?: string;
   itemWebUrl?: string;
   relistingGroupId?: string;
+  eventuallyWon?: boolean;
 };
 
 type EndedWatchlistItem = HistoryItem & { captured: boolean };
@@ -149,10 +152,12 @@ type MatchedSalesState =
   | { status: "ready"; sales: MatchedSalePoint[]; summary?: MatchedSalesSummary }
   | { status: "unavailable" };
 
+type PurchasePriceComparison = { differenceValue: number; differencePercent?: number };
+
 type MatchedSalesSummariesState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "ready"; summaries: Record<string, MatchedSalesSummary | undefined> }
+  | { status: "ready"; summaries: Record<string, MatchedSalesSummary | undefined>; comparisons: Record<string, PurchasePriceComparison> }
   | { status: "unavailable" };
 
 type BuyingHistory = {
@@ -170,6 +175,8 @@ type BuyingHistory = {
   lostItems: HistoryItem[];
   wonItems: HistoryItem[];
   endedWatchlistItems: EndedWatchlistItem[];
+  analyticsItems: AnalyticsItem[];
+  purchaseChartPoints: PurchaseChartPoint[];
   homeFeed: {
     rows: HomeFeedRow[];
     counts: {
@@ -226,6 +233,9 @@ type HomeFeedRow = {
   endsAt?: string;
   wonAt?: string;
   sellerUserId?: string;
+  sellerUsername?: string;
+  sellerDisplayName?: string;
+  sellerProfileUrl?: string;
   conditionDisplayName?: string;
   imageUrl?: string;
   itemWebUrl?: string;
@@ -267,40 +277,12 @@ export default function Home() {
     setActiveTab("analytics");
   }
 
-  function markItemsCaptured(itemIds: string[]) {
-    setHistoryState((current) => {
-      if (current.status !== "ready") {
-        return current;
-      }
-
-      const idSet = new Set(itemIds);
-      return {
-        ...current,
-        history: {
-          ...current.history,
-          endedWatchlistItems: current.history.endedWatchlistItems.map((item) =>
-            idSet.has(item.itemId) ? { ...item, captured: true } : item
-          )
-        }
-      };
-    });
+  function markItemsCaptured(_itemIds: string[]) {
+    void refreshBuyingHistory();
   }
 
-  function removeHistoryItems(itemIds: string[]) {
-    setHistoryState((current) => {
-      if (current.status !== "ready") {
-        return current;
-      }
-
-      const idSet = new Set(itemIds);
-      return {
-        ...current,
-        history: {
-          ...current.history,
-          endedWatchlistItems: current.history.endedWatchlistItems.filter((item) => !idSet.has(item.itemId))
-        }
-      };
-    });
+  function removeHistoryItems(_itemIds: string[]) {
+    void refreshBuyingHistory();
   }
 
   async function refreshEbayConfigStatus() {
@@ -994,7 +976,7 @@ function HomeFeedCard({ row, onAddToWatchlist }: { row: HomeFeedRow; onAddToWatc
         </div>
 
         <div className="meta-row">
-          <span>seller: <SellerLink inline sellerUserId={row.sellerUserId} /></span>
+          <span>seller: <SellerLink inline sellerDisplayName={row.sellerDisplayName} sellerProfileUrl={row.sellerProfileUrl} /></span>
           {wonDate && <span>won: {wonDate}</span>}
           {row.maxBid && <span>max bid: {formatMoneyValue(row.maxBid)}</span>}
           {row.section === "unresolved" || row.section === "resolved" ? (
@@ -1072,13 +1054,12 @@ function Tracking({
       return [];
     }
 
-    const wonGroups = new Set(historyState.history.wonItems.map((item) => item.relistingGroupId));
     if (filter === "neverWon") {
-      return historyState.history.lostItems.filter((item) => !wonGroups.has(item.relistingGroupId));
+      return historyState.history.lostItems.filter((item) => !item.eventuallyWon);
     }
 
     if (filter === "eventuallyWon") {
-      return historyState.history.lostItems.filter((item) => wonGroups.has(item.relistingGroupId));
+      return historyState.history.lostItems.filter((item) => item.eventuallyWon);
     }
 
     return historyState.history.lostItems;
@@ -1129,7 +1110,7 @@ function Tracking({
           </div>
           <div className="table-panel">
             {filteredItems.map((item) => (
-              <HistoryRow item={item} key={item.itemId} sideLabel={formatLostStatus(item, historyState.history.wonItems)} />
+              <HistoryRow item={item} key={item.itemId} sideLabel={formatLostStatus(item)} />
             ))}
           </div>
         </>
@@ -1158,14 +1139,14 @@ function Won({
     () => (historyState.status === "ready" ? historyState.history.wonItems : []),
     [historyState]
   );
-  const chartPoints = useMemo(() => buildPurchaseChartPoints(wonItems), [wonItems]);
+  const chartPoints = historyState.status === "ready" ? historyState.history.purchaseChartPoints ?? [] : [];
   const filteredItems = useMemo(() => {
     const term = searchQuery.trim().toLocaleLowerCase("en-GB");
     if (!term) {
       return wonItems;
     }
     return wonItems.filter(
-      (item) => item.title.toLocaleLowerCase("en-GB").includes(term) || item.sellerUserId?.toLocaleLowerCase("en-GB").includes(term)
+      (item) => item.title.toLocaleLowerCase("en-GB").includes(term) || (item.sellerDisplayName?.toLocaleLowerCase("en-GB").includes(term) || item.sellerUserId?.toLocaleLowerCase("en-GB").includes(term))
     );
   }, [wonItems, searchQuery]);
   const selectedItem = wonItems.find((item) => item.itemId === selectedItemId);
@@ -1212,9 +1193,9 @@ function Won({
       method: "POST"
     })
       .then((response) => (response.ok ? response.json() : Promise.reject(new Error("matched_sales_summary_unavailable"))))
-      .then((body: { summaries?: Record<string, MatchedSalesSummary | undefined> }) => {
+      .then((body: { summaries?: Record<string, MatchedSalesSummary | undefined>; comparisons?: Record<string, PurchasePriceComparison> }) => {
         if (!cancelled) {
-          setSummariesState({ status: "ready", summaries: body.summaries ?? {} });
+          setSummariesState({ status: "ready", summaries: body.summaries ?? {}, comparisons: body.comparisons ?? {} });
         }
       })
       .catch(() => {
@@ -1266,6 +1247,7 @@ function Won({
                   onSelect={selectPurchase}
                   onViewPriceHistory={onViewPriceHistory}
                   selected={item.itemId === selectedPoint?.itemId || item.itemId === selectedItem?.itemId}
+                  comparison={summariesState.status === "ready" ? summariesState.comparisons[item.itemId] : undefined}
                   summary={
                     item.relistingGroupId && item.currentPrice?.currency
                       ? summaries[matchedSalesSummaryKey(item.relistingGroupId, item.currentPrice.currency)]
@@ -1438,22 +1420,23 @@ function PurchaseCard({
   onSelect,
   onViewPriceHistory,
   selected,
-  summary
+  summary,
+  comparison
 }: {
   item: HistoryItem;
   onSelect: (itemId: string) => void;
   onViewPriceHistory: (itemId: string, relistingGroupId: string | undefined) => void;
   selected: boolean;
   summary: MatchedSalesSummary | undefined;
+  comparison?: PurchasePriceComparison;
 }) {
   const imageUrl = safeEbayImageUrl(item.imageUrl);
   const wonDate = formatAbsoluteDate(item.endTime);
   const paidValue = item.currentPrice?.value;
   const paidCurrency = item.currentPrice?.currency;
-  const comparableSummary = summary && summary.count > 1 ? summary : undefined;
-  const diff = comparableSummary && paidValue !== undefined ? paidValue - comparableSummary.average : undefined;
-  const diffPercent =
-    diff !== undefined && comparableSummary && comparableSummary.average !== 0 ? (diff / comparableSummary.average) * 100 : undefined;
+  const comparableSummary = comparison ? summary : undefined;
+  const diff = comparison?.differenceValue;
+  const diffPercent = comparison?.differencePercent;
 
   return (
     <article
@@ -1471,7 +1454,7 @@ function PurchaseCard({
           </div>
         </div>
         <div className="meta-row">
-          <span>seller: <SellerLink inline sellerUserId={item.sellerUserId} /></span>
+          <span>seller: <SellerLink inline sellerDisplayName={item.sellerDisplayName} sellerProfileUrl={item.sellerProfileUrl} /></span>
           {wonDate && <span>won: {wonDate}</span>}
         </div>
         <div className="signal-row">
@@ -1567,32 +1550,7 @@ function Analytics({
     };
   }, []);
 
-  const items: AnalyticsItem[] = useMemo(() => {
-    if (historyState.status !== "ready") {
-      return [];
-    }
-
-    const { endedWatchlistItems, wonItems } = historyState.history;
-    const wonItemIds = new Set(wonItems.map((won) => won.itemId));
-    const wonGroupIds = new Set(
-      wonItems.map((won) => won.relistingGroupId).filter((groupId): groupId is string => Boolean(groupId))
-    );
-
-    const watchlistRows: AnalyticsItem[] = endedWatchlistItems.map((item) => {
-      const won = wonItemIds.has(item.itemId);
-      return {
-        ...item,
-        won,
-        eventuallyWon: !won && Boolean(item.relistingGroupId) && wonGroupIds.has(item.relistingGroupId as string)
-      };
-    });
-    const watchlistIds = new Set(watchlistRows.map((row) => row.itemId));
-    const wonOnlyRows: AnalyticsItem[] = wonItems
-      .filter((won) => !watchlistIds.has(won.itemId))
-      .map((won) => ({ ...won, captured: false, won: true, eventuallyWon: false }));
-
-    return [...watchlistRows, ...wonOnlyRows].sort((a, b) => Date.parse(b.endTime ?? "") - Date.parse(a.endTime ?? ""));
-  }, [historyState]);
+  const items: AnalyticsItem[] = historyState.status === "ready" ? historyState.history.analyticsItems ?? [] : [];
   const capturedCount = items.filter((item) => item.captured).length;
   const notCapturedCount = items.length - capturedCount;
   const filteredItems = useMemo(() => {
@@ -1624,7 +1582,7 @@ function Analytics({
       return winFiltered;
     }
     return winFiltered.filter(
-      (item) => item.title.toLocaleLowerCase("en-GB").includes(term) || item.sellerUserId?.toLocaleLowerCase("en-GB").includes(term)
+      (item) => item.title.toLocaleLowerCase("en-GB").includes(term) || (item.sellerDisplayName?.toLocaleLowerCase("en-GB").includes(term) || item.sellerUserId?.toLocaleLowerCase("en-GB").includes(term))
     );
   }, [filter, winFilter, items, searchQuery, groupFilter, aiFilterItemIds]);
 
@@ -2158,7 +2116,7 @@ function AnalyticsRow({
           </div>
         </div>
         <div className="meta-row">
-          <span>seller: <SellerLink inline sellerUserId={item.sellerUserId} /></span>
+          <span>seller: <SellerLink inline sellerDisplayName={item.sellerDisplayName} sellerProfileUrl={item.sellerProfileUrl} /></span>
           {dateLabel && <span>{isWonOnly ? "won" : "ended"}: {dateLabel}</span>}
         </div>
         <div className="signal-row">
@@ -2487,7 +2445,7 @@ function HistoryRow({ item, sideLabel }: { item: HistoryItem; sideLabel: string 
       <div>
         <h2>{item.title}</h2>
         <p>
-          <SellerLink inline sellerUserId={item.sellerUserId} />
+          <SellerLink inline sellerDisplayName={item.sellerDisplayName} sellerProfileUrl={item.sellerProfileUrl} />
           {item.conditionDisplayName ? ` | ${item.conditionDisplayName}` : ""}
           {item.endTime ? ` | ended ${new Date(item.endTime).toLocaleDateString()}` : ""}
         </p>
@@ -2501,9 +2459,9 @@ function HistoryRow({ item, sideLabel }: { item: HistoryItem; sideLabel: string 
   );
 }
 
-function SellerLink({ inline = false, sellerUserId }: { inline?: boolean; sellerUserId?: string }) {
-  const sellerUrl = ebaySellerProfileUrl(sellerUserId);
-  const sellerLabel = sellerUserId?.trim() || "Unknown seller";
+function SellerLink({ inline = false, sellerDisplayName, sellerProfileUrl }: { inline?: boolean; sellerDisplayName?: string; sellerProfileUrl?: string }) {
+  const sellerUrl = sellerProfileUrl;
+  const sellerLabel = sellerDisplayName ?? "Unknown seller";
   const content = sellerUrl ? (
     <a className="seller-link" href={sellerUrl} rel="noreferrer" target="_blank">
       {sellerLabel}
@@ -2644,6 +2602,9 @@ function candidateToRow(candidate: WatchlistAutomationCandidate): HomeFeedRow {
     currentPrice: candidate.currentPrice,
     endsAt: candidate.endsAt,
     sellerUserId: candidate.sellerUserId,
+    sellerUsername: candidate.sellerUsername,
+    sellerDisplayName: candidate.sellerDisplayName,
+    sellerProfileUrl: candidate.sellerProfileUrl,
     conditionDisplayName: candidate.conditionDisplayName,
     imageUrl: candidate.imageUrl,
     itemWebUrl: candidate.itemWebUrl,
@@ -2662,6 +2623,9 @@ function toCaptureRequestItem(item: AnalyticsItem) {
     list: item.list,
     endTime: item.endTime,
     sellerUserId: item.sellerUserId,
+    sellerUsername: item.sellerUsername,
+    sellerDisplayName: item.sellerDisplayName,
+    sellerProfileUrl: item.sellerProfileUrl,
     conditionDisplayName: item.conditionDisplayName,
     imageUrl: item.imageUrl,
     itemWebUrl: item.itemWebUrl
@@ -2696,9 +2660,8 @@ function priceTicks(minPrice: number, maxPrice: number, step: number): number[] 
   return ticks;
 }
 
-function formatLostStatus(item: HistoryItem, wonItems: HistoryItem[]): string {
-  const wasEventuallyWon = wonItems.some((wonItem) => wonItem.relistingGroupId === item.relistingGroupId);
-  return wasEventuallyWon ? "Eventually won" : "Never won";
+function formatLostStatus(item: HistoryItem): string {
+  return item.eventuallyWon ? "Eventually won" : "Never won";
 }
 
 function formatRelativeDate(value: string): string {
