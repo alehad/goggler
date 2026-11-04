@@ -8,7 +8,7 @@ import type { EbayBuyingHistoryItem } from "../ebay/trading-client.ts";
 import { computeGroupDeals, computeGroupTrends, type GroupDeal, type GroupTrend } from "./price-history.ts";
 
 const ANALYTICS_ASSISTANT_SYSTEM_PROMPT =
-  "You answer questions about the signed-in user's own eBay price-history and purchase data, using only " +
+  "Use sellerDisplayName to name sellers; sellerUserId may be an opaque identity, not a username. You answer questions about the signed-in user's own eBay price-history and purchase data, using only " +
   "the results of the tools provided to you. Never guess, estimate, or use outside knowledge for a numeric " +
   "or factual claim — always call a tool first. If a tool returns no matching data, say so plainly instead " +
   "of speculating. Markdown is rendered, so use it for readability, but never invent structure the tool " +
@@ -226,7 +226,7 @@ function filterItems(
   }
   if (filter.sellerUserId) {
     const seller = filter.sellerUserId.toLocaleLowerCase("en-GB");
-    filtered = filtered.filter((item) => item.sellerUserId?.toLocaleLowerCase("en-GB") === seller);
+    filtered = filtered.filter((item) => (item.sellerUserId?.toLocaleLowerCase("en-GB") === seller || item.sellerUsername?.toLocaleLowerCase("en-GB") === seller));
   }
   if (filter.minPrice !== undefined) {
     const minPrice = filter.minPrice;
@@ -278,7 +278,8 @@ function toItemSummary(item: ToolItem) {
     price: item.currentPrice?.value,
     currency: item.currentPrice?.currency,
     endTime: item.endTime,
-    sellerUserId: item.sellerUserId
+    sellerUserId: item.sellerUserId,
+    sellerDisplayName: item.sellerDisplayName
   };
 }
 

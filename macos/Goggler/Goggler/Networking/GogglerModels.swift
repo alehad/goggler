@@ -62,6 +62,9 @@ struct HistoryItem: Decodable, Sendable, Identifiable {
     var maxBid: Money?
     var endTime: String?
     var sellerUserId: String?
+    var sellerUsername: String? = nil
+    var sellerDisplayName: String? = nil
+    var sellerProfileUrl: String? = nil
     var conditionDisplayName: String?
     var imageUrl: String?
     var itemWebUrl: String?

@@ -1,3 +1,4 @@
+import { ebaySellerProfileUrl } from "./seller-profile.ts";
 import type { EbayConfig } from "./config.ts";
 import type { HomeFeedRow } from "./home-feed.ts";
 import type { EbayMoney } from "./trading-client.ts";
@@ -153,6 +154,9 @@ function parseBrowseRow(raw: unknown, matchingPreferences: MatchingPreferences):
     currentPrice: price,
     endsAt,
     sellerUserId,
+    sellerUsername: sellerUserId,
+    sellerDisplayName: sellerUserId ?? "Unknown seller",
+    sellerProfileUrl: ebaySellerProfileUrl(sellerUserId),
     conditionDisplayName,
     categoryId: category?.categoryId,
     categoryName: category?.categoryName,

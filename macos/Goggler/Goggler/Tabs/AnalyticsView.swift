@@ -595,7 +595,7 @@ func filterAnalyticsItems(
     guard !term.isEmpty else { return winFiltered }
     return winFiltered.filter { analyticsItem in
         analyticsItem.item.title.lowercased().contains(term)
-            || (analyticsItem.item.sellerUserId?.lowercased().contains(term) ?? false)
+            || ((analyticsItem.item.sellerDisplayName?.lowercased().contains(term) ?? false) || (analyticsItem.item.sellerUserId?.lowercased().contains(term) ?? false))
     }
 }
 
@@ -666,7 +666,7 @@ private struct AnalyticsRow: View {
     }
 
     private var subtitle: String {
-        var parts = [item.sellerUserId?.trimmingCharacters(in: .whitespaces).nilIfEmpty ?? "Unknown seller"]
+        var parts = [item.sellerDisplayName ?? "Unknown seller"]
         if let endTime = item.endTime, let date = ISO8601DateFormatter().date(from: endTime) {
             parts.append("\(isWonOnly ? "won" : "ended") \(date.formatted(date: .abbreviated, time: .omitted))")
         }

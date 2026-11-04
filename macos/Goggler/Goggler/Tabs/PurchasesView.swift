@@ -68,7 +68,7 @@ struct PurchasesView: View {
         let filteredItems = term.isEmpty
             ? history.wonItems
             : history.wonItems.filter { item in
-                item.title.lowercased().contains(term) || (item.sellerUserId?.lowercased().contains(term) ?? false)
+                item.title.lowercased().contains(term) || ((item.sellerDisplayName?.lowercased().contains(term) ?? false) || (item.sellerUserId?.lowercased().contains(term) ?? false))
             }
 
         HStack {
@@ -121,7 +121,7 @@ private struct PurchaseRow: View {
     }
 
     private var subtitle: String {
-        var parts = [item.sellerUserId?.trimmingCharacters(in: .whitespaces).nilIfEmpty ?? "Unknown seller"]
+        var parts = [item.sellerDisplayName ?? "Unknown seller"]
         if let endTime = item.endTime, let date = ISO8601DateFormatter().date(from: endTime) {
             parts.append("won \(date.formatted(date: .abbreviated, time: .omitted))")
         }

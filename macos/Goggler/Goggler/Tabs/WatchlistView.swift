@@ -150,7 +150,7 @@ private struct HistoryItemRow: View {
     }
 
     private var subtitle: String {
-        var parts = [item.sellerUserId?.trimmingCharacters(in: .whitespaces).nilIfEmpty ?? "Unknown seller"]
+        var parts = [item.sellerDisplayName ?? "Unknown seller"]
         if let condition = item.conditionDisplayName { parts.append(condition) }
         if let endTime = item.endTime, let date = ISO8601DateFormatter().date(from: endTime) {
             parts.append("ended \(date.formatted(date: .abbreviated, time: .omitted))")

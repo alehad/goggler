@@ -19,6 +19,9 @@ export type WatchlistAutomationCandidate = {
   currentPrice?: { value: number; currency: string };
   endsAt?: string;
   sellerUserId?: string;
+  sellerUsername?: string;
+  sellerDisplayName?: string;
+  sellerProfileUrl?: string;
   conditionDisplayName?: string;
   categoryId?: string;
   categoryName?: string;
@@ -169,6 +172,9 @@ function rowToCandidate(row: HomeFeedRow, recordId: string, sourceItem: EbayBuyi
     currentPrice: row.currentPrice,
     endsAt: row.endsAt,
     sellerUserId: row.sellerUserId,
+    sellerUsername: row.sellerUsername,
+    sellerDisplayName: row.sellerDisplayName,
+    sellerProfileUrl: row.sellerProfileUrl,
     conditionDisplayName: row.conditionDisplayName,
     categoryId: row.categoryId,
     categoryName: row.categoryName,

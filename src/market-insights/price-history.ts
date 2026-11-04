@@ -1,3 +1,4 @@
+import { resolveSellerDetails } from "../ebay/seller-profile.ts";
 import { fetchGetMyeBayBuyingPages } from "../ebay/trading-client.ts";
 import { getMatchingPreferencesForUser } from "../persistence/matching-preferences.ts";
 import { buildPurchaseChartPoints } from "../ebay/purchase-analytics.ts";
@@ -339,8 +340,17 @@ export async function assembleHistoryAnalytics(history: EbayHistoryResponse, use
   const analyticsItems = assembleAnalyticsHistory([
     ...history.wonItems, ...history.lostItems, ...history.endedWatchlistItems, ...captured
   ], capturedIds, preferences);
-  return { ...history, analyticsItems, endedWatchlistItems: analyticsItems,
-    purchaseChartPoints: buildPurchaseChartPoints(history.wonItems),
-    lostItems: history.lostItems.map(item => ({ ...item, eventuallyWon: analyticsItems.find(row => row.itemId === item.itemId)?.eventuallyWon ?? false }))
+  const evidence = [...history.wonItems, ...history.lostItems, ...history.watchlistItems, ...history.endedWatchlistItems, ...captured, ...history.relistingCandidates];
+  const wonItems = resolveSellerDetails(history.wonItems, evidence);
+  const lostItems = resolveSellerDetails(history.lostItems, evidence).map(item => ({ ...item, eventuallyWon: analyticsItems.find(row => row.itemId === item.itemId)?.eventuallyWon ?? false }));
+  const decorateRows = (rows: typeof history.homeFeed.rows) => rows.map(row => {
+    const [seller] = resolveSellerDetails([{ itemId: row.sourceItemId ?? row.id, sellerUserId: row.sellerUserId, sellerUsername: row.sellerUsername }], evidence);
+    return { ...row, sellerUsername: seller.sellerUsername, sellerDisplayName: seller.sellerDisplayName, sellerProfileUrl: seller.sellerProfileUrl };
+  });
+  return { ...history, wonItems, lostItems, analyticsItems, endedWatchlistItems: analyticsItems,
+    watchlistItems: resolveSellerDetails(history.watchlistItems, evidence),
+    relistingCandidates: resolveSellerDetails(history.relistingCandidates, evidence),
+    homeFeed: { ...history.homeFeed, rows: decorateRows(history.homeFeed.rows), ebayRows: decorateRows(history.homeFeed.ebayRows), relistingRows: decorateRows(history.homeFeed.relistingRows) },
+    purchaseChartPoints: buildPurchaseChartPoints(wonItems)
   };
 }

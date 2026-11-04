@@ -27,7 +27,6 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { MatchingPreferences } from "../src/ebay/matching-preferences.ts";
 import { type PurchaseChartPoint } from "../src/ebay/purchase-analytics.ts";
-import { ebaySellerProfileUrl } from "../src/ebay/seller-profile.ts";
 import { safeEbayImageUrl, safeEbayItemUrl } from "../src/http/safe-external-url.ts";
 import type { WatchlistAutomationCandidate, WatchlistAutomationEvent } from "../src/market-insights/watchlist-automation.ts";
 import { formatAbsoluteDate } from "../src/ui/date-format.ts";
@@ -116,6 +115,9 @@ type HistoryItem = {
   };
   endTime?: string;
   sellerUserId?: string;
+  sellerUsername?: string;
+  sellerDisplayName?: string;
+  sellerProfileUrl?: string;
   conditionDisplayName?: string;
   imageUrl?: string;
   itemWebUrl?: string;
@@ -231,6 +233,9 @@ type HomeFeedRow = {
   endsAt?: string;
   wonAt?: string;
   sellerUserId?: string;
+  sellerUsername?: string;
+  sellerDisplayName?: string;
+  sellerProfileUrl?: string;
   conditionDisplayName?: string;
   imageUrl?: string;
   itemWebUrl?: string;
@@ -971,7 +976,7 @@ function HomeFeedCard({ row, onAddToWatchlist }: { row: HomeFeedRow; onAddToWatc
         </div>
 
         <div className="meta-row">
-          <span>seller: <SellerLink inline sellerUserId={row.sellerUserId} /></span>
+          <span>seller: <SellerLink inline sellerDisplayName={row.sellerDisplayName} sellerProfileUrl={row.sellerProfileUrl} /></span>
           {wonDate && <span>won: {wonDate}</span>}
           {row.maxBid && <span>max bid: {formatMoneyValue(row.maxBid)}</span>}
           {row.section === "unresolved" || row.section === "resolved" ? (
@@ -1141,7 +1146,7 @@ function Won({
       return wonItems;
     }
     return wonItems.filter(
-      (item) => item.title.toLocaleLowerCase("en-GB").includes(term) || item.sellerUserId?.toLocaleLowerCase("en-GB").includes(term)
+      (item) => item.title.toLocaleLowerCase("en-GB").includes(term) || (item.sellerDisplayName?.toLocaleLowerCase("en-GB").includes(term) || item.sellerUserId?.toLocaleLowerCase("en-GB").includes(term))
     );
   }, [wonItems, searchQuery]);
   const selectedItem = wonItems.find((item) => item.itemId === selectedItemId);
@@ -1449,7 +1454,7 @@ function PurchaseCard({
           </div>
         </div>
         <div className="meta-row">
-          <span>seller: <SellerLink inline sellerUserId={item.sellerUserId} /></span>
+          <span>seller: <SellerLink inline sellerDisplayName={item.sellerDisplayName} sellerProfileUrl={item.sellerProfileUrl} /></span>
           {wonDate && <span>won: {wonDate}</span>}
         </div>
         <div className="signal-row">
@@ -1577,7 +1582,7 @@ function Analytics({
       return winFiltered;
     }
     return winFiltered.filter(
-      (item) => item.title.toLocaleLowerCase("en-GB").includes(term) || item.sellerUserId?.toLocaleLowerCase("en-GB").includes(term)
+      (item) => item.title.toLocaleLowerCase("en-GB").includes(term) || (item.sellerDisplayName?.toLocaleLowerCase("en-GB").includes(term) || item.sellerUserId?.toLocaleLowerCase("en-GB").includes(term))
     );
   }, [filter, winFilter, items, searchQuery, groupFilter, aiFilterItemIds]);
 
@@ -2111,7 +2116,7 @@ function AnalyticsRow({
           </div>
         </div>
         <div className="meta-row">
-          <span>seller: <SellerLink inline sellerUserId={item.sellerUserId} /></span>
+          <span>seller: <SellerLink inline sellerDisplayName={item.sellerDisplayName} sellerProfileUrl={item.sellerProfileUrl} /></span>
           {dateLabel && <span>{isWonOnly ? "won" : "ended"}: {dateLabel}</span>}
         </div>
         <div className="signal-row">
@@ -2440,7 +2445,7 @@ function HistoryRow({ item, sideLabel }: { item: HistoryItem; sideLabel: string 
       <div>
         <h2>{item.title}</h2>
         <p>
-          <SellerLink inline sellerUserId={item.sellerUserId} />
+          <SellerLink inline sellerDisplayName={item.sellerDisplayName} sellerProfileUrl={item.sellerProfileUrl} />
           {item.conditionDisplayName ? ` | ${item.conditionDisplayName}` : ""}
           {item.endTime ? ` | ended ${new Date(item.endTime).toLocaleDateString()}` : ""}
         </p>
@@ -2454,9 +2459,9 @@ function HistoryRow({ item, sideLabel }: { item: HistoryItem; sideLabel: string 
   );
 }
 
-function SellerLink({ inline = false, sellerUserId }: { inline?: boolean; sellerUserId?: string }) {
-  const sellerUrl = ebaySellerProfileUrl(sellerUserId);
-  const sellerLabel = sellerUserId?.trim() || "Unknown seller";
+function SellerLink({ inline = false, sellerDisplayName, sellerProfileUrl }: { inline?: boolean; sellerDisplayName?: string; sellerProfileUrl?: string }) {
+  const sellerUrl = sellerProfileUrl;
+  const sellerLabel = sellerDisplayName ?? "Unknown seller";
   const content = sellerUrl ? (
     <a className="seller-link" href={sellerUrl} rel="noreferrer" target="_blank">
       {sellerLabel}
@@ -2597,6 +2602,9 @@ function candidateToRow(candidate: WatchlistAutomationCandidate): HomeFeedRow {
     currentPrice: candidate.currentPrice,
     endsAt: candidate.endsAt,
     sellerUserId: candidate.sellerUserId,
+    sellerUsername: candidate.sellerUsername,
+    sellerDisplayName: candidate.sellerDisplayName,
+    sellerProfileUrl: candidate.sellerProfileUrl,
     conditionDisplayName: candidate.conditionDisplayName,
     imageUrl: candidate.imageUrl,
     itemWebUrl: candidate.itemWebUrl,
@@ -2615,6 +2623,9 @@ function toCaptureRequestItem(item: AnalyticsItem) {
     list: item.list,
     endTime: item.endTime,
     sellerUserId: item.sellerUserId,
+    sellerUsername: item.sellerUsername,
+    sellerDisplayName: item.sellerDisplayName,
+    sellerProfileUrl: item.sellerProfileUrl,
     conditionDisplayName: item.conditionDisplayName,
     imageUrl: item.imageUrl,
     itemWebUrl: item.itemWebUrl

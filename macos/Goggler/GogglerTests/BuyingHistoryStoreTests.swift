@@ -396,3 +396,16 @@ struct FilterAnalyticsItemsTests {
         #expect(result.map(\.id) == ["a"])
     }
 }
+
+
+@Suite("Server seller display contract")
+struct SellerDisplayDecodingTests {
+    @Test("Preserves raw identity and decodes the separate server label and profile URL")
+    func decodesSellerDisplay() throws {
+        let json = #"{"itemId":"one","title":"Record","list":"WonList","sellerUserId":"201977996","sellerDisplayName":"facerecords","sellerUsername":"facerecords","sellerProfileUrl":"https://www.ebay.co.uk/usr/facerecords"}"#
+        let row = try JSONDecoder().decode(HistoryItem.self, from: Data(json.utf8))
+        #expect(row.sellerUserId == "201977996")
+        #expect(row.sellerDisplayName == "facerecords")
+        #expect(row.sellerProfileUrl == "https://www.ebay.co.uk/usr/facerecords")
+    }
+}

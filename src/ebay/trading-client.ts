@@ -17,6 +17,9 @@ export type EbayBuyingHistoryItem = {
   maxBid?: EbayMoney;
   endTime?: string;
   sellerUserId?: string;
+  sellerUsername?: string;
+  sellerDisplayName?: string;
+  sellerProfileUrl?: string;
   conditionDisplayName?: string;
   categoryId?: string;
   categoryName?: string;

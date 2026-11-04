@@ -1,3 +1,4 @@
+import { resolveSellerDetails } from "./seller-profile.ts";
 import type { EbayBuyingHistoryItem } from "./trading-client.ts";
 
 const authority = { WonList: 0, LostList: 1, WatchList: 2 } as const;
@@ -19,5 +20,5 @@ export function assembleListings(observations: readonly EbayBuyingHistoryItem[])
       if (!existing[field] && observation[field]) existing[field] = observation[field];
     }
   }
-  return [...byId.values()];
+  return resolveSellerDetails([...byId.values()], observations);
 }

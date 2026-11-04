@@ -44,3 +44,18 @@ The system SHALL support a read-only, session-authenticated and CSRF-protected p
 #### Scenario: Ordinary refresh discovers a different paid price
 - **WHEN** a normal authenticated refresh resolves a transaction price different from an existing purchase price
 - **THEN** the importer preserves the stored amount and currency and does not bypass the repair-review gate
+
+### Requirement: Seller identity and display username are resolved separately
+The server SHALL preserve the original seller identity and return separate display-name and profile-link fields. It SHALL infer an identity-to-username association only from unambiguous same-listing evidence within the requesting user's dataset, never product-title matching or cross-user caches. Explicit username evidence SHALL take priority over legacy observations. Clients SHALL render the server-resolved values.
+
+#### Scenario: Won identity and captured username describe the same seller
+- **WHEN** a won listing carries an opaque seller identity and the same captured listing carries a known username
+- **THEN** the server preserves the won identity and financial facts while supplying the username as its display label, including for other items with the same unambiguous identity
+
+#### Scenario: Conflicting or unavailable username evidence
+- **WHEN** equal-strength username evidence conflicts or no association is established
+- **THEN** the server uses a seller-ID fallback label and omits a username-based profile link
+
+#### Scenario: A real username contains only digits
+- **WHEN** an explicitly username-bearing eBay response supplies a numeric-only username
+- **THEN** the server may display and link that username without treating it as an opaque identifier
